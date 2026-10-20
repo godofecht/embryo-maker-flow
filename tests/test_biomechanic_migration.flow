@@ -1,0 +1,17 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, delta }
+import embryo.neighboring { neighbor_build }
+import embryo.biomechanic { forces, iterdiferencial, rungekutta4, adaptive_rungekutta }
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/migration/migration.txt") != 0 { return 1 }
+    if neighbor_build() == false { return 2 }
+    if forces() == false { return 3 }
+    if iterdiferencial() == false { return 4 }
+    if delta <= 0.0 { return 5 }
+    if rungekutta4(delta) == false { return 6 }
+    if iterdiferencial() == false { return 7 }
+    if adaptive_rungekutta() == false { return 8 }
+    if nd != 364 { return 9 }
+    return 0
+}

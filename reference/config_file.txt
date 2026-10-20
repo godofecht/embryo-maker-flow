@@ -74,6 +74,7 @@
 0   plot intercellular contour
 0   plot displacement of nodes respect initial conditions
 0   nothing
+0   EPIGRID
 
 #Preselection of nodes and cells
 

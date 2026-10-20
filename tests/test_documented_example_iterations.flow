@@ -1,0 +1,26 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.aleas { inialea3d }
+import embryo.general { nparti, nd }
+import embryo.model { advance_model_iteration, model_error }
+
+function check_iteration(path: string, expected_nodes: i32) -> i32 {
+    if read_snapshot_parameters(path) != 0 { return 1 }
+    if nd != expected_nodes { return 2 }
+    inialea3d(nparti)
+    if advance_model_iteration() == false { return 10 + model_error }
+    return 0
+}
+
+function main() -> i32 {
+    let result: i32 = check_iteration("../reference/examples/apoptosis/apoptosis.txt", 518)
+    if result != 0 { return 10 + result }
+    if check_iteration("../reference/examples/blastula-like_initial_conditions/Epithelial_blastula.dat", 744) != 0 { return 15 }
+    if check_iteration("../reference/examples/blastula-like_initial_conditions/Epithelial_blastula_filled_with_mesenchyme.dat", 1144) != 0 { return 16 }
+    if check_iteration("../reference/examples/differential_adhesion/differential_adhesion.txt", 168) != 0 { return 20 }
+    if check_iteration("../reference/examples/migration/migration.txt", 364) != 0 { return 30 }
+    if check_iteration("../reference/examples/polar_growth/polar_growth.txt", 98) != 0 { return 40 }
+    if check_iteration("../reference/examples/apical_contraction/apical_contraction.txt", 1274) != 0 { return 50 }
+    if check_iteration("../reference/examples/ecm_secretion/ecm_secretion.txt", 1073) != 0 { return 60 }
+    if check_iteration("../reference/examples/figure_6/gastrula.txt", 576) != 0 { return 70 }
+    return check_iteration("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", 3534)
+}

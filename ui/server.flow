@@ -1,0 +1,1540 @@
+# EmbryoMaker Studio's local HTTP server, written in Flow.
+# Run from the project root with: flow run ui/server.flow
+
+import embryo.general { Nod, Cel, node, nodeo, cels, ncels, neigh, nneigh, dneigh, neigh_ld, px, py, pz, vcilx, vcily, vcilz, vtorx, vtory, vtorz, vstorx, vstory, vstorz, erep, erepcel, eyou, eadh, nd, ng, nparti, getot, rtime, ffu, rv, maxelong }
+import embryo.genetic { gex, gene_effects, npag, whonpag, gene_expression_index, gene_effect_index }
+import embryo.io { read_snapshot_parameters, snapshot_error, write_snapshot, format_i64, format_f64 }
+import embryo.aleas { inialea3d }
+import embryo.model { advance_model_iteration, advance_model_batch, model_batch_reset, model_batch_begin, model_batch_advance_chunk, ModelBatchProgress, model_error }
+import embryo.editor { editor_error, editor_delete_node, editor_delete_cell, editor_add_ecm, editor_add_node, editor_paste_node, editor_paste_cell, editor_add_basic_cell }
+import std.bytebuf { ByteBuf, bb_new, bb_puts, bb_putc, bb_put_i32, bb_put_bytes, bb_str, bb_free }
+import std.io { FileRead, io_read_file, io_write_file, io_write_bytes }
+import std.process { proc_getenv, proc_pid }
+import std.process { ProcResult, proc_cmd, proc_arg, proc_timeout_ms, proc_run }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+import embryo.neighboring { neighbor_build, restore_neighbors, neighbor_error, triangulation_warning, nboxes, neighbor_box_head, neighbor_clear_warning }
+import embryo.energy { energia, energy_error }
+
+extern {
+    function flow_rt_tcp_listen(port: i32) -> i32
+    function flow_rt_tcp_accept(listen_fd: i32) -> i32
+    function flow_rt_tcp_close(fd: i32) -> i32
+    function flow_rt_tcp_recv(fd: i32, buf: ptr<void>, len: i32) -> i32
+    function flow_rt_tcp_send(fd: i32, buf: ptr<void>, len: i32) -> i32
+    function unlink(path: string) -> i32
+    function mkdir(path: string, mode: i32) -> i32
+    function strlen(s: string) -> i64
+    function malloc(size: i64) -> ptr<void>
+    function realloc(p: ptr<void>, size: i64) -> ptr<void>
+    function free(p: ptr<void>) -> void
+}
+
+@cEmbed("#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <stdint.h>
+extern int close(int);
+static int32_t embryomaker_loopback_listen(int32_t port) { int fd = socket(AF_INET, SOCK_STREAM, 0); if (fd < 0) return -1; int yes = 1; setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)); struct sockaddr_in addr = {0}; addr.sin_family = AF_INET; addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); addr.sin_port = htons((uint16_t)port); if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 || listen(fd, 64) < 0) { close(fd); return -1; } return fd; }
+static int32_t embryomaker_configure_client(int fd) { struct timeval send_timeout = {10, 0}; struct timeval recv_timeout = {30, 0}; int yes = 1; if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout)) < 0) return -1; if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &recv_timeout, sizeof(recv_timeout)) < 0) return -1; if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes)) < 0) return -1; return 0; }
+")
+extern { function embryomaker_loopback_listen(port: i32) -> i32 }
+extern { function embryomaker_configure_client(fd: i32) -> i32 }
+
+const MAX_REQUEST: i32 = 16777216
+const SESSION_ID: string = "00000000000000000000000000000001"
+const EXAMPLE_COUNT: i32 = 19
+
+let mut session_active: bool = false
+let mut session_name: string = ""
+let mut session_name_owned: ptr<u8> = null
+let mut snapshot_file: string = ""
+let mut rollback_file: string = ""
+let mut upload_counter: i32 = 0
+
+struct HttpRequest {
+    bytes: ptr<u8>,
+    length: i32,
+    method_start: i32,
+    method_end: i32,
+    path_start: i32,
+    path_end: i32,
+    body_start: i32,
+    body_length: i32,
+    valid: bool
+}
+
+function example_id(index: i32) -> string {
+    if index == 0 { return "apical_contraction" }
+    if index == 1 { return "apoptosis" }
+    if index == 2 { return "blastula_epithelial" }
+    if index == 3 { return "blastula_mesenchyme" }
+    if index == 4 { return "differential_adhesion" }
+    if index == 5 { return "ecm_secretion" }
+    if index == 6 { return "figure_6" }
+    if index == 7 { return "migration" }
+    if index == 8 { return "polar_growth" }
+    if index == 9 { return "sea_urchin" }
+    if index == 10 { return "morphospace_figure_7a" }
+    if index == 11 { return "morphospace_figure_7b" }
+    if index == 12 { return "morphospace_figure_7c" }
+    if index == 13 { return "morphospace_figure_7d" }
+    if index == 14 { return "morphospace_figure_7e" }
+    if index == 15 { return "morphospace_figure_7f" }
+    if index == 16 { return "morphospace_figure_4d" }
+    if index == 17 { return "morphospace_figure_4e" }
+    if index == 18 { return "morphospace_figure_4f" }
+    return ""
+}
+
+function example_name(index: i32) -> string {
+    if index == 0 { return "Apical contraction" }
+    if index == 1 { return "Apoptosis" }
+    if index == 2 { return "Epithelial blastula" }
+    if index == 3 { return "Blastula with mesenchyme" }
+    if index == 4 { return "Differential adhesion" }
+    if index == 5 { return "ECM secretion" }
+    if index == 6 { return "Figure 6 gastrula" }
+    if index == 7 { return "Migration" }
+    if index == 8 { return "Polar growth" }
+    if index == 9 { return "Sea urchin gastrulation" }
+    if index == 10 { return "Morphospace · Figure 7A" }
+    if index == 11 { return "Morphospace · Figure 7B" }
+    if index == 12 { return "Morphospace · Figure 7C" }
+    if index == 13 { return "Morphospace · Figure 7D" }
+    if index == 14 { return "Morphospace · Figure 7E" }
+    if index == 15 { return "Morphospace · Figure 7F" }
+    if index == 16 { return "Morphospace · Figure 4D" }
+    if index == 17 { return "Morphospace · Figure 4E" }
+    if index == 18 { return "Morphospace · Figure 4F" }
+    return ""
+}
+
+function example_path(index: i32) -> string {
+    if index == 0 { return "reference/examples/apical_contraction/apical_contraction.txt" }
+    if index == 1 { return "reference/examples/apoptosis/apoptosis.txt" }
+    if index == 2 { return "reference/examples/blastula-like_initial_conditions/Epithelial_blastula.dat" }
+    if index == 3 { return "reference/examples/blastula-like_initial_conditions/Epithelial_blastula_filled_with_mesenchyme.dat" }
+    if index == 4 { return "reference/examples/differential_adhesion/differential_adhesion.txt" }
+    if index == 5 { return "reference/examples/ecm_secretion/ecm_secretion.txt" }
+    if index == 6 { return "reference/examples/figure_6/gastrula.txt" }
+    if index == 7 { return "reference/examples/migration/migration.txt" }
+    if index == 8 { return "reference/examples/polar_growth/polar_growth.txt" }
+    if index == 9 { return "reference/examples/sea_urchin_gastrulation/sea_urchin.txt" }
+    if index == 10 { return "reference/examples/morphospace_exploration/Figure_7A.dat" }
+    if index == 11 { return "reference/examples/morphospace_exploration/Figure_7B.dat" }
+    if index == 12 { return "reference/examples/morphospace_exploration/Figure_7C.dat" }
+    if index == 13 { return "reference/examples/morphospace_exploration/Figure_7D.dat" }
+    if index == 14 { return "reference/examples/morphospace_exploration/Figure_7E.dat" }
+    if index == 15 { return "reference/examples/morphospace_exploration/Figure_7F.dat" }
+    if index == 16 { return "reference/examples/morphospace_exploration/Figure_4D.dat" }
+    if index == 17 { return "reference/examples/morphospace_exploration/Figure_4E.dat" }
+    if index == 18 { return "reference/examples/morphospace_exploration/Figure_4F.dat" }
+    return ""
+}
+
+function write_json_string(out: ptr<ByteBuf>, value: string) -> void {
+    let bytes: ptr<u8> = value as ptr<u8>
+    let length: i32 = strlen(value) as i32
+    bb_putc(out, 34)
+    let mut i: i32 = 0
+    while i < length {
+        let c: i32 = bytes[i] as i32
+        if c == 34 { bb_puts(out, "\\\"") }
+        elif c == 92 { bb_puts(out, "\\\\") }
+        elif c == 10 { bb_puts(out, "\\n") }
+        elif c == 13 { bb_puts(out, "\\r") }
+        elif c == 9 { bb_puts(out, "\\t") }
+        elif c < 32 { bb_putc(out, 32) }
+        else { bb_putc(out, c as u8) }
+        i = i + 1
+    }
+    bb_putc(out, 34)
+}
+
+function make_examples_json() -> string {
+    let out: ptr<ByteBuf> = bb_new(512)
+    bb_puts(out, "{\"examples\":[")
+    let mut i: i32 = 0
+    while i < EXAMPLE_COUNT {
+        if i > 0 { bb_putc(out, 44) }
+        bb_puts(out, "{\"id\":")
+        write_json_string(out, example_id(i))
+        bb_puts(out, ",\"name\":")
+        write_json_string(out, example_name(i))
+        bb_putc(out, 125)
+        i = i + 1
+    }
+    bb_puts(out, "]}")
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
+function bytes_equal(bytes: ptr<u8>, start: i32, end: i32, value: string) -> bool {
+    let wanted: ptr<u8> = value as ptr<u8>
+    let wanted_len: i32 = strlen(value) as i32
+    if end - start != wanted_len { return false }
+    let mut i: i32 = 0
+    while i < wanted_len {
+        if bytes[start + i] != wanted[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+function find_bytes(bytes: ptr<u8>, length: i32, from: i32, value: string) -> i32 {
+    let needle: ptr<u8> = value as ptr<u8>
+    let needle_len: i32 = strlen(value) as i32
+    let mut i: i32 = from
+    while i + needle_len <= length {
+        let mut j: i32 = 0
+        let mut found: bool = true
+        while j < needle_len {
+            if bytes[i + j] != needle[j] { found = false; break }
+            j = j + 1
+        }
+        if found { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+function header_name_matches(bytes: ptr<u8>, start: i32, end: i32, wanted: string) -> bool {
+    let wanted_bytes: ptr<u8> = wanted as ptr<u8>
+    let wanted_length: i32 = strlen(wanted) as i32
+    if end - start != wanted_length { return false }
+    let mut i: i32 = 0
+    while i < wanted_length {
+        let mut value: i32 = bytes[start + i] as i32
+        if value >= 65 and value <= 90 { value = value + 32 }
+        if value != wanted_bytes[i] as i32 { return false }
+        i = i + 1
+    }
+    return true
+}
+
+function parse_content_length(bytes: ptr<u8>, header_end: i32) -> i32 {
+    let mut line_start: i32 = 0
+    let mut found: bool = false
+    let mut content_length: i32 = 0
+    while line_start < header_end {
+        let line_break: i32 = find_bytes(bytes, header_end, line_start, "\r\n")
+        let line_end: i32 = if line_break < 0 { header_end } else { line_break }
+        let mut colon: i32 = line_start
+        while colon < line_end and bytes[colon] != 58 { colon = colon + 1 }
+        if colon < line_end {
+            if header_name_matches(bytes, line_start, colon, "transfer-encoding") { return -1 }
+            if header_name_matches(bytes, line_start, colon, "content-length") {
+                if found { return -1 }
+                let mut p: i32 = colon + 1
+                while p < line_end and (bytes[p] == 32 or bytes[p] == 9) { p = p + 1 }
+                if p >= line_end { return -1 }
+                let mut parsed_length: i32 = 0
+                let mut digits: i32 = 0
+                while p < line_end and bytes[p] >= 48 and bytes[p] <= 57 {
+                    let digit: i32 = bytes[p] as i32 - 48
+                    if parsed_length > (8000000 - digit) / 10 { return -1 }
+                    parsed_length = parsed_length * 10 + digit
+                    digits = digits + 1
+                    p = p + 1
+                }
+                if digits == 0 { return -1 }
+                while p < line_end and (bytes[p] == 32 or bytes[p] == 9) { p = p + 1 }
+                if p != line_end { return -1 }
+                content_length = parsed_length
+                found = true
+            }
+        }
+        if line_break < 0 { break }
+        line_start = line_end + 2
+    }
+    return content_length
+}
+
+function read_request(fd: i32) -> HttpRequest {
+    let mut capacity: i32 = 4096
+    let mut storage: ptr<u8> = malloc((capacity + 1) as i64) as ptr<u8>
+    if storage == null { return HttpRequest { bytes: null, length: 0, method_start: 0, method_end: 0, path_start: 0, path_end: 0, body_start: 0, body_length: 0, valid: false } }
+    let mut length: i32 = 0
+    let mut header_end: i32 = -1
+    let mut required: i32 = -1
+    let mut failed: bool = false
+    while length < MAX_REQUEST {
+        if length >= capacity {
+            let next_capacity: i32 = if capacity > (MAX_REQUEST / 2) { MAX_REQUEST } else { capacity * 2 }
+            let grown: ptr<u8> = realloc(storage as ptr<void>, (next_capacity + 1) as i64) as ptr<u8>
+            if grown == null { failed = true; break }
+            storage = grown
+            capacity = next_capacity
+        }
+        let remaining: i32 = MAX_REQUEST - length
+        let available: i32 = capacity - length
+        let read_size: i32 = if available > 16384 { 16384 } else { available }
+        let chunk: i32 = if read_size > remaining { remaining } else { read_size }
+        let got: i32 = flow_rt_tcp_recv(fd, &storage[length] as ptr<void>, chunk)
+        if got <= 0 { failed = true; break }
+        length = length + got
+        storage[length] = 0
+        if header_end < 0 {
+            header_end = find_bytes(storage, length, 0, "\r\n\r\n")
+            if header_end >= 0 {
+                let body_len: i32 = parse_content_length(storage, header_end)
+                if body_len < 0 or body_len > 8000000 { failed = true; break }
+                required = header_end + 4 + body_len
+                if required > MAX_REQUEST { failed = true; break }
+            }
+        }
+        if required >= 0 and length >= required { break }
+    }
+    if failed or header_end < 0 or required < 0 or length < required {
+        free(storage as ptr<void>)
+        return HttpRequest { bytes: null, length: 0, method_start: 0, method_end: 0, path_start: 0, path_end: 0, body_start: 0, body_length: 0, valid: false }
+    }
+    let mut method_end: i32 = 0
+    while method_end < header_end and storage[method_end] != 32 { method_end = method_end + 1 }
+    let path_start: i32 = method_end + 1
+    let mut path_end: i32 = path_start
+    while path_end < header_end and storage[path_end] != 32 and storage[path_end] != 63 { path_end = path_end + 1 }
+    return HttpRequest { bytes: storage, length: length, method_start: 0, method_end: method_end, path_start: path_start, path_end: path_end, body_start: header_end + 4, body_length: required - header_end - 4, valid: true }
+}
+
+function json_key_value(body: ptr<u8>, length: i32, key: string) -> i32 {
+    let pattern: string = "\"" + key + "\""
+    let mut p: i32 = find_bytes(body, length, 0, pattern)
+    if p < 0 { return -1 }
+    p = p + (strlen(pattern) as i32)
+    while p < length and (body[p] == 32 or body[p] == 9 or body[p] == 10 or body[p] == 13) { p = p + 1 }
+    if p >= length or body[p] != 58 { return -1 }
+    p = p + 1
+    while p < length and (body[p] == 32 or body[p] == 9 or body[p] == 10 or body[p] == 13) { p = p + 1 }
+    return p
+}
+
+function hex_digit(c: i32) -> i32 {
+    if c >= 48 and c <= 57 { return c - 48 }
+    if c >= 65 and c <= 70 { return c - 55 }
+    if c >= 97 and c <= 102 { return c - 87 }
+    return -1
+}
+
+function decode_json_string(body: ptr<u8>, length: i32, key: string, output: ptr<u8>, capacity: i32) -> i32 {
+    let p: i32 = json_key_value(body, length, key)
+    if p < 0 or p >= length or body[p] != 34 { return -1 }
+    p = p + 1
+    let mut out: i32 = 0
+    while p < length and body[p] != 34 {
+        let mut c: i32 = body[p] as i32
+        p = p + 1
+        if c == 92 {
+            if p >= length { return -1 }
+            c = body[p] as i32
+            p = p + 1
+            if c == 110 { c = 10 }
+            elif c == 114 { c = 13 }
+            elif c == 116 { c = 9 }
+            elif c == 98 { c = 8 }
+            elif c == 102 { c = 12 }
+            elif c == 117 {
+                if p + 4 > length { return -1 }
+                let mut code: i32 = 0
+                let mut d: i32 = 0
+                while d < 4 {
+                    let h: i32 = body[p + d] as i32
+                    let digit: i32 = hex_digit(h)
+                    if digit < 0 { return -1 }
+                    code = code * 16 + digit
+                    d = d + 1
+                }
+                p = p + 4
+                if code < 128 { c = code }
+                elif code < 2048 {
+                    if out + 2 >= capacity { return -1 }
+                    output[out] = (192 + code / 64) as u8
+                    out = out + 1
+                    c = 128 + (code % 64)
+                } else {
+                    if out + 3 >= capacity { return -1 }
+                    output[out] = (224 + code / 4096) as u8
+                    output[out + 1] = (128 + ((code / 64) % 64)) as u8
+                    out = out + 2
+                    c = 128 + (code % 64)
+                }
+            }
+        }
+        if out + 1 >= capacity { return -1 }
+        output[out] = c as u8
+        out = out + 1
+    }
+    if p >= length { return -1 }
+    output[out] = 0
+    return out
+}
+
+function json_integer(body: ptr<u8>, length: i32, key: string, fallback: i32) -> i32 {
+    let mut p: i32 = json_key_value(body, length, key)
+    if p < 0 { return fallback }
+    let mut sign: i32 = 1
+    if p < length and body[p] == 45 { sign = -1; p = p + 1 }
+    let mut value: i32 = 0
+    let mut digits: i32 = 0
+    while p < length and body[p] >= 48 and body[p] <= 57 {
+        value = value * 10 + (body[p] as i32 - 48)
+        digits = digits + 1
+        p = p + 1
+    }
+    if digits == 0 { return fallback }
+    return value * sign
+}
+
+function apply_node_property(node_id: i32, field: string, value: f64) -> bool {
+    if field == "x" { node[node_id].x = value }
+    elif field == "y" { node[node_id].y = value }
+    elif field == "z" { node[node_id].z = value }
+    elif field == "energy" { node[node_id].e = value }
+    elif field == "eqd" { node[node_id].eqd = value }
+    elif field == "radius" { node[node_id].add = value }
+    elif field == "you" { node[node_id].you = value }
+    elif field == "adh" { node[node_id].adh = value }
+    elif field == "rep" { node[node_id].rep = value }
+    elif field == "rec" { node[node_id].rec = value }
+    elif field == "erp" { node[node_id].erp = value }
+    elif field == "est" { node[node_id].est = value }
+    elif field == "eqs" { node[node_id].eqs = value }
+    elif field == "hoo" { node[node_id].hoo = value }
+    elif field == "mov" { node[node_id].mov = value }
+    elif field == "dmo" { node[node_id].dmo = value }
+    elif field == "x0" { node[node_id].orix = value }
+    elif field == "y0" { node[node_id].oriy = value }
+    elif field == "z0" { node[node_id].oriz = value }
+    elif field == "ecm" { node[node_id].ecm = value }
+    elif field == "cod" { node[node_id].cod = value }
+    elif field == "grd" { node[node_id].grd = value }
+    elif field == "pld" { node[node_id].pld = value }
+    elif field == "vod" { node[node_id].vod = value }
+    elif field == "dif" { node[node_id].dif = value }
+    elif field == "kfi" { node[node_id].kfi = value }
+    elif field == "pla" { node[node_id].pla = value }
+    elif field == "kvol" { node[node_id].kvol = value }
+    elif field == "type" { node[node_id].tipus = value as i32 }
+    elif field == "cell" { node[node_id].icel = value as i32 }
+    elif field == "other" { node[node_id].altre = value as i32 }
+    elif field == "marge" { node[node_id].marge = value as i32 }
+    elif field == "talone" { node[node_id].talone = value as i32 }
+    elif field == "fixed" { node[node_id].fix = value as i32 }
+    elif field == "ndiv" { node[node_id].ndiv = value as i32 }
+    else { return false }
+    return true
+}
+
+function apply_cell_property(cell_id: i32, field: string, value: f64) -> bool {
+    if field == "phase" { cels[cell_id].fase = value }
+    elif field == "time" { cels[cell_id].temt = value }
+    elif field == "x" { cels[cell_id].cex = value }
+    elif field == "y" { cels[cell_id].cey = value }
+    elif field == "z" { cels[cell_id].cez = value }
+    elif field == "polx" { cels[cell_id].polx = value }
+    elif field == "poly" { cels[cell_id].poly = value }
+    elif field == "polz" { cels[cell_id].polz = value }
+    elif field == "minsize_for_div" { cels[cell_id].minsize_for_div = value }
+    elif field == "maxsize_for_div" { cels[cell_id].maxsize_for_div = value }
+    elif field == "nodela" { cels[cell_id].nodela = value as i32 }
+    elif field == "type" { cels[cell_id].ctipus = value as i32 }
+    else { return false }
+    return true
+}
+
+function handle_node_edit(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let node_id: i32 = json_integer(body, body_len, "nodeId", 0)
+    if node_id < 1 or node_id > nd { send_response(fd, 400, "application/json", make_error("Node index is outside the active model")); return }
+    let field_buffer: ptr<u8> = malloc(64) as ptr<u8>
+    if field_buffer == null { send_response(fd, 500, "application/json", make_error("Out of memory")); return }
+    let field_length: i32 = decode_json_string(body, body_len, "field", field_buffer, 64)
+    let value_pos: i32 = json_key_value(body, body_len, "value")
+    if field_length < 0 or value_pos < 0 { free(field_buffer as ptr<void>); send_response(fd, 400, "application/json", make_error("Node edit requires a field and numeric value")); return }
+    let parsed: ParseF64 = str_parse_f64_at(body as string, value_pos)
+    if parsed.ok == false { free(field_buffer as ptr<void>); send_response(fd, 400, "application/json", make_error("Node edit value is invalid")); return }
+    let field: string = field_buffer as string
+    let changes_geometry: bool = field == "x" or field == "y" or field == "z"
+    let original: Nod = node[node_id]
+    if apply_node_property(node_id, field, parsed.value) == false { free(field_buffer as ptr<void>); send_response(fd, 400, "application/json", make_error("Unsupported node property")); return }
+    if changes_geometry and neighbor_build() == false {
+        node[node_id] = original
+        let _restore: bool = neighbor_build()
+        free(field_buffer as ptr<void>)
+        send_response(fd, 422, "application/json", make_error("Edited node position breaks the current neighbor graph"))
+        return
+    }
+    free(field_buffer as ptr<void>)
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_node_move(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let node_id: i32 = json_integer(body, body_len, "nodeId", 0)
+    if node_id < 1 or node_id > nd { send_response(fd, 400, "application/json", make_error("Node index is outside the active model")); return }
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("Node move requires x, y, and z coordinates")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("Node move coordinates must be numeric")); return }
+    let original: Nod = node[node_id]
+    node[node_id].x = x_value.value
+    node[node_id].y = y_value.value
+    node[node_id].z = z_value.value
+    if neighbor_build() == false {
+        node[node_id] = original
+        let _restore: bool = neighbor_build()
+        send_response(fd, 422, "application/json", make_error("Moved node breaks the current neighbor graph")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_cell_move(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let cell_id: i32 = json_integer(body, body_len, "cellId", 0)
+    if cell_id < 1 or cell_id > ncels { send_response(fd, 400, "application/json", make_error("Cell index is outside the active model")); return }
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("Cell move requires x, y, and z coordinates")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("Cell move coordinates must be numeric")); return }
+    let dx: f64 = x_value.value - cels[cell_id].cex
+    let dy: f64 = y_value.value - cels[cell_id].cey
+    let dz: f64 = z_value.value - cels[cell_id].cez
+    let mut i: i32 = 1
+    while i <= nd {
+        if node[i].icel == cell_id {
+            node[i].x = node[i].x + dx
+            node[i].y = node[i].y + dy
+            node[i].z = node[i].z + dz
+        }
+        i = i + 1
+    }
+    cels[cell_id].cex = x_value.value
+    cels[cell_id].cey = y_value.value
+    cels[cell_id].cez = z_value.value
+    if neighbor_build() == false {
+        i = 1
+        while i <= nd {
+            if node[i].icel == cell_id {
+                node[i].x = node[i].x - dx
+                node[i].y = node[i].y - dy
+                node[i].z = node[i].z - dz
+            }
+            i = i + 1
+        }
+        cels[cell_id].cex = cels[cell_id].cex - dx
+        cels[cell_id].cey = cels[cell_id].cey - dy
+        cels[cell_id].cez = cels[cell_id].cez - dz
+        let _restore: bool = neighbor_build()
+        send_response(fd, 422, "application/json", make_error("Moved cell breaks the current neighbor graph")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_node_delete(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let node_id: i32 = json_integer(body, body_len, "nodeId", 0)
+    if editor_delete_node(node_id) == false {
+        send_response(fd, 422, "application/json", make_error("The selected node could not be removed from the model")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_cell_delete(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let cell_id: i32 = json_integer(body, body_len, "cellId", 0)
+    if editor_delete_cell(cell_id) == false {
+        send_response(fd, 422, "application/json", make_error("The selected cell could not be removed from the model")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_ecm_add(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("ECM node requires x, y, and z coordinates")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("ECM node coordinates must be numeric")); return }
+    if editor_add_ecm(x_value.value, y_value.value, z_value.value) == false {
+        send_response(fd, 422, "application/json", make_error("The ECM node could not be added to the model")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_node_add(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let cell_id: i32 = json_integer(body, body_len, "cellId", 0)
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("Node addition requires x, y, and z coordinates")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("Node coordinates must be numeric")); return }
+    if editor_add_node(cell_id, x_value.value, y_value.value, z_value.value) == false {
+        send_response(fd, 422, "application/json", make_error("The node could not be added to the selected cell")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_basic_cell_add(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    let cell_type: i32 = json_integer(body, body_len, "cellType", 1)
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("Basic cell addition requires x, y, and z coordinates")); return }
+    if cell_type != 1 and cell_type != 3 { send_response(fd, 400, "application/json", make_error("Basic cell type must be epithelial (1) or mesenchymal (3)")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("Basic cell coordinates must be numeric")); return }
+    if editor_add_basic_cell(x_value.value, y_value.value, z_value.value, cell_type == 3) == false {
+        send_response(fd, 422, "application/json", make_error("The basic cell could not be added to the model")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_node_paste(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let node_id: i32 = json_integer(body, body_len, "nodeId", 0)
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("Node paste requires x, y, and z coordinates")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("Node paste coordinates must be numeric")); return }
+    if editor_paste_node(node_id, x_value.value, y_value.value, z_value.value) == false {
+        send_response(fd, 422, "application/json", make_error("The selected node could not be pasted")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_cell_paste(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let cell_id: i32 = json_integer(body, body_len, "cellId", 0)
+    let x_pos: i32 = json_key_value(body, body_len, "x")
+    let y_pos: i32 = json_key_value(body, body_len, "y")
+    let z_pos: i32 = json_key_value(body, body_len, "z")
+    if x_pos < 0 or y_pos < 0 or z_pos < 0 { send_response(fd, 400, "application/json", make_error("Cell paste requires x, y, and z coordinates")); return }
+    let x_value: ParseF64 = str_parse_f64_at(body as string, x_pos)
+    let y_value: ParseF64 = str_parse_f64_at(body as string, y_pos)
+    let z_value: ParseF64 = str_parse_f64_at(body as string, z_pos)
+    if x_value.ok == false or y_value.ok == false or z_value.ok == false { send_response(fd, 400, "application/json", make_error("Cell paste coordinates must be numeric")); return }
+    if editor_paste_cell(cell_id, x_value.value, y_value.value, z_value.value) == false {
+        send_response(fd, 422, "application/json", make_error("The selected cell could not be pasted")); return
+    }
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_gene_edit(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let node_id: i32 = json_integer(body, body_len, "nodeId", 0)
+    let gene_id: i32 = json_integer(body, body_len, "geneId", 0)
+    let value_pos: i32 = json_key_value(body, body_len, "value")
+    if node_id < 1 or node_id > nd { send_response(fd, 400, "application/json", make_error("Node index is outside the active model")); return }
+    if gene_id < 1 or gene_id > ng { send_response(fd, 400, "application/json", make_error("Gene index is outside the active model")); return }
+    if value_pos < 0 { send_response(fd, 400, "application/json", make_error("Gene edit requires a numeric expression value")); return }
+    let value: ParseF64 = str_parse_f64_at(body as string, value_pos)
+    if value.ok == false { send_response(fd, 400, "application/json", make_error("Gene expression value must be numeric")); return }
+    gex[gene_expression_index(node_id, gene_id)] = value.value
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_cell_edit(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let cell_id: i32 = json_integer(body, body_len, "cellId", 0)
+    if cell_id < 1 or cell_id > ncels { send_response(fd, 400, "application/json", make_error("Cell index is outside the active model")); return }
+    let field_buffer: ptr<u8> = malloc(64) as ptr<u8>
+    if field_buffer == null { send_response(fd, 500, "application/json", make_error("Out of memory")); return }
+    let field_length: i32 = decode_json_string(body, body_len, "field", field_buffer, 64)
+    let value_pos: i32 = json_key_value(body, body_len, "value")
+    if field_length < 0 or value_pos < 0 { free(field_buffer as ptr<void>); send_response(fd, 400, "application/json", make_error("Cell edit requires a field and numeric value")); return }
+    let parsed: ParseF64 = str_parse_f64_at(body as string, value_pos)
+    if parsed.ok == false { free(field_buffer as ptr<void>); send_response(fd, 400, "application/json", make_error("Cell edit value is invalid")); return }
+    if apply_cell_property(cell_id, field_buffer as string, parsed.value) == false { free(field_buffer as ptr<void>); send_response(fd, 400, "application/json", make_error("Unsupported cell property")); return }
+    free(field_buffer as ptr<void>)
+    send_model_response(fd, getot, false, true)
+}
+
+function json_true(body: ptr<u8>, length: i32, key: string) -> bool {
+    let p: i32 = json_key_value(body, length, key)
+    return p >= 0 and p + 3 < length and body[p] == 116 and body[p + 1] == 114 and body[p + 2] == 117 and body[p + 3] == 101
+}
+
+function count_unique(field: i32) -> i32 {
+    let values: ptr<i32> = malloc(((nd + 1) * 4) as i64) as ptr<i32>
+    if values == null { return 0 }
+    let mut count: i32 = 0
+    let mut i: i32 = 1
+    while i <= nd {
+        let value: i32 = if field == 0 { node[i].icel } else { node[i].tipus }
+        let mut j: i32 = 0
+        let mut seen: bool = false
+        while j < count {
+            if values[j] == value { seen = true; break }
+            j = j + 1
+        }
+        if seen == false { values[count] = value; count = count + 1 }
+        i = i + 1
+    }
+    free(values as ptr<void>)
+    return count
+}
+
+function node_elongation_factor(node_id: i32) -> f64 {
+    let property: i32 = 52
+    if npag == null or npag[property] <= 0 { return 1.0 }
+    let mut factor: f64 = 1.0
+    let mut slot: i32 = 1
+    while slot <= npag[property] {
+        let gene_id: i32 = whonpag[property * (ng + 1) + slot]
+        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+        if expression > 0.0 { factor = factor + expression * gene_effects[gene_effect_index(gene_id, property)] }
+        slot = slot + 1
+    }
+    if factor > maxelong { factor = maxelong }
+    return factor
+}
+
+function json_put_f64(out: ptr<ByteBuf>, value: f64) -> void {
+    if value == 0.0 { bb_puts(out, "0.0000000000000000e+00"); return }
+    let negative: bool = value < 0.0
+    let mut mantissa: f64 = if negative { 0.0 - value } else { value }
+    let mut exponent: i32 = 0
+    while mantissa >= 10.0 { mantissa = mantissa / 10.0; exponent = exponent + 1 }
+    while mantissa < 1.0 { mantissa = mantissa * 10.0; exponent = exponent - 1 }
+    let mut digits: i64 = (mantissa * 10000000000000000.0 + 0.5) as i64
+    if digits >= 100000000000000000 { digits = digits / 10; exponent = exponent + 1 }
+    if negative { bb_putc(out, 45) }
+    let mut divisor: i64 = 10000000000000000
+    let mut digit_index: i32 = 0
+    while digit_index < 17 {
+        if digit_index == 1 { bb_putc(out, 46) }
+        let digit: i64 = digits / divisor
+        bb_putc(out, (48 + digit) as u8)
+        digits = digits % divisor
+        divisor = divisor / 10
+        digit_index = digit_index + 1
+    }
+    bb_putc(out, 101)
+    let exponent_negative: bool = exponent < 0
+    if exponent_negative { bb_putc(out, 45) } else { bb_putc(out, 43) }
+    let exponent_magnitude: i32 = if exponent_negative { 0 - exponent } else { exponent }
+    if exponent_magnitude < 10 { bb_putc(out, 48) }
+    bb_put_i32(out, exponent_magnitude)
+}
+
+function make_model_json(iteration: i32, include_snapshot: bool, batch_complete: bool) -> string {
+    let out: ptr<ByteBuf> = bb_new(8192)
+    bb_puts(out, "{\"iterations\":")
+    bb_put_i32(out, iteration)
+    bb_puts(out, ",\"simulatedTime\":")
+    json_put_f64(out, rtime)
+    bb_puts(out, ",\"batchComplete\":")
+    bb_puts(out, if batch_complete { "true" } else { "false" })
+    bb_puts(out, ",\"geneCount\":")
+    bb_put_i32(out, ng)
+    bb_puts(out, ",\"triangulationWarning\":")
+    bb_put_i32(out, triangulation_warning)
+    bb_puts(out, ",\"boxGrid\":{\"spacing\":")
+    json_put_f64(out, rv)
+    bb_puts(out, ",\"count\":")
+    bb_put_i32(out, nboxes)
+    bb_putc(out, 125)
+    bb_puts(out, ",\"cells\":[")
+    let mut cell_index: i32 = 1
+    while cell_index <= ncels {
+        if cell_index > 1 { bb_putc(out, 44) }
+        let cell: Cel = cels[cell_index]
+        bb_puts(out, "{\"id\":")
+        bb_put_i32(out, cell_index)
+        bb_puts(out, ",\"x\":")
+        json_put_f64(out, cell.cex)
+        bb_puts(out, ",\"y\":")
+        json_put_f64(out, cell.cey)
+        bb_puts(out, ",\"z\":")
+        json_put_f64(out, cell.cez)
+        bb_puts(out, ",\"polx\":")
+        json_put_f64(out, cell.polx)
+        bb_puts(out, ",\"poly\":")
+        json_put_f64(out, cell.poly)
+        bb_puts(out, ",\"polz\":")
+        json_put_f64(out, cell.polz)
+        bb_puts(out, ",\"phase\":")
+        json_put_f64(out, cell.fase)
+        bb_puts(out, ",\"time\":")
+        json_put_f64(out, cell.temt)
+        bb_puts(out, ",\"minsize_for_div\":")
+        json_put_f64(out, cell.minsize_for_div)
+        bb_puts(out, ",\"maxsize_for_div\":")
+        json_put_f64(out, cell.maxsize_for_div)
+        bb_puts(out, ",\"nodela\":")
+        bb_put_i32(out, cell.nodela)
+        bb_puts(out, ",\"type\":")
+        bb_put_i32(out, cell.ctipus)
+        bb_putc(out, 125)
+        cell_index = cell_index + 1
+    }
+    bb_puts(out, "],\"edges\":[")
+    let mut edge_count: i32 = 0
+    let mut edge_from: i32 = 1
+    while edge_from <= nd {
+        let mut slot: i32 = 1
+        while slot <= nneigh[edge_from] {
+            let edge_to: i32 = neigh[edge_from * neigh_ld + slot]
+            if edge_to > edge_from and dneigh[edge_from * neigh_ld + slot] < node[edge_from].add + node[edge_to].add {
+                if edge_count > 0 { bb_putc(out, 44) }
+                bb_puts(out, "{\"a\":")
+                bb_put_i32(out, edge_from)
+                bb_puts(out, ",\"b\":")
+                bb_put_i32(out, edge_to)
+                bb_puts(out, ",\"inter\":")
+                bb_puts(out, if node[edge_from].icel != node[edge_to].icel { "true" } else { "false" })
+                bb_putc(out, 125)
+                edge_count = edge_count + 1
+            }
+            slot = slot + 1
+        }
+        edge_from = edge_from + 1
+    }
+    bb_puts(out, "],\"nodes\":[")
+    let mut i: i32 = 1
+    while i <= nd {
+        if i > 1 { bb_putc(out, 44) }
+        let n: Nod = node[i]
+        bb_puts(out, "{\"id\":")
+        bb_put_i32(out, i)
+        bb_puts(out, ",\"x\":")
+        json_put_f64(out, n.x)
+        bb_puts(out, ",\"y\":")
+        json_put_f64(out, n.y)
+        bb_puts(out, ",\"z\":")
+        json_put_f64(out, n.z)
+        bb_puts(out, ",\"radius\":")
+        json_put_f64(out, n.add)
+        bb_puts(out, ",\"eqd\":")
+        json_put_f64(out, n.eqd)
+        bb_puts(out, ",\"fixed\":")
+        bb_puts(out, if n.fix != 0 { "true" } else { "false" })
+        bb_puts(out, ",\"type\":")
+        bb_put_i32(out, n.tipus)
+        bb_puts(out, ",\"cell\":")
+        bb_put_i32(out, n.icel)
+        bb_puts(out, ",\"energy\":")
+        json_put_f64(out, n.e)
+        bb_puts(out, ",\"you\":")
+        json_put_f64(out, n.you)
+        bb_puts(out, ",\"adh\":")
+        json_put_f64(out, n.adh)
+        bb_puts(out, ",\"rep\":")
+        json_put_f64(out, n.rep)
+        bb_puts(out, ",\"rec\":")
+        json_put_f64(out, n.rec)
+        bb_puts(out, ",\"erp\":")
+        json_put_f64(out, n.erp)
+        bb_puts(out, ",\"est\":")
+        json_put_f64(out, n.est)
+        bb_puts(out, ",\"eqs\":")
+        json_put_f64(out, n.eqs)
+        bb_puts(out, ",\"hoo\":")
+        json_put_f64(out, n.hoo)
+        bb_puts(out, ",\"mov\":")
+        json_put_f64(out, n.mov)
+        bb_puts(out, ",\"dmo\":")
+        json_put_f64(out, n.dmo)
+        bb_puts(out, ",\"x0\":")
+        json_put_f64(out, n.orix)
+        bb_puts(out, ",\"y0\":")
+        json_put_f64(out, n.oriy)
+        bb_puts(out, ",\"z0\":")
+        json_put_f64(out, n.oriz)
+        bb_puts(out, ",\"ecm\":")
+        json_put_f64(out, n.ecm)
+        bb_puts(out, ",\"cod\":")
+        json_put_f64(out, n.cod)
+        bb_puts(out, ",\"grd\":")
+        json_put_f64(out, n.grd)
+        bb_puts(out, ",\"pld\":")
+        json_put_f64(out, n.pld)
+        bb_puts(out, ",\"vod\":")
+        json_put_f64(out, n.vod)
+        bb_puts(out, ",\"dif\":")
+        json_put_f64(out, n.dif)
+        bb_puts(out, ",\"kfi\":")
+        json_put_f64(out, n.kfi)
+        bb_puts(out, ",\"pla\":")
+        json_put_f64(out, n.pla)
+        bb_puts(out, ",\"kvol\":")
+        json_put_f64(out, n.kvol)
+        bb_puts(out, ",\"other\":")
+        bb_put_i32(out, n.altre)
+        bb_puts(out, ",\"marge\":")
+        bb_put_i32(out, n.marge)
+        bb_puts(out, ",\"talone\":")
+        bb_put_i32(out, n.talone)
+        bb_puts(out, ",\"ndiv\":")
+        bb_put_i32(out, n.ndiv)
+        bb_puts(out, ",\"phase\":")
+        json_put_f64(out, if n.tipus < 4 and n.icel > 0 { cels[n.icel].fase } else { 0.0 })
+        bb_puts(out, ",\"lineage\":")
+        bb_put_i32(out, nodeo[i].icel)
+        bb_puts(out, ",\"box\":")
+        bb_put_i32(out, neighbor_box_head(i))
+        bb_puts(out, ",\"elongationFactor\":")
+        json_put_f64(out, node_elongation_factor(i))
+        bb_puts(out, ",\"moveX\":")
+        json_put_f64(out, px[i])
+        bb_puts(out, ",\"moveY\":")
+        json_put_f64(out, py[i])
+        bb_puts(out, ",\"moveZ\":")
+        json_put_f64(out, pz[i])
+        bb_puts(out, ",\"repX\":")
+        json_put_f64(out, vcilx[i])
+        bb_puts(out, ",\"repY\":")
+        json_put_f64(out, vcily[i])
+        bb_puts(out, ",\"repZ\":")
+        json_put_f64(out, vcilz[i])
+        bb_puts(out, ",\"lateralX\":")
+        json_put_f64(out, vtorx[i])
+        bb_puts(out, ",\"lateralY\":")
+        json_put_f64(out, vtory[i])
+        bb_puts(out, ",\"lateralZ\":")
+        json_put_f64(out, vtorz[i])
+        bb_puts(out, ",\"axialX\":")
+        json_put_f64(out, vstorx[i])
+        bb_puts(out, ",\"axialY\":")
+        json_put_f64(out, vstory[i])
+        bb_puts(out, ",\"axialZ\":")
+        json_put_f64(out, vstorz[i])
+        bb_puts(out, ",\"genes\":[")
+        let mut gene_index: i32 = 1
+        while gene_index <= ng {
+            if gene_index > 1 { bb_putc(out, 44) }
+            json_put_f64(out, gex[gene_expression_index(i, gene_index)])
+            gene_index = gene_index + 1
+        }
+        bb_putc(out, 93)
+        bb_putc(out, 125)
+        i = i + 1
+    }
+    bb_puts(out, "],\"count\":")
+    bb_put_i32(out, nd)
+    bb_puts(out, ",\"session\":\"")
+    bb_puts(out, SESSION_ID)
+    bb_puts(out, "\",\"experiment\":")
+    write_json_string(out, session_name)
+    bb_puts(out, ",\"cellCount\":")
+    bb_put_i32(out, count_unique(0))
+    bb_puts(out, ",\"typeCount\":")
+    bb_put_i32(out, count_unique(1))
+    if include_snapshot {
+        if write_snapshot(snapshot_file) {
+            let snapshot: FileRead = io_read_file(snapshot_file)
+            if snapshot.ok {
+                bb_puts(out, ",\"snapshot\":")
+                write_json_string(out, snapshot.data)
+            }
+        }
+    }
+    bb_putc(out, 125)
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
+function make_batch_progress_json() -> string {
+    let out: ptr<ByteBuf> = bb_new(96)
+    bb_puts(out, "{\"iterations\":")
+    bb_put_i32(out, getot)
+    bb_puts(out, ",\"simulatedTime\":")
+    json_put_f64(out, rtime)
+    bb_puts(out, ",\"batchComplete\":false}")
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
+function make_error(message: string) -> string {
+    let out: ptr<ByteBuf> = bb_new(128)
+    bb_puts(out, "{\"error\":")
+    write_json_string(out, message)
+    bb_putc(out, 125)
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
+function send_all(fd: i32, bytes: ptr<u8>, length: i32) -> bool {
+    let mut sent: i32 = 0
+    while sent < length {
+        let n: i32 = flow_rt_tcp_send(fd, &bytes[sent] as ptr<void>, length - sent)
+        if n <= 0 { return false }
+        sent = sent + n
+    }
+    return true
+}
+
+function status_reason(status: i32) -> string {
+    if status == 200 { return "OK" }
+    if status == 400 { return "Bad Request" }
+    if status == 404 { return "Not Found" }
+    if status == 422 { return "Unprocessable Content" }
+    if status == 500 { return "Internal Server Error" }
+    return "OK"
+}
+
+function send_response(fd: i32, status: i32, content_type: string, body: string) -> void {
+    let body_len: i32 = strlen(body) as i32
+    let header: string = "HTTP/1.1 " + format_i64(status as i64) + " " + status_reason(status) + "\r\nContent-Type: " + content_type + "\r\nContent-Length: " + format_i64(body_len as i64) + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
+    let _h: bool = send_all(fd, header as ptr<u8>, strlen(header) as i32)
+    if body_len > 0 { let _b: bool = send_all(fd, body as ptr<u8>, body_len) }
+}
+
+function send_owned_response(fd: i32, status: i32, content_type: string, body: string) -> void {
+    send_response(fd, status, content_type, body)
+    free(body as ptr<void>)
+}
+
+function send_model_response(fd: i32, iteration: i32, include_snapshot: bool, batch_complete: bool) -> void {
+    let response: string = make_model_json(iteration, include_snapshot, batch_complete)
+    send_owned_response(fd, 200, "application/json; charset=utf-8", response)
+}
+
+function output_slug(value: string) -> string {
+    let source: ptr<u8> = value as ptr<u8>
+    let length: i32 = strlen(value) as i32
+    let out: ptr<u8> = calloc(96, 1) as ptr<u8>
+    let mut used: i32 = 0
+    let mut i: i32 = 0
+    while i < length and used < 80 {
+        let c: i32 = source[i] as i32
+        if (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 45 or c == 95 {
+            out[used] = c as u8
+            used = used + 1
+        } elif used > 0 and out[used - 1] != 95 {
+            out[used] = 95
+            used = used + 1
+        }
+        i = i + 1
+    }
+    while used > 0 and out[used - 1] == 95 { used = used - 1 }
+    if used == 0 { return "simulation" }
+    out[used] = 0
+    return out as string
+}
+
+function output_label(body: ptr<u8>, body_len: i32) -> string {
+    let raw: ptr<u8> = calloc(128, 1) as ptr<u8>
+    if raw == null { return "" }
+    let length: i32 = decode_json_string(body, body_len, "label", raw, 128)
+    if length <= 0 { return "" }
+    let out: ptr<u8> = calloc(66, 1) as ptr<u8>
+    let mut i: i32 = 0
+    let mut used: i32 = 0
+    while i < length and i < 64 {
+        let c: i32 = raw[i] as i32
+        if (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 45 or c == 95 { out[used] = raw[i]; used = used + 1 }
+        i = i + 1
+    }
+    free(raw as ptr<void>)
+    return out as string
+}
+
+function base64_digit(value: i32) -> i32 {
+    if value >= 65 and value <= 90 { return value - 65 }
+    if value >= 97 and value <= 122 { return value - 97 + 26 }
+    if value >= 48 and value <= 57 { return value - 48 + 52 }
+    if value == 43 { return 62 }
+    if value == 47 { return 63 }
+    return -1
+}
+
+function decode_image(body: ptr<u8>, body_len: i32, output: ptr<u8>, capacity: i32, field: string) -> i32 {
+    let encoded: ptr<u8> = calloc(12000000, 1) as ptr<u8>
+    if encoded == null { return -1 }
+    let length: i32 = decode_json_string(body, body_len, field, encoded, 12000000)
+    if length <= 0 { free(encoded as ptr<void>); return -1 }
+    let mut start: i32 = 0
+    while start < length and encoded[start] != 44 { start = start + 1 }
+    if start < length { start = start + 1 }
+    let mut accumulator: i32 = 0
+    let mut bits: i32 = 0
+    let mut written: i32 = 0
+    let mut i: i32 = start
+    while i < length {
+        let c: i32 = encoded[i] as i32
+        if c == 61 { break }
+        let digit: i32 = base64_digit(c)
+        if digit < 0 { free(encoded as ptr<void>); return -1 }
+        accumulator = accumulator * 64 + digit
+        bits = bits + 6
+        if bits >= 8 {
+            bits = bits - 8
+            if written >= capacity { free(encoded as ptr<void>); return -1 }
+            output[written] = ((accumulator >> bits) & 255) as u8
+            written = written + 1
+            accumulator = accumulator & ((1 << bits) - 1)
+        }
+        i = i + 1
+    }
+    free(encoded as ptr<void>)
+    return written
+}
+
+function handle_save_image(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let _root: i32 = mkdir("images", 511)
+    let folder: string = "images/" + output_slug(session_name)
+    let _folder: i32 = mkdir(folder, 511)
+    let path: string = folder + "/" + output_label(body, body_len) + format_i64(getot as i64) + ".png"
+    let image: ptr<u8> = calloc(8000000, 1) as ptr<u8>
+    if image == null { send_response(fd, 500, "application/json", make_error("Out of memory")); return }
+    let length: i32 = decode_image(body, body_len, image, 8000000, "image")
+    if length < 8 or image[0] != 137 or image[1] != 80 or image[2] != 78 or image[3] != 71 {
+        free(image as ptr<void>)
+        send_response(fd, 400, "application/json", make_error("Image data must be a PNG"))
+        return
+    }
+    let written: bool = io_write_bytes(path, image, length as i64)
+    free(image as ptr<void>)
+    if written == false { send_response(fd, 500, "application/json", make_error("Could not write image")); return }
+    send_response(fd, 200, "application/json; charset=utf-8", "{\"path\":\"" + path + "\",\"iteration\":" + format_i64(getot as i64) + "}")
+}
+
+function handle_save_movie(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let folder: string = "output/" + output_slug(session_name)
+    let _root: i32 = mkdir("output", 511)
+    let _folder: i32 = mkdir(folder, 511)
+    let prefix: string = output_label(body, body_len)
+    if prefix == "" { prefix = output_slug(session_name) }
+    let movie_data: ptr<u8> = calloc(8000000, 1) as ptr<u8>
+    if movie_data == null { send_response(fd, 500, "application/json", make_error("Out of memory")); return }
+    let length: i32 = decode_image(body, body_len, movie_data, 8000000, "movie")
+    if length < 12 or movie_data[0] != 26 or movie_data[1] != 69 or movie_data[2] != 223 or movie_data[3] != 163 {
+        free(movie_data as ptr<void>)
+        send_response(fd, 400, "application/json", make_error("Movie data must be a WebM recording"))
+        return
+    }
+    let webm_path: string = folder + "/" + prefix + ".webm"
+    let gif_path: string = folder + "/" + prefix + ".gif"
+    let written: bool = io_write_bytes(webm_path, movie_data, length as i64)
+    free(movie_data as ptr<void>)
+    if written == false { send_response(fd, 500, "application/json", make_error("Could not write movie recording")); return }
+    let command = proc_cmd("ffmpeg")
+    proc_arg(command, "-y")
+    proc_arg(command, "-loglevel")
+    proc_arg(command, "error")
+    proc_arg(command, "-i")
+    proc_arg(command, webm_path)
+    proc_arg(command, "-vf")
+    proc_arg(command, "fps=20,scale=800:-1:flags=lanczos")
+    proc_arg(command, "-loop")
+    proc_arg(command, "0")
+    proc_arg(command, gif_path)
+    proc_timeout_ms(command, 120000)
+    let result: ptr<ProcResult> = proc_run(command)
+    if result.exit_code != 0 {
+        send_response(fd, 500, "application/json", make_error("Could not create GIF with ffmpeg: " + result.error + result.stderr))
+        return
+    }
+    let _removed: i32 = unlink(webm_path)
+    send_response(fd, 200, "application/json; charset=utf-8", "{\"path\":\"" + gif_path + "\",\"iteration\":" + format_i64(getot as i64) + "}")
+}
+
+function handle_save_snapshot(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let _root: i32 = mkdir("output", 511)
+    let folder: string = "output/" + output_slug(session_name)
+    let _folder: i32 = mkdir(folder, 511)
+    let path: string = folder + "/" + output_label(body, body_len) + format_i64(getot as i64) + ".dat"
+    if write_snapshot(path) == false { send_response(fd, 500, "application/json", make_error("Could not write snapshot")); return }
+    send_response(fd, 200, "application/json; charset=utf-8", "{\"path\":\"" + path + "\",\"iteration\":" + format_i64(getot as i64) + "}")
+}
+
+function restore_previous_session(was_active: bool, previous_name: string) -> bool {
+    if was_active == false {
+        session_active = false
+        session_name = previous_name
+        return true
+    }
+    if read_snapshot_parameters(rollback_file) != 0 { return false }
+    neighbor_clear_warning()
+    inialea3d(nparti)
+    if nd > 1 {
+        if neighbor_build() == false { return false }
+        if ffu[24] == 0 and restore_neighbors() == false { return false }
+    }
+    session_name = previous_name
+    session_active = true
+    return true
+}
+
+function handle_start(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    model_batch_reset()
+    let previous_active: bool = session_active
+    let previous_name: string = session_name
+    if previous_active and write_snapshot(rollback_file) == false {
+        send_response(fd, 500, "application/json", make_error("Could not preserve the active simulation"))
+        return
+    }
+    let input: ptr<u8> = malloc(8000001) as ptr<u8>
+    if input == null { send_response(fd, 500, "application/json", make_error("Out of memory")); return }
+    let input_len: i32 = decode_json_string(body, body_len, "inputText", input, 8000001)
+    let mut path: string = ""
+    let mut uploaded_file: bool = false
+    let mut next_session_name: string = ""
+    let mut next_session_name_owned: ptr<u8> = null
+    if input_len >= 0 {
+        uploaded_file = true
+        upload_counter = upload_counter + 1
+        path = "/tmp/embryomaker-flow-" + format_i64(proc_pid() as i64) + "-" + format_i64(upload_counter as i64) + ".dat"
+        if io_write_bytes(path, input, input_len as i64) == false {
+            free(input as ptr<void>)
+            send_response(fd, 500, "application/json", make_error("Could not write uploaded input"))
+            return
+        }
+        next_session_name = "Custom input"
+        let file_name: ptr<u8> = malloc(256) as ptr<u8>
+        if file_name != null {
+            let file_len: i32 = decode_json_string(body, body_len, "fileName", file_name, 256)
+            if file_len > 0 { next_session_name = file_name as string; next_session_name_owned = file_name }
+            else { free(file_name as ptr<void>) }
+        }
+        free(input as ptr<void>)
+    } else {
+        free(input as ptr<void>)
+        let id: ptr<u8> = malloc(128) as ptr<u8>
+        if id == null { send_response(fd, 500, "application/json", make_error("Out of memory")); return }
+        let id_len: i32 = decode_json_string(body, body_len, "example", id, 128)
+        let id_value: string = if id_len < 0 { "migration" } else { id as string }
+        let mut index: i32 = 0
+        while index < EXAMPLE_COUNT and example_id(index) != id_value { index = index + 1 }
+        free(id as ptr<void>)
+        if index >= EXAMPLE_COUNT {
+            send_response(fd, 400, "application/json", make_error("Unknown EmbryoMaker example"))
+            return
+        }
+        path = example_path(index)
+        next_session_name = example_name(index)
+    }
+    let status: i32 = read_snapshot_parameters(path)
+    if uploaded_file { let _r: i32 = unlink(path) }
+    if status != 0 {
+        let parser_status: i32 = snapshot_error
+        if next_session_name_owned != null { free(next_session_name_owned as ptr<void>) }
+        if restore_previous_session(previous_active, previous_name) == false {
+            session_active = false
+            send_response(fd, 500, "application/json", make_error("Could not restore the active simulation after rejecting the input"))
+            return
+        }
+        send_response(fd, 422, "application/json", make_error("Could not load EmbryoMaker input. Parser status " + format_i64(parser_status as i64)))
+        return
+    }
+    neighbor_clear_warning()
+    inialea3d(nparti)
+    if nd > 1 {
+        if neighbor_build() == false {
+            let build_error: i32 = neighbor_error
+            if next_session_name_owned != null { free(next_session_name_owned as ptr<void>) }
+            if restore_previous_session(previous_active, previous_name) == false { session_active = false }
+            let mut message: string = "Could not prepare EmbryoMaker neighbors. Status " + format_i64(build_error as i64)
+            if build_error == 10 { message = "Gabriel filtering requires a triangulation or legacy adjacency neighbor mode." }
+            send_response(fd, 422, "application/json", make_error(message))
+            return
+        }
+        if ffu[24] == 0 and restore_neighbors() == false {
+            let restore_error: i32 = neighbor_error
+            if next_session_name_owned != null { free(next_session_name_owned as ptr<void>) }
+            if restore_previous_session(previous_active, previous_name) == false { session_active = false }
+            send_response(fd, 422, "application/json", make_error("Could not restore EmbryoMaker neighbors. Status " + format_i64(restore_error as i64)))
+            return
+        }
+    }
+    if session_name_owned != null { free(session_name_owned as ptr<void>) }
+    session_name = next_session_name
+    session_name_owned = next_session_name_owned
+    session_active = true
+    send_model_response(fd, getot, false, true)
+}
+
+function handle_advance(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    let batch_mode: bool = json_key_value(body, body_len, "timeUnits") >= 0
+    let steps: i32 = if batch_mode { json_integer(body, body_len, "timeUnits", 1) } else { json_integer(body, body_len, "steps", 1) }
+    let maximum: i32 = if batch_mode { 50000 } else { 10000 }
+    if steps < 0 or steps > maximum { send_response(fd, 400, "application/json", make_error("Advance amount is outside the supported range.")); return }
+    if batch_mode {
+        let token_position: i32 = json_key_value(body, body_len, "batchToken")
+        if token_position >= 0 {
+            let token: i32 = json_integer(body, body_len, "batchToken", 0)
+            let chunk_size: i32 = json_integer(body, body_len, "maxIterations", 1)
+            if token <= 0 or chunk_size < 1 or chunk_size > 64 {
+                model_batch_reset()
+                send_response(fd, 400, "application/json", make_error("Simulation batch token or chunk size is invalid."))
+                return
+            }
+            if json_true(body, body_len, "startBatch") and model_batch_begin(token, steps) == false {
+                send_response(fd, 400, "application/json", make_error("Could not begin simulation batch."))
+                return
+            }
+            let progress: ModelBatchProgress = model_batch_advance_chunk(token, chunk_size)
+            if progress.ok == false {
+                send_response(fd, 422, "application/json", make_error("Simulation stopped. Flow model status " + format_i64(model_error as i64)))
+                return
+            }
+            if progress.complete == false {
+                send_owned_response(fd, 200, "application/json; charset=utf-8", make_batch_progress_json())
+                return
+            }
+            let snapshot: bool = json_true(body, body_len, "includeSnapshot")
+            send_model_response(fd, getot, snapshot, progress.complete)
+            return
+        }
+        model_batch_reset()
+        if advance_model_batch(steps) == false {
+            send_response(fd, 422, "application/json", make_error("Simulation stopped. Flow model status " + format_i64(model_error as i64)))
+            return
+        }
+        let snapshot: bool = json_true(body, body_len, "includeSnapshot")
+        send_model_response(fd, getot, snapshot, true)
+        return
+    }
+    let mut i: i32 = 0
+    while i < steps {
+        if advance_model_iteration() == false {
+            send_response(fd, 422, "application/json", make_error("Simulation stopped. Flow model status " + format_i64(model_error as i64)))
+            return
+        }
+        i = i + 1
+    }
+    let snapshot: bool = json_true(body, body_len, "includeSnapshot")
+    model_batch_reset()
+    send_model_response(fd, getot, snapshot, true)
+}
+
+function handle_slice_plot(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
+    if nd < 1 { send_response(fd, 422, "application/json", make_error("The active model has no nodes")); return }
+    let axis: i32 = json_integer(body, body_len, "axis", -1)
+    let field: i32 = json_integer(body, body_len, "field", 0)
+    let decoy: i32 = json_integer(body, body_len, "decoy", nd)
+    let mut resolution: i32 = json_integer(body, body_len, "resolution", 450)
+    if axis < 0 or axis > 2 or field < 0 or field > 4 or decoy < 1 or decoy > nd or resolution < 1 or resolution > 450 {
+        send_response(fd, 400, "application/json", make_error("Slice axis, energy field, decoy node, or resolution is outside its supported range")); return
+    }
+    let plane_pos: i32 = json_key_value(body, body_len, "plane")
+    let minx_pos: i32 = json_key_value(body, body_len, "minx")
+    let maxx_pos: i32 = json_key_value(body, body_len, "maxx")
+    let miny_pos: i32 = json_key_value(body, body_len, "miny")
+    let maxy_pos: i32 = json_key_value(body, body_len, "maxy")
+    let minz_pos: i32 = json_key_value(body, body_len, "minz")
+    let maxz_pos: i32 = json_key_value(body, body_len, "maxz")
+    if plane_pos < 0 or minx_pos < 0 or maxx_pos < 0 or miny_pos < 0 or maxy_pos < 0 or minz_pos < 0 or maxz_pos < 0 {
+        send_response(fd, 400, "application/json", make_error("Slice plot requires a plane and three coordinate ranges")); return
+    }
+    let plane_value: ParseF64 = str_parse_f64_at(body as string, plane_pos)
+    let minx_value: ParseF64 = str_parse_f64_at(body as string, minx_pos)
+    let maxx_value: ParseF64 = str_parse_f64_at(body as string, maxx_pos)
+    let miny_value: ParseF64 = str_parse_f64_at(body as string, miny_pos)
+    let maxy_value: ParseF64 = str_parse_f64_at(body as string, maxy_pos)
+    let minz_value: ParseF64 = str_parse_f64_at(body as string, minz_pos)
+    let maxz_value: ParseF64 = str_parse_f64_at(body as string, maxz_pos)
+    if plane_value.ok == false or minx_value.ok == false or maxx_value.ok == false or miny_value.ok == false or maxy_value.ok == false or minz_value.ok == false or maxz_value.ok == false {
+        send_response(fd, 400, "application/json", make_error("Slice plot coordinates must be numeric")); return
+    }
+    if maxx_value.value <= minx_value.value or maxy_value.value <= miny_value.value or maxz_value.value <= minz_value.value {
+        send_response(fd, 400, "application/json", make_error("Slice plot ranges must have positive width")); return
+    }
+    let sample_count: i32 = (resolution + 1) * (resolution + 1)
+    let samples: ptr<f64> = calloc(sample_count as i64, 8) as ptr<f64>
+    if samples == null { send_response(fd, 500, "application/json", make_error("Could not allocate the slice plot field")); return }
+    let old_x: f64 = node[decoy].x
+    let old_y: f64 = node[decoy].y
+    let old_z: f64 = node[decoy].z
+    let mut failed: bool = false
+    let mut i: i32 = 0
+    while i <= resolution and failed == false {
+        let mut j: i32 = 0
+        while j <= resolution and failed == false {
+            let u: f64 = i as f64 / resolution as f64
+            let v: f64 = j as f64 / resolution as f64
+            if axis == 0 {
+                node[decoy].x = plane_value.value
+                node[decoy].y = miny_value.value + u * (maxy_value.value - miny_value.value)
+                node[decoy].z = minz_value.value + v * (maxz_value.value - minz_value.value)
+            } elif axis == 1 {
+                node[decoy].x = minx_value.value + u * (maxx_value.value - minx_value.value)
+                node[decoy].y = plane_value.value
+                node[decoy].z = minz_value.value + v * (maxz_value.value - minz_value.value)
+            } else {
+                node[decoy].x = minx_value.value + u * (maxx_value.value - minx_value.value)
+                node[decoy].y = miny_value.value + v * (maxy_value.value - miny_value.value)
+                node[decoy].z = plane_value.value
+            }
+            if energia(decoy) == false { failed = true }
+            let sample_index: i32 = i * (resolution + 1) + j
+            let mut value: f64 = node[decoy].e
+            if field == 1 { value = eadh[decoy] }
+            elif field == 2 { value = eyou[decoy] }
+            elif field == 3 { value = erep[decoy] }
+            elif field == 4 { value = erepcel[decoy] }
+            if value != value or value > 1e300 or value < -1e300 { failed = true }
+            samples[sample_index] = value
+            j = j + 1
+        }
+        i = i + 1
+    }
+    node[decoy].x = old_x
+    node[decoy].y = old_y
+    node[decoy].z = old_z
+    let restored: bool = energia(decoy)
+    if failed or restored == false {
+        free(samples as ptr<void>)
+        send_response(fd, 422, "application/json", make_error("Flow could not evaluate the requested OG slice energy field"))
+        return
+    }
+    let mut minimum: f64 = samples[0]
+    let mut maximum: f64 = samples[0]
+    let mut index: i32 = 1
+    while index < sample_count {
+        if samples[index] < minimum { minimum = samples[index] }
+        if samples[index] > maximum { maximum = samples[index] }
+        index = index + 1
+    }
+    let out: ptr<ByteBuf> = bb_new(sample_count * 16 + 256)
+    bb_puts(out, "{\"axis\":")
+    bb_put_i32(out, axis)
+    bb_puts(out, ",\"field\":")
+    bb_put_i32(out, field)
+    bb_puts(out, ",\"decoy\":")
+    bb_put_i32(out, decoy)
+    bb_puts(out, ",\"plane\":")
+    json_put_f64(out, plane_value.value)
+    bb_puts(out, ",\"resolution\":")
+    bb_put_i32(out, resolution)
+    bb_puts(out, ",\"minimum\":")
+    json_put_f64(out, minimum)
+    bb_puts(out, ",\"maximum\":")
+    json_put_f64(out, maximum)
+    bb_puts(out, ",\"values\":[")
+    index = 0
+    while index < sample_count {
+        if index > 0 { bb_putc(out, 44) }
+        json_put_f64(out, samples[index])
+        index = index + 1
+    }
+    bb_puts(out, "]}")
+    free(samples as ptr<void>)
+    let response: string = bb_str(out)
+    bb_free(out)
+    send_owned_response(fd, 200, "application/json; charset=utf-8", response)
+}
+
+function route_request(fd: i32, request: HttpRequest) -> void {
+    let bytes: ptr<u8> = request.bytes
+    let body: ptr<u8> = &bytes[request.body_start]
+    let body_len: i32 = request.body_length
+    if bytes_equal(bytes, request.method_start, request.method_end, "GET") {
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/display-config") {
+            let config: FileRead = io_read_file("config_file.txt")
+            if config.ok == false { config = io_read_file("reference/config_file.txt") }
+            if config.ok { send_response(fd, 200, "text/plain; charset=utf-8", config.data) }
+            else { send_response(fd, 200, "text/plain; charset=utf-8", "") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/examples") {
+            send_owned_response(fd, 200, "application/json; charset=utf-8", make_examples_json())
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/") or bytes_equal(bytes, request.path_start, request.path_end, "/index.html") {
+            let page: FileRead = io_read_file("ui/index.html")
+            if page.ok { send_response(fd, 200, "text/html; charset=utf-8", page.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read ui/index.html") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/favicon.svg") {
+            let icon: FileRead = io_read_file("ui/favicon.svg")
+            if icon.ok { send_response(fd, 200, "image/svg+xml", icon.data) }
+            else { send_response(fd, 404, "text/plain", "Not found") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/renderer.js") {
+            let renderer: FileRead = io_read_file("ui/renderer.js")
+            if renderer.ok { send_response(fd, 200, "application/javascript; charset=utf-8", renderer.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read ui/renderer.js") }
+            return
+        }
+        send_response(fd, 404, "text/plain; charset=utf-8", "Not found")
+        return
+    }
+    if bytes_equal(bytes, request.method_start, request.method_end, "POST") {
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session") { handle_start(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/edit") { handle_node_edit(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-edit") { handle_cell_edit(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/node-move") { handle_node_move(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-move") { handle_cell_move(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/node-delete") { handle_node_delete(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-delete") { handle_cell_delete(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/ecm-add") { handle_ecm_add(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/node-add") { handle_node_add(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-add") { handle_basic_cell_add(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/node-paste") { handle_node_paste(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-paste") { handle_cell_paste(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/gene-edit") { handle_gene_edit(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/advance") { handle_advance(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/slice-plot") { handle_slice_plot(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/save") { handle_save_snapshot(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/save-image") { handle_save_image(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/save-movie") { handle_save_movie(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/close") {
+            session_active = false
+            send_response(fd, 200, "application/json; charset=utf-8", "{\"closed\":true}")
+            return
+        }
+    }
+    send_response(fd, 404, "application/json; charset=utf-8", "{\"error\":\"Not found\"}")
+}
+
+function main() -> i32 {
+    let port_text: string = proc_getenv("PORT")
+    let port: i32 = if port_text == "" { 8765 } else { str_parse_i64_at(port_text, 0).value as i32 }
+    if port < 1 or port > 65535 { println("PORT must be between 1 and 65535"); return 2 }
+    snapshot_file = "/tmp/embryomaker-flow-" + format_i64(proc_pid() as i64) + "-snapshot.dat"
+    rollback_file = "/tmp/embryomaker-flow-" + format_i64(proc_pid() as i64) + "-rollback.dat"
+    let listener: i32 = embryomaker_loopback_listen(port)
+    if listener < 0 { println("Could not open EmbryoMaker Studio HTTP listener"); return 1 }
+    println("EmbryoMaker Studio (Flow) at http://127.0.0.1:" + format_i64(port as i64))
+    while true {
+        let client: i32 = flow_rt_tcp_accept(listener)
+        if client >= 0 {
+            if embryomaker_configure_client(client) < 0 {
+                let _closed: i32 = flow_rt_tcp_close(client)
+                continue
+            }
+            let request: HttpRequest = read_request(client)
+            if request.valid { route_request(client, request) }
+            else { send_response(client, 400, "text/plain; charset=utf-8", "Bad request") }
+            if request.bytes != null { free(request.bytes as ptr<void>) }
+            let _c: i32 = flow_rt_tcp_close(client)
+        }
+    }
+    return 0
+}

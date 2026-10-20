@@ -1,0 +1,1291 @@
+import embryo.general { nd, node }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function realloc(p: ptr<void>, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+    function memset(p: ptr<void>, value: i32, size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+let mut d_npt: i32 = 0
+let mut d_sizht: i32 = 0
+let mut d_maxbf: i32 = 0
+let mut d_maxfc: i32 = 0
+let mut d_bfcap: i32 = 0
+let mut d_fccap: i32 = 0
+let mut d_nbf: i32 = 0
+let mut d_nfc: i32 = 0
+let mut d_nface: i32 = 0
+let mut d_ntetra: i32 = 0
+let mut d_error: i32 = 0
+let mut d_i3: i32 = 0
+let mut d_i4: i32 = 0
+let mut d_vcl: ptr<f64> = null
+let mut d_vm: ptr<i32> = null
+let mut d_bf: ptr<i32> = null
+let mut d_fc: ptr<i32> = null
+let mut d_ht: ptr<i32> = null
+let mut d_cx: f64 = 0.0
+let mut d_cy: f64 = 0.0
+let mut d_cz: f64 = 0.0
+let mut d_hdavbf: i32 = 0
+let mut d_hdavfc: i32 = 0
+let mut d_ifac: i32 = 0
+let mut d_ivrt: i32 = 0
+let mut d_front: i32 = 0
+let mut d_back: i32 = 0
+let mut d_bfi: i32 = 0
+let mut d_last_insert: i32 = 0
+let mut d_last_stage: i32 = 0
+let mut d_last_ivrt: i32 = 0
+let mut d_last_swap_type: i32 = 0
+let mut d_bad_hash_index: i32 = 0
+let mut d_bad_boundary_face: i32 = 0
+let mut d_bad_boundary_side: i32 = 0
+let mut d_bad_boundary_neighbor: i32 = 0
+
+function d_v(row: i32, column: i32) -> i32 { return column * 4 + row }
+function d_f(row: i32, column: i32) -> i32 { return column * 8 + row }
+function d_b(row: i32, column: i32) -> i32 { return column * 4 + row }
+
+function d_order3(a0: i32, b0: i32, c0: i32) -> array<i32, 3> {
+    let mut a: i32 = a0
+    let mut b: i32 = b0
+    let mut c: i32 = c0
+    if b < a {
+        if c < b { let t: i32 = a; a = c; c = t }
+        elif c < a { let t: i32 = a; a = b; b = c; c = t }
+        else { let t: i32 = a; a = b; b = t }
+    } else {
+        if c < a { let t: i32 = a; a = c; c = b; b = t }
+        elif c < b { let t: i32 = b; b = c; c = t }
+    }
+    return [a, b, c]
+}
+
+function d_face_hash_ordered(a: i32, b: i32, c: i32) -> i32 {
+    let h1: i32 = (a * d_npt + b) % d_sizht
+    return (h1 * d_npt + c) % d_sizht
+}
+
+function d_htins(index: i32, a: i32, b: i32, c: i32, d: i32, e: i32) -> void {
+    let ordered: array<i32, 3> = d_order3(a, b, c)
+    let bucket: i32 = d_face_hash_ordered(ordered[0], ordered[1], ordered[2])
+    d_fc[d_f(1, index)] = ordered[0]
+    d_fc[d_f(2, index)] = ordered[1]
+    d_fc[d_f(3, index)] = ordered[2]
+    d_fc[d_f(4, index)] = d
+    d_fc[d_f(5, index)] = e
+    d_fc[d_f(6, index)] = d_ht[bucket]
+    d_fc[d_f(7, index)] = -1
+    d_ht[bucket] = index
+}
+
+function d_htsrc(a: i32, b: i32, c: i32) -> i32 {
+    let ordered: array<i32, 3> = d_order3(a, b, c)
+    let bucket: i32 = d_face_hash_ordered(ordered[0], ordered[1], ordered[2])
+    let mut index: i32 = d_ht[bucket]
+    while index != 0 {
+        if d_fc[d_f(1, index)] == ordered[0] and d_fc[d_f(2, index)] == ordered[1] and d_fc[d_f(3, index)] == ordered[2] { return index }
+        index = d_fc[d_f(6, index)]
+    }
+    return 0
+}
+
+function d_htsrc_ordered(a: i32, b: i32, c: i32) -> i32 {
+    let bucket: i32 = d_face_hash_ordered(a, b, c)
+    let mut index: i32 = d_ht[bucket]
+    while index != 0 {
+        if d_fc[d_f(1, index)] == a and d_fc[d_f(2, index)] == b and d_fc[d_f(3, index)] == c { return index }
+        index = d_fc[d_f(6, index)]
+    }
+    return 0
+}
+
+function d_availf() -> i32 {
+    if d_hdavfc != 0 {
+        let index: i32 = d_hdavfc
+        d_hdavfc = 0 - d_fc[d_f(1, index)]
+        return index
+    }
+    if d_nfc >= d_maxfc or d_reserve_faces(d_nfc + 1) == false { if d_error == 0 { d_error = 11 }; return 0 }
+    d_nfc = d_nfc + 1
+    return d_nfc
+}
+
+function d_htdel(index: i32) -> bool {
+    if index < 1 or index > d_nfc { d_error = 300; return false }
+    let bucket: i32 = d_face_hash_ordered(d_fc[d_f(1, index)], d_fc[d_f(2, index)], d_fc[d_f(3, index)])
+    let next: i32 = d_fc[d_f(6, index)]
+    let mut previous: i32 = d_ht[bucket]
+    if previous == index { d_ht[bucket] = next; return true }
+    while previous != 0 and d_fc[d_f(6, previous)] != index { previous = d_fc[d_f(6, previous)] }
+    if previous == 0 { d_error = 300; return false }
+    d_fc[d_f(6, previous)] = next
+    return true
+}
+
+function d_reserve_faces(required: i32) -> bool {
+    if required < 0 or required > d_maxfc { d_error = 11; return false }
+    if required <= d_fccap { return true }
+    let old_capacity: i32 = d_fccap
+    let mut new_capacity: i32 = if old_capacity > 0 { old_capacity } else { 64 }
+    while new_capacity < required {
+        if new_capacity > d_maxfc / 2 { new_capacity = d_maxfc }
+        else { new_capacity = new_capacity * 2 }
+    }
+    let grown: ptr<i32> = realloc(d_fc as ptr<void>, (new_capacity + 1) as i64 * 8 * sizeof<i32>()) as ptr<i32>
+    if grown == null { d_error = 305; return false }
+    memset(&grown[(old_capacity + 1) * 8] as ptr<void>, 0, (new_capacity - old_capacity) as i64 * 8 * sizeof<i32>())
+    d_fc = grown
+    d_fccap = new_capacity
+    return true
+}
+
+function d_reserve_boundaries(required: i32) -> bool {
+    if required < 0 or required > d_maxbf { d_error = 12; return false }
+    if required <= d_bfcap { return true }
+    let old_capacity: i32 = d_bfcap
+    let mut new_capacity: i32 = if old_capacity > 0 { old_capacity } else { 64 }
+    while new_capacity < required {
+        if new_capacity > d_maxbf / 2 { new_capacity = d_maxbf }
+        else { new_capacity = new_capacity * 2 }
+    }
+    let grown: ptr<i32> = realloc(d_bf as ptr<void>, (new_capacity + 1) as i64 * 4 * sizeof<i32>()) as ptr<i32>
+    if grown == null { d_error = 305; return false }
+    memset(&grown[(old_capacity + 1) * 4] as ptr<void>, 0, (new_capacity - old_capacity) as i64 * 4 * sizeof<i32>())
+    d_bf = grown
+    d_bfcap = new_capacity
+    return true
+}
+
+function d_nwthfc(point_index: i32, face_index: i32) -> bool {
+    let a: i32 = d_fc[d_f(1, face_index)]
+    let b: i32 = d_fc[d_f(2, face_index)]
+    let c: i32 = d_fc[d_f(3, face_index)]
+    let boundary: bool = d_fc[d_f(5, face_index)] <= 0
+    let mut vertex_slot: i32 = 4
+    let last_vertex_slot: i32 = if boundary { 4 } else { 5 }
+    let mut front: i32 = 0
+    let mut back: i32 = 0
+    let mut last_d: i32 = 0
+    while vertex_slot <= last_vertex_slot {
+        d_ntetra = d_ntetra + 2
+        let d: i32 = d_fc[d_f(vertex_slot, face_index)]
+        last_d = d
+        let mut edge_slot: i32 = 1
+        while edge_slot <= 3 {
+            let mut aa: i32 = a; let mut bb: i32 = b; let mut cc: i32 = c
+            if edge_slot == 2 { aa = b; bb = c; cc = a }
+            elif edge_slot == 3 { aa = c; bb = a; cc = b }
+            let new_face: i32 = d_availf()
+            if new_face == 0 { return false }
+            d_htins(new_face, aa, d, point_index, bb, cc)
+            let matched: i32 = d_htsrc(aa, bb, d)
+            if matched <= 0 { d_error = 300; return false }
+            if d_fc[d_f(4, matched)] == cc { d_fc[d_f(4, matched)] = point_index }
+            else { d_fc[d_f(5, matched)] = point_index }
+            if d_fc[d_f(5, matched)] > 0 {
+                if front == 0 { front = matched }
+                else { d_fc[d_f(7, back)] = matched }
+                back = matched
+            }
+            edge_slot = edge_slot + 1
+        }
+        vertex_slot = vertex_slot + 1
+    }
+    if front != 0 { d_fc[d_f(7, back)] = 0 }
+    let face_ab: i32 = d_availf()
+    let face_ac: i32 = d_availf()
+    if d_error != 0 { return false }
+    let mut e: i32 = if boundary { d_fc[d_f(5, face_index)] } else { d_fc[d_f(4, face_index)] }
+    if d_htdel(face_index) == false { return false }
+    d_htins(face_index, a, b, point_index, last_d, e)
+    d_htins(face_ab, a, c, point_index, last_d, e)
+    d_htins(face_ac, b, c, point_index, last_d, e)
+    if boundary {
+        e = 0 - e
+        let mut bf1: i32 = 0
+        let mut bf2: i32 = 0
+        if d_hdavbf != 0 {
+            bf1 = d_hdavbf
+            d_hdavbf = 0 - d_bf[d_b(1, bf1)]
+            if d_hdavbf != 0 { bf2 = d_hdavbf; d_hdavbf = 0 - d_bf[d_b(1, bf2)] }
+            else { d_nbf = d_nbf + 1; bf2 = d_nbf }
+        } else { d_nbf = d_nbf + 2; bf1 = d_nbf - 1; bf2 = d_nbf }
+        if d_nbf > d_maxbf { d_nbf = d_maxbf; d_error = 12; return false }
+        if d_reserve_boundaries(d_nbf) == false { return false }
+        d_fc[d_f(5, face_ab)] = 0 - bf1
+        d_fc[d_f(5, face_ac)] = 0 - bf2
+        let nbrac: i32 = d_bf[d_b(2, e)]
+        let nbrbc: i32 = d_bf[d_b(1, e)]
+        d_bf[d_b(1, e)] = face_ac; d_bf[d_b(2, e)] = face_ab
+        d_bf[d_b(1, bf1)] = face_ac; d_bf[d_b(2, bf1)] = face_index; d_bf[d_b(3, bf1)] = nbrac
+        d_bf[d_b(1, bf2)] = face_ab; d_bf[d_b(2, bf2)] = face_index; d_bf[d_b(3, bf2)] = nbrbc
+        let neighbor_ac: i32 = 0 - d_fc[d_f(5, nbrac)]
+        if d_bf[d_b(1, neighbor_ac)] == face_index { d_bf[d_b(1, neighbor_ac)] = face_ab }
+        elif d_bf[d_b(2, neighbor_ac)] == face_index { d_bf[d_b(2, neighbor_ac)] = face_ab }
+        else { d_bf[d_b(3, neighbor_ac)] = face_ab }
+        let neighbor_bc: i32 = 0 - d_fc[d_f(5, nbrbc)]
+        if d_bf[d_b(1, neighbor_bc)] == face_index { d_bf[d_b(1, neighbor_bc)] = face_ac }
+        elif d_bf[d_b(2, neighbor_bc)] == face_index { d_bf[d_b(2, neighbor_bc)] = face_ac }
+        else { d_bf[d_b(3, neighbor_bc)] = face_ac }
+    }
+    d_front = front; d_back = back
+    return true
+}
+
+function d_nwthin(point_index: i32, face_index: i32, vertex_slot: i32) -> bool {
+    d_front = 0; d_back = 0
+    d_ntetra = d_ntetra + 3
+    let a: i32 = d_fc[d_f(1, face_index)]
+    let b: i32 = d_fc[d_f(2, face_index)]
+    let c: i32 = d_fc[d_f(3, face_index)]
+    let d: i32 = d_fc[d_f(vertex_slot, face_index)]
+    let mut face_slot: i32 = 1
+    while face_slot <= 4 {
+        let mut aa: i32 = a; let mut bb: i32 = b; let mut cc: i32 = c; let mut dd: i32 = d
+        let mut face: i32 = face_index
+        if face_slot == 2 { cc = d; dd = c; face = d_htsrc(aa, bb, cc) }
+        elif face_slot == 3 { bb = c; cc = d; dd = b; face = d_htsrc(aa, bb, cc) }
+        elif face_slot == 4 { aa = b; bb = c; cc = d; dd = a; face = d_htsrc(aa, bb, cc) }
+        if face <= 0 { d_error = 300; return false }
+        if d_fc[d_f(4, face)] == dd { d_fc[d_f(4, face)] = point_index }
+        else { d_fc[d_f(5, face)] = point_index }
+        if d_fc[d_f(5, face)] > 0 {
+            if d_front == 0 { d_front = face }
+            else { d_fc[d_f(7, d_back)] = face }
+            d_back = face
+        }
+        face_slot = face_slot + 1
+    }
+    if d_front != 0 { d_fc[d_f(7, d_back)] = 0 }
+    let mut indices: array<i32, 6> = []
+    let mut j: i32 = 0
+    while j < 6 {
+        indices[j] = d_availf()
+        if indices[j] == 0 { return false }
+        j = j + 1
+    }
+    d_htins(indices[0], a, b, point_index, c, d)
+    d_htins(indices[1], a, c, point_index, b, d)
+    d_htins(indices[2], a, d, point_index, b, c)
+    d_htins(indices[3], b, c, point_index, a, d)
+    d_htins(indices[4], b, d, point_index, a, c)
+    d_htins(indices[5], c, d, point_index, a, b)
+    return true
+}
+
+function d_nwthed(point_index: i32, face_index: i32, edge_slot: i32) -> bool {
+    d_front = 0; d_back = 0
+    let mut a: i32 = d_fc[d_f(1, face_index)]
+    let mut b: i32 = d_fc[d_f(2, face_index)]
+    let mut c: i32 = d_fc[d_f(3, face_index)]
+    if edge_slot == 2 { a = d_fc[d_f(2, face_index)]; b = d_fc[d_f(3, face_index)]; c = d_fc[d_f(1, face_index)] }
+    elif edge_slot == 3 { a = d_fc[d_f(1, face_index)]; b = d_fc[d_f(3, face_index)]; c = d_fc[d_f(2, face_index)] }
+    let mut saved_c: i32 = c
+    let mut d: i32 = d_fc[d_f(4, face_index)]
+    let mut boundary_edge: bool = false
+    let mut current_face: i32 = face_index
+    let mut k: i32 = 0
+    let mut cp: i32 = 0
+    while true {
+        k = k + 1
+        if d_nfc + k > d_maxfc { d_error = 11; return false }
+        if d_reserve_faces(d_nfc + k) == false { return false }
+        d_fc[d_f(1, d_nfc + k)] = current_face
+        if boundary_edge { break }
+        if d == saved_c { break }
+        current_face = d_htsrc(a, b, d)
+        if current_face <= 0 { d_error = 300; return false }
+        if d_fc[d_f(5, current_face)] <= 0 { boundary_edge = true; cp = d }
+        elif d_fc[d_f(4, current_face)] == c { c = d; d = d_fc[d_f(5, current_face)] }
+        else { c = d; d = d_fc[d_f(4, current_face)] }
+    }
+    if boundary_edge {
+        if d_fc[d_f(5, face_index)] > 0 {
+            let mut left: i32 = 1
+            let mut right: i32 = k
+            while left <= k / 2 {
+                let x: i32 = d_fc[d_f(1, d_nfc + left)]
+                d_fc[d_f(1, d_nfc + left)] = d_fc[d_f(1, d_nfc + right)]
+                d_fc[d_f(1, d_nfc + right)] = x
+                left = left + 1; right = right - 1
+            }
+            c = saved_c
+            saved_c = cp
+            d = d_fc[d_f(5, face_index)]
+            while true {
+                current_face = d_htsrc(a, b, d)
+                if current_face <= 0 { d_error = 300; return false }
+                k = k + 1
+                if d_nfc + k > d_maxfc { d_error = 11; return false }
+                d_fc[d_f(1, d_nfc + k)] = current_face
+                if d_fc[d_f(5, current_face)] <= 0 { break }
+                elif d_fc[d_f(4, current_face)] == c { c = d; d = d_fc[d_f(5, current_face)] }
+                else { c = d; d = d_fc[d_f(4, current_face)] }
+            }
+        }
+    }
+
+    let nfcin: i32 = d_nfc
+    d_nfc = d_nfc + k
+    d_ntetra = d_ntetra + k
+    let mut fcn1: i32 = 0; let mut fcn2: i32 = 0
+    let mut fco1: i32 = 0; let mut fco2: i32 = 0
+    let mut bfo1: i32 = 0; let mut bfo2: i32 = 0
+    if boundary_edge {
+        d_ntetra = d_ntetra - 1
+        fcn1 = nfcin + 1; fcn2 = nfcin + k
+        fco1 = d_fc[d_f(1, fcn1)]; fco2 = d_fc[d_f(1, fcn2)]
+        bfo1 = 0 - d_fc[d_f(5, fco1)]; bfo2 = 0 - d_fc[d_f(5, fco2)]
+    }
+
+    let mut j: i32 = 1
+    let mut last_c: i32 = c
+    while j <= k {
+        let new_face: i32 = nfcin + j
+        let old_face: i32 = d_fc[d_f(1, new_face)]
+        if d_fc[d_f(1, old_face)] == a {
+            if d_fc[d_f(2, old_face)] == b { c = d_fc[d_f(3, old_face)] }
+            else { c = d_fc[d_f(2, old_face)] }
+        } else { c = d_fc[d_f(1, old_face)] }
+        d = d_fc[d_f(4, old_face)]
+        let e: i32 = d_fc[d_f(5, old_face)]
+        if d_htdel(old_face) == false { return false }
+        if d_htsrc(a, c, point_index) != 0 { d_error = 790; return false }
+        d_htins(old_face, a, c, point_index, d, e)
+        if d_htsrc(b, c, point_index) != 0 { d_error = 791; return false }
+        d_htins(new_face, b, c, point_index, d, e)
+        if j == k {
+            if boundary_edge { last_c = c; j = j + 1; continue }
+            d = saved_c
+        } elif j > 1 and d == cp { d = e }
+        if d_htsrc(c, d, point_index) != 0 { d_error = 792; return false }
+        if d_hdavfc != 0 {
+            let reusable: i32 = d_hdavfc
+            d_hdavfc = 0 - d_fc[d_f(1, reusable)]
+            d_htins(reusable, c, d, point_index, a, b)
+        } else {
+            if d_nfc >= d_maxfc { d_error = 11; return false }
+            if d_reserve_faces(d_nfc + 1) == false { return false }
+            d_nfc = d_nfc + 1
+            d_htins(d_nfc, c, d, point_index, a, b)
+        }
+        let mut direction: i32 = 1
+        while direction <= 2 {
+            let aa: i32 = if direction == 1 { a } else { b }
+            let bb: i32 = if direction == 1 { b } else { a }
+            let adjacent: i32 = d_htsrc(aa, c, d)
+            if adjacent <= 0 { d_error = 300; return false }
+            if d_fc[d_f(5, adjacent)] <= 0 { d_fc[d_f(4, adjacent)] = point_index }
+            else {
+                if d_fc[d_f(4, adjacent)] == bb { d_fc[d_f(4, adjacent)] = point_index }
+                else { d_fc[d_f(5, adjacent)] = point_index }
+                if d_front == 0 { d_front = adjacent }
+                else { d_fc[d_f(7, d_back)] = adjacent }
+                d_back = adjacent
+            }
+            direction = direction + 1
+        }
+        last_c = c
+        cp = c
+        j = j + 1
+    }
+    if d_front != 0 { d_fc[d_f(7, d_back)] = 0 }
+
+    if boundary_edge {
+        d = last_c; c = saved_c
+        let mut bfn1: i32 = 0; let mut bfn2: i32 = 0
+        if d_hdavbf != 0 {
+            bfn1 = d_hdavbf; d_hdavbf = 0 - d_bf[d_b(1, bfn1)]
+            if d_hdavbf != 0 { bfn2 = d_hdavbf; d_hdavbf = 0 - d_bf[d_b(1, bfn2)] }
+            else { d_nbf = d_nbf + 1; bfn2 = d_nbf }
+        } else { d_nbf = d_nbf + 2; bfn1 = d_nbf - 1; bfn2 = d_nbf }
+        if d_nbf > d_maxbf { d_nbf = d_maxbf; d_error = 12; return false }
+        if d_reserve_boundaries(d_nbf) == false { return false }
+        d_fc[d_f(5, fcn1)] = 0 - bfn1; d_fc[d_f(5, fcn2)] = 0 - bfn2
+        let mut which: i32 = 1
+        while which <= 2 {
+            if which == 2 { c = d }
+            let old_boundary: i32 = if which == 1 { bfo1 } else { bfo2 }
+            let new_boundary: i32 = if which == 1 { bfn1 } else { bfn2 }
+            let old_new_face: i32 = if which == 1 { fco1 } else { fco2 }
+            let replacement_face: i32 = if which == 1 { fcn1 } else { fcn2 }
+            let other_old_face: i32 = if which == 1 { fco2 } else { fco1 }
+            let other_new_face: i32 = if which == 1 { fcn2 } else { fcn1 }
+            let mut cross1: i32 = 0; let mut cross2: i32 = 0
+            if c < a { cross1 = d_bf[d_b(3, old_boundary)]; cross2 = d_bf[d_b(2, old_boundary)] }
+            elif c < b { cross1 = d_bf[d_b(3, old_boundary)]; cross2 = d_bf[d_b(1, old_boundary)] }
+            else { cross1 = d_bf[d_b(2, old_boundary)]; cross2 = d_bf[d_b(1, old_boundary)] }
+            if c < a {
+                d_bf[d_b(1, old_boundary)] = other_old_face
+                d_bf[d_b(2, old_boundary)] = replacement_face
+                d_bf[d_b(1, new_boundary)] = other_new_face
+                d_bf[d_b(2, new_boundary)] = old_new_face
+            } elif c < b {
+                d_bf[d_b(1, old_boundary)] = replacement_face
+                d_bf[d_b(2, old_boundary)] = other_old_face
+                d_bf[d_b(1, new_boundary)] = other_new_face
+                d_bf[d_b(2, new_boundary)] = old_new_face
+            } else {
+                d_bf[d_b(1, old_boundary)] = replacement_face
+                d_bf[d_b(2, old_boundary)] = other_old_face
+                d_bf[d_b(1, new_boundary)] = old_new_face
+                d_bf[d_b(2, new_boundary)] = other_new_face
+            }
+            d_bf[d_b(3, old_boundary)] = cross1; d_bf[d_b(3, new_boundary)] = cross2
+            let adjacent_boundary: i32 = 0 - d_fc[d_f(5, cross2)]
+            if d_bf[d_b(1, adjacent_boundary)] == old_new_face { d_bf[d_b(1, adjacent_boundary)] = replacement_face }
+            elif d_bf[d_b(2, adjacent_boundary)] == old_new_face { d_bf[d_b(2, adjacent_boundary)] = replacement_face }
+            else { d_bf[d_b(3, adjacent_boundary)] = replacement_face }
+            which = which + 1
+        }
+    }
+    return true
+}
+
+function d_opside(a: i32, b: i32, c: i32, d: i32, e: i32) -> i32 {
+    let ax: f64 = d_vcl[d_v(1, a)]; let ay: f64 = d_vcl[d_v(2, a)]; let az: f64 = d_vcl[d_v(3, a)]
+    let abx: f64 = d_vcl[d_v(1, b)] - ax; let aby: f64 = d_vcl[d_v(2, b)] - ay; let abz: f64 = d_vcl[d_v(3, b)] - az
+    let acx: f64 = d_vcl[d_v(1, c)] - ax; let acy: f64 = d_vcl[d_v(2, c)] - ay; let acz: f64 = d_vcl[d_v(3, c)] - az
+    let nrml1: f64 = aby * acz - abz * acy
+    let nrml2: f64 = abz * acx - abx * acz
+    let nrml3: f64 = abx * acy - aby * acx
+    let dp: f64 = (d_vcl[d_v(1, d)] - ax) * nrml1 + (d_vcl[d_v(2, d)] - ay) * nrml2 + (d_vcl[d_v(3, d)] - az) * nrml3
+    let mut maxabc: f64 = fabs(ax)
+    let coords: array<f64, 8> = [ay, az, d_vcl[d_v(1, b)], d_vcl[d_v(2, b)], d_vcl[d_v(3, b)], d_vcl[d_v(1, c)], d_vcl[d_v(2, c)], d_vcl[d_v(3, c)]]
+    let mut k: i32 = 0
+    while k < 8 { if fabs(coords[k]) > maxabc { maxabc = fabs(coords[k]) }; k = k + 1 }
+    let mut maxd: f64 = maxabc
+    if fabs(d_vcl[d_v(2, d)]) > maxd { maxd = fabs(d_vcl[d_v(2, d)]) }
+    if fabs(d_vcl[d_v(3, d)]) > maxd { maxd = fabs(d_vcl[d_v(3, d)]) }
+    let tol: f64 = 2.2204460492503131e-14
+    if fabs(dp) <= tol * maxd { return 2 }
+    let mut maxe: f64 = maxabc
+    if fabs(d_vcl[d_v(1, e)]) > maxe { maxe = fabs(d_vcl[d_v(1, e)]) }
+    if fabs(d_vcl[d_v(2, e)]) > maxe { maxe = fabs(d_vcl[d_v(2, e)]) }
+    if fabs(d_vcl[d_v(3, e)]) > maxe { maxe = fabs(d_vcl[d_v(3, e)]) }
+    let ep: f64 = (d_vcl[d_v(1, e)] - ax) * nrml1 + (d_vcl[d_v(2, e)] - ay) * nrml2 + (d_vcl[d_v(3, e)] - az) * nrml3
+    if fabs(ep) <= tol * maxe { return 0 }
+    return if dp * ep < 0.0 { 1 } else { -1 }
+}
+
+struct DelaunaySphere {
+    inside: i32,
+    center_x: f64,
+    center_y: f64,
+    center_z: f64,
+    radius_squared: f64
+}
+
+function d_ccsph(a: i32, b: i32, c: i32, d: i32, e: i32) -> DelaunaySphere {
+    let dax: f64 = d_vcl[d_v(1, a)] - d_vcl[d_v(1, d)]
+    let day: f64 = d_vcl[d_v(2, a)] - d_vcl[d_v(2, d)]
+    let daz: f64 = d_vcl[d_v(3, a)] - d_vcl[d_v(3, d)]
+    let dbx: f64 = d_vcl[d_v(1, b)] - d_vcl[d_v(1, d)]
+    let dby: f64 = d_vcl[d_v(2, b)] - d_vcl[d_v(2, d)]
+    let dbz: f64 = d_vcl[d_v(3, b)] - d_vcl[d_v(3, d)]
+    let dcx: f64 = d_vcl[d_v(1, c)] - d_vcl[d_v(1, d)]
+    let dcy: f64 = d_vcl[d_v(2, c)] - d_vcl[d_v(2, d)]
+    let dcz: f64 = d_vcl[d_v(3, c)] - d_vcl[d_v(3, d)]
+    let rhs1: f64 = 0.5 * ((dax * dax + day * day) + daz * daz)
+    let rhs2: f64 = 0.5 * ((dbx * dbx + dby * dby) + dbz * dbz)
+    let rhs3: f64 = 0.5 * ((dcx * dcx + dcy * dcy) + dcz * dcz)
+    let cp1: f64 = dby * dcz - dcy * dbz
+    let cp2: f64 = dcy * daz - day * dcz
+    let cp3: f64 = day * dbz - dby * daz
+    let determinant: f64 = dax * cp1 + dbx * cp2 + dcx * cp3
+    let tol: f64 = 2.2204460492503131e-14
+    let mut cmax: f64 = 0.0
+    let ids: array<i32, 4> = [a, b, c, d]
+    let mut i: i32 = 0
+    while i < 4 {
+        let p: i32 = ids[i]
+        if fabs(d_vcl[d_v(1, p)]) > cmax { cmax = fabs(d_vcl[d_v(1, p)]) }
+        if fabs(d_vcl[d_v(2, p)]) > cmax { cmax = fabs(d_vcl[d_v(2, p)]) }
+        if fabs(d_vcl[d_v(3, p)]) > cmax { cmax = fabs(d_vcl[d_v(3, p)]) }
+        i = i + 1
+    }
+    if fabs(determinant) <= 0.01 * tol * cmax { return DelaunaySphere { inside: 2, center_x: 0.0, center_y: 0.0, center_z: 0.0, radius_squared: -1.0 } }
+    let mut ox: f64 = (rhs1 * cp1 + rhs2 * cp2 + rhs3 * cp3) / determinant
+    let q1: f64 = dbx * rhs3 - dcx * rhs2
+    let q2: f64 = dcx * rhs1 - dax * rhs3
+    let q3: f64 = dax * rhs2 - dbx * rhs1
+    let mut oy: f64 = (daz * q1 + dbz * q2 + dcz * q3) / determinant
+    let mut oz: f64 = 0.0 - ((day * q1 + dby * q2 + dcy * q3) / determinant)
+    let radius_squared: f64 = (ox * ox + oy * oy) + oz * oz
+    let center_x: f64 = ox + d_vcl[d_v(1, d)]
+    let center_y: f64 = oy + d_vcl[d_v(2, d)]
+    let center_z: f64 = oz + d_vcl[d_v(3, d)]
+    let ex: f64 = d_vcl[d_v(1, e)] - center_x
+    let ey: f64 = d_vcl[d_v(2, e)] - center_y
+    let ez: f64 = d_vcl[d_v(3, e)] - center_z
+    let distance_squared: f64 = (ex * ex + ey * ey) + ez * ez
+    let mut inside: i32 = 0
+    if distance_squared > (1.0 + tol) * radius_squared { inside = -1 }
+    elif distance_squared < (1.0 - tol) * radius_squared { inside = 1 }
+    return DelaunaySphere { inside: inside, center_x: center_x, center_y: center_y, center_z: center_z, radius_squared: radius_squared }
+}
+
+function d_updatf(a: i32, b: i32, c: i32, d: i32, e: i32, inserted: i32) -> bool {
+    let index: i32 = d_htsrc(a, b, c)
+    if index <= 0 { d_error = 300; return false }
+    if d_fc[d_f(4, index)] == d { d_fc[d_f(4, index)] = e }
+    else { d_fc[d_f(5, index)] = e }
+    if d_fc[d_f(7, index)] == -1 and d_fc[d_f(3, index)] != inserted and d_fc[d_f(5, index)] > 0 {
+        d_fc[d_f(7, index)] = 0
+        if d_front == 0 { d_front = index }
+        else { d_fc[d_f(7, d_back)] = index }
+        d_back = index
+    }
+    return true
+}
+
+function d_i_swap(x: i32, y: i32) -> array<i32, 2> {
+    return [y, x]
+}
+
+function d_remove_face(index: i32) -> bool {
+    if d_htdel(index) == false { return false }
+    if d_fc[d_f(7, index)] >= 0 { d_fc[d_f(2, index)] = 0 }
+    elif index == d_nfc { d_nfc = d_nfc - 1 }
+    else { d_fc[d_f(1, index)] = 0 - d_hdavfc; d_hdavfc = index }
+    return true
+}
+
+function d_swapes(inserted: i32) -> bool {
+    while d_front != 0 {
+        let index: i32 = d_front
+        d_front = d_fc[d_f(7, index)]
+        if d_fc[d_f(2, index)] == 0 {
+            if index == d_nfc { d_nfc = d_nfc - 1 }
+            else { d_fc[d_f(1, index)] = 0 - d_hdavfc; d_hdavfc = index }
+            continue
+        }
+        d_ifac = index
+        d_fc[d_f(7, index)] = -1
+        let a: i32 = d_fc[d_f(1, index)]; let b: i32 = d_fc[d_f(2, index)]; let c: i32 = d_fc[d_f(3, index)]
+        let d: i32 = d_fc[d_f(4, index)]; let e: i32 = d_fc[d_f(5, index)]
+        let sphere = d_ccsph(d_vm[a], d_vm[b], d_vm[c], d_vm[d], d_vm[e])
+        if sphere.inside == 2 { d_error = 301; return false }
+        if sphere.inside < 1 { continue }
+        let bary = d_baryth(d_vm[a], d_vm[b], d_vm[c], d_vm[d], d_vcl[d_v(1, d_vm[e])], d_vcl[d_v(2, d_vm[e])], d_vcl[d_v(3, d_vm[e])])
+        if bary.degenerate { d_error = 301; return false }
+        if bary.a4 > 0.0 { d_error = 309; return false }
+        let mut negative_count: i32 = 1
+        let mut zero_count: i32 = 0
+        if bary.a1 < 0.0 { negative_count = negative_count + 1 } elif bary.a1 == 0.0 { zero_count = zero_count + 1 }
+        if bary.a2 < 0.0 { negative_count = negative_count + 1 } elif bary.a2 == 0.0 { zero_count = zero_count + 1 }
+        if bary.a3 < 0.0 { negative_count = negative_count + 1 } elif bary.a3 == 0.0 { zero_count = zero_count + 1 }
+        if negative_count == 1 and zero_count == 0 {
+            d_last_swap_type = 1
+            if d_updatf(a, b, d, c, e, inserted) == false { return false }
+            if d_updatf(a, c, d, b, e, inserted) == false { return false }
+            if d_updatf(b, c, d, a, e, inserted) == false { return false }
+            if d_updatf(a, b, e, c, d, inserted) == false { return false }
+            if d_updatf(a, c, e, b, d, inserted) == false { return false }
+            if d_updatf(b, c, e, a, d, inserted) == false { return false }
+            if d_htdel(index) == false { return false }
+            d_htins(index, a, d, e, b, c)
+            let first_free: i32 = d_availf()
+            if first_free == 0 { return false }
+            d_htins(first_free, b, d, e, a, c)
+            let second_free: i32 = d_availf()
+            if second_free == 0 { return false }
+            d_htins(second_free, c, d, e, a, b)
+            d_ntetra = d_ntetra + 1
+        } elif negative_count == 2 and zero_count == 0 {
+            d_last_swap_type = 2
+            let mut aa: i32 = a; let mut bb: i32 = b; let mut cc: i32 = c
+            if bary.a1 < 0.0 { let swapped = d_i_swap(aa, cc); aa = swapped[0]; cc = swapped[1] }
+            elif bary.a2 < 0.0 { let swapped = d_i_swap(bb, cc); bb = swapped[0]; cc = swapped[1] }
+            let ind1: i32 = d_htsrc(aa, bb, d)
+            if ind1 <= 0 { d_error = 300; return false }
+            if d_fc[d_f(4, ind1)] == e or d_fc[d_f(5, ind1)] == e {
+                if d_updatf(aa, cc, d, bb, e, inserted) == false { return false }
+                if d_updatf(aa, cc, e, bb, d, inserted) == false { return false }
+                if d_updatf(aa, d, e, bb, cc, inserted) == false { return false }
+                if d_updatf(bb, cc, d, aa, e, inserted) == false { return false }
+                if d_updatf(bb, cc, e, aa, d, inserted) == false { return false }
+                if d_updatf(bb, d, e, aa, cc, inserted) == false { return false }
+                if d_htdel(index) == false { return false }
+                d_htins(index, cc, d, e, aa, bb)
+                if d_remove_face(ind1) == false { return false }
+                let ind2: i32 = d_htsrc(aa, bb, e)
+                if ind2 <= 0 { d_error = 300; return false }
+                if d_remove_face(ind2) == false { return false }
+                d_ntetra = d_ntetra - 1
+            }
+        } elif negative_count == 1 and zero_count == 1 {
+            d_last_swap_type = 3
+            let mut aa: i32 = a; let mut bb: i32 = b; let mut cc: i32 = c
+            if bary.a1 == 0.0 { let swapped = d_i_swap(aa, cc); aa = swapped[0]; cc = swapped[1] }
+            elif bary.a2 == 0.0 { let swapped = d_i_swap(bb, cc); bb = swapped[0]; cc = swapped[1] }
+            if aa > bb { let swapped = d_i_swap(aa, bb); aa = swapped[0]; bb = swapped[1] }
+            let mut dd: i32 = d; let mut ee: i32 = e
+            if dd > ee { let swapped = d_i_swap(dd, ee); dd = swapped[0]; ee = swapped[1] }
+            let ind1: i32 = d_htsrc(aa, bb, dd)
+            let ind2: i32 = d_htsrc(aa, bb, ee)
+            if ind1 <= 0 or ind2 <= 0 { d_error = 300; return false }
+            let f: i32 = if d_fc[d_f(4, ind1)] == cc { d_fc[d_f(5, ind1)] } else { d_fc[d_f(4, ind1)] }
+            let g: i32 = if d_fc[d_f(4, ind2)] == cc { d_fc[d_f(5, ind2)] } else { d_fc[d_f(4, ind2)] }
+            if f <= 0 and g <= 0 {
+                if d_updatf(aa, cc, dd, bb, ee, inserted) == false { return false }
+                if d_updatf(aa, cc, ee, bb, dd, inserted) == false { return false }
+                if d_updatf(bb, cc, dd, aa, ee, inserted) == false { return false }
+                if d_updatf(bb, cc, ee, aa, dd, inserted) == false { return false }
+                if d_htdel(index) == false { return false }
+                d_htins(index, cc, dd, ee, aa, bb)
+                if d_htdel(ind1) == false { return false }
+                let bfx1: i32 = 0 - d_fc[d_f(5, ind1)]
+                d_htins(ind1, aa, dd, ee, cc, d_fc[d_f(5, ind1)])
+                if d_htdel(ind2) == false { return false }
+                let bfx2: i32 = 0 - d_fc[d_f(5, ind2)]
+                d_htins(ind2, bb, dd, ee, cc, d_fc[d_f(5, ind2)])
+                let mut nbr11: i32 = 0; let mut nbr12: i32 = 0
+                let mut nbr21: i32 = 0; let mut nbr22: i32 = 0
+                let mut which: i32 = 1
+                while which <= 2 {
+                    let boundary: i32 = if which == 1 { bfx1 } else { bfx2 }
+                    let opposite: i32 = if which == 1 { dd } else { ee }
+                    let mut near1: i32 = 0; let mut near2: i32 = 0
+                    if opposite < aa { near1 = d_bf[d_b(3, boundary)]; near2 = d_bf[d_b(2, boundary)] }
+                    elif opposite < bb { near1 = d_bf[d_b(3, boundary)]; near2 = d_bf[d_b(1, boundary)] }
+                    else { near1 = d_bf[d_b(2, boundary)]; near2 = d_bf[d_b(1, boundary)] }
+                    if which == 1 { nbr11 = near1; nbr12 = near2 } else { nbr21 = near1; nbr22 = near2 }
+                    which = which + 1
+                }
+                which = 1
+                let mut pivot: i32 = aa
+                let mut adjacent_boundary: i32 = 0 - d_fc[d_f(5, nbr12)]
+                while which <= 2 {
+                    let boundary: i32 = if which == 1 { bfx1 } else { bfx2 }
+                    let other_face: i32 = if which == 1 { ind2 } else { ind1 }
+                    let near1: i32 = if which == 1 { nbr11 } else { nbr12 }
+                    let near2: i32 = if which == 1 { nbr21 } else { nbr22 }
+                    if which == 2 { pivot = bb; adjacent_boundary = 0 - d_fc[d_f(5, nbr21)] }
+                    if pivot < dd {
+                        d_bf[d_b(1, boundary)] = other_face
+                        d_bf[d_b(2, boundary)] = near2
+                        d_bf[d_b(3, boundary)] = near1
+                    } elif pivot < ee {
+                        d_bf[d_b(1, boundary)] = near2
+                        d_bf[d_b(2, boundary)] = other_face
+                        d_bf[d_b(3, boundary)] = near1
+                    } else {
+                        d_bf[d_b(1, boundary)] = near2
+                        d_bf[d_b(2, boundary)] = near1
+                        d_bf[d_b(3, boundary)] = other_face
+                    }
+                    if d_bf[d_b(1, adjacent_boundary)] == (if which == 1 { ind1 } else { ind2 }) { d_bf[d_b(1, adjacent_boundary)] = (if which == 1 { ind2 } else { ind1 }) }
+                    elif d_bf[d_b(2, adjacent_boundary)] == (if which == 1 { ind1 } else { ind2 }) { d_bf[d_b(2, adjacent_boundary)] = (if which == 1 { ind2 } else { ind1 }) }
+                    else { d_bf[d_b(3, adjacent_boundary)] = (if which == 1 { ind2 } else { ind1 }) }
+                    which = which + 1
+                }
+            } elif f == g {
+                d_last_swap_type = 4
+                if d_updatf(aa, cc, dd, bb, ee, inserted) == false { return false }
+                if d_updatf(aa, cc, ee, bb, dd, inserted) == false { return false }
+                if d_updatf(bb, cc, dd, aa, ee, inserted) == false { return false }
+                if d_updatf(bb, cc, ee, aa, dd, inserted) == false { return false }
+                if d_updatf(aa, dd, f, bb, ee, inserted) == false { return false }
+                if d_updatf(aa, ee, f, bb, dd, inserted) == false { return false }
+                if d_updatf(bb, dd, f, aa, ee, inserted) == false { return false }
+                if d_updatf(bb, ee, f, aa, dd, inserted) == false { return false }
+                if d_htdel(index) == false { return false }
+                d_htins(index, cc, dd, ee, aa, bb)
+                let old_diagonal: i32 = d_htsrc(aa, bb, f)
+                if old_diagonal <= 0 { d_error = 300; return false }
+                if d_htdel(old_diagonal) == false { return false }
+                let mut replacement: i32 = old_diagonal
+                if d_fc[d_f(7, old_diagonal)] >= 0 {
+                    d_fc[d_f(2, old_diagonal)] = 0
+                    replacement = d_availf()
+                    if replacement == 0 { return false }
+                }
+                d_htins(replacement, dd, ee, f, aa, bb)
+                if d_htdel(ind1) == false { return false }
+                let queued1: i32 = d_fc[d_f(7, ind1)]
+                d_htins(ind1, aa, dd, ee, cc, f)
+                d_fc[d_f(7, ind1)] = queued1
+                if d_htdel(ind2) == false { return false }
+                let queued2: i32 = d_fc[d_f(7, ind2)]
+                d_htins(ind2, bb, dd, ee, cc, f)
+                d_fc[d_f(7, ind2)] = queued2
+            }
+        }
+    }
+    return true
+}
+
+function d_validate_faces() -> bool {
+    d_bad_hash_index = 0
+    let mut index: i32 = 1
+    while index <= d_nfc {
+        if d_fc[d_f(1, index)] > 0 and d_fc[d_f(2, index)] > 0 {
+            let a: i32 = d_fc[d_f(1, index)]
+            let b: i32 = d_fc[d_f(2, index)]
+            let c: i32 = d_fc[d_f(3, index)]
+            if a > b or b > c or d_htsrc_ordered(a, b, c) != index { d_bad_hash_index = index; return false }
+        }
+        index = index + 1
+    }
+    return true
+}
+
+function d_validate_boundary() -> bool {
+    d_bad_boundary_face = 0; d_bad_boundary_side = 0; d_bad_boundary_neighbor = 0
+    let mut face: i32 = 1
+    while face <= d_nfc {
+        if d_fc[d_f(1, face)] > 0 and d_fc[d_f(2, face)] > 0 and d_fc[d_f(5, face)] < 0 {
+            let boundary: i32 = 0 - d_fc[d_f(5, face)]
+            let mut side: i32 = 1
+            while side <= 3 {
+                let neighbor: i32 = d_bf[d_b(side, boundary)]
+                if neighbor <= 0 or d_fc[d_f(5, neighbor)] >= 0 { d_bad_boundary_face = face; d_bad_boundary_side = side; d_bad_boundary_neighbor = neighbor; return false }
+                let mut edge_a: i32 = d_fc[d_f(1, face)]
+                let mut edge_b: i32 = d_fc[d_f(3, face)]
+                if side == 1 { edge_a = d_fc[d_f(2, face)] }
+                elif side == 3 { edge_b = d_fc[d_f(2, face)] }
+                let contains_a: bool = d_fc[d_f(1, neighbor)] == edge_a or d_fc[d_f(2, neighbor)] == edge_a or d_fc[d_f(3, neighbor)] == edge_a
+                let contains_b: bool = d_fc[d_f(1, neighbor)] == edge_b or d_fc[d_f(2, neighbor)] == edge_b or d_fc[d_f(3, neighbor)] == edge_b
+                if contains_a == false or contains_b == false { d_bad_boundary_face = face; d_bad_boundary_side = side; d_bad_boundary_neighbor = neighbor; return false }
+                let neighbor_boundary: i32 = 0 - d_fc[d_f(5, neighbor)]
+                let mut reciprocal: bool = false
+                let mut k: i32 = 1
+                while k <= 3 { if d_bf[d_b(k, neighbor_boundary)] == face { reciprocal = true }; k = k + 1 }
+                if reciprocal == false { d_bad_boundary_face = face; d_bad_boundary_side = side; d_bad_boundary_neighbor = neighbor; return false }
+                side = side + 1
+            }
+        }
+        face = face + 1
+    }
+    return true
+}
+
+function d_vbfac(point: i32, top_visible: i32, top_nonvisible: i32) -> bool {
+    let mut topn: i32 = top_nonvisible
+    let mut topt: i32 = 0
+    d_fc[d_f(7, top_visible)] = 0
+    let mut k: i32 = 0 - d_fc[d_f(5, top_visible)]
+    let mut j: i32 = 1
+    while j <= 3 {
+        let nbr: i32 = d_bf[d_b(j, k)]
+        if d_fc[d_f(7, nbr)] == -1 { d_fc[d_f(7, nbr)] = topt; topt = nbr }
+        j = j + 1
+    }
+    while topt != 0 {
+        let face: i32 = topt
+        topt = d_fc[d_f(7, face)]
+        let va: i32 = d_vm[d_fc[d_f(1, face)]]
+        let vb: i32 = d_vm[d_fc[d_f(2, face)]]
+        let vc: i32 = d_vm[d_fc[d_f(3, face)]]
+        let orientation: i32 = d_opside(va, vb, vc, d_npt + 1, d_vm[point])
+        if orientation == 2 { d_error = 301; return false }
+        if orientation == 1 {
+            d_fc[d_f(7, face)] = top_visible
+            top_visible = face
+            k = 0 - d_fc[d_f(5, face)]
+            j = 1
+            while j <= 3 {
+                let nbr: i32 = d_bf[d_b(j, k)]
+                if d_fc[d_f(7, nbr)] == -1 { d_fc[d_f(7, nbr)] = topt; topt = nbr }
+                j = j + 1
+            }
+        } else {
+            d_fc[d_f(7, face)] = topn
+            topn = face
+        }
+    }
+    while topn != 0 {
+        let face: i32 = topn
+        topn = d_fc[d_f(7, face)]
+        d_fc[d_f(7, face)] = -1
+    }
+    d_front = top_visible
+    return true
+}
+
+function d_nwthou(point_index: i32) -> bool {
+    d_bfi = 0
+    let mut pointer: i32 = d_front
+    while pointer != 0 {
+        d_back = pointer
+        let a0: i32 = d_fc[d_f(1, pointer)]
+        let b0: i32 = d_fc[d_f(2, pointer)]
+        let c0: i32 = d_fc[d_f(3, pointer)]
+        let boundary_id: i32 = 0 - d_fc[d_f(5, pointer)]
+        d_fc[d_f(5, pointer)] = point_index
+        d_ntetra = d_ntetra + 1
+        let mut a: i32 = a0; let mut b: i32 = b0; let mut c: i32 = c0
+        let mut edge: i32 = 1
+        while edge <= 3 {
+            if edge == 2 { let swap: i32 = a; a = b; b = swap }
+            elif edge == 3 { let swap: i32 = a; a = c; c = swap }
+            let neighbor: i32 = d_bf[d_b(edge, boundary_id)]
+            if d_fc[d_f(7, neighbor)] != -1 and d_fc[d_f(5, neighbor)] == point_index {
+                edge = edge + 1
+                continue
+            }
+            let new_face: i32 = d_availf()
+            if new_face == 0 { return false }
+            let neighbor_boundary_id: i32 = 0 - d_fc[d_f(5, neighbor)]
+            let mut side: i32 = 3
+            if d_bf[d_b(1, neighbor_boundary_id)] == pointer { side = 1 }
+            elif d_bf[d_b(2, neighbor_boundary_id)] == pointer { side = 2 }
+            if d_fc[d_f(7, neighbor)] != -1 {
+                d_htins(new_face, b, c, point_index, a, d_fc[d_f(side, neighbor)])
+            } else {
+                let mut new_boundary: i32 = 0
+                if d_hdavbf != 0 { new_boundary = d_hdavbf; d_hdavbf = 0 - d_bf[d_b(1, new_boundary)] }
+                else {
+                    if d_nbf >= d_maxbf { d_error = 12; return false }
+                    d_nbf = d_nbf + 1
+                    new_boundary = d_nbf
+                }
+                if d_reserve_boundaries(new_boundary) == false { return false }
+                if d_bfi == 0 { d_bfi = new_face }
+                d_htins(new_face, b, c, point_index, a, 0 - new_boundary)
+                d_bf[d_b(side, neighbor_boundary_id)] = new_face
+                d_bf[d_b(3, new_boundary)] = neighbor
+            }
+            edge = edge + 1
+        }
+        if boundary_id == d_nbf { d_nbf = d_nbf - 1 }
+        else { d_bf[d_b(1, boundary_id)] = 0 - d_hdavbf; d_hdavbf = boundary_id }
+        pointer = d_fc[d_f(7, pointer)]
+    }
+    if d_bfi == 0 { d_error = 300; return false }
+    let mut link_pointer: i32 = d_bfi
+    let mut a: i32 = d_fc[d_f(1, link_pointer)]
+    let mut side: i32 = 2
+    let mut counter: i32 = 0
+    while true {
+        let mut b: i32 = d_fc[d_f(side, link_pointer)]
+        let mut c: i32 = d_fc[d_f(4, link_pointer)]
+        counter = counter + 1
+        let mut linked: bool = false
+        while linked == false {
+            let neighbor: i32 = d_htsrc(a, c, point_index)
+            if neighbor <= 0 { d_error = 300; return false }
+            if d_fc[d_f(5, neighbor)] > 0 {
+                let opposite: i32 = if d_fc[d_f(4, neighbor)] == b { d_fc[d_f(5, neighbor)] } else { d_fc[d_f(4, neighbor)] }
+                b = c; c = opposite
+                continue
+            }
+            let current_boundary: i32 = 0 - d_fc[d_f(5, link_pointer)]
+            let neighbor_boundary: i32 = 0 - d_fc[d_f(5, neighbor)]
+            if d_fc[d_f(1, link_pointer)] == a { d_bf[d_b(2, current_boundary)] = neighbor }
+            else { d_bf[d_b(1, current_boundary)] = neighbor }
+            side = if d_fc[d_f(1, neighbor)] == a { 1 } else { 2 }
+            d_bf[d_b(3 - side, neighbor_boundary)] = link_pointer
+            a = d_fc[d_f(3 - side, neighbor)]
+            link_pointer = neighbor
+            linked = true
+            if counter > 100 { d_error = 666; return false }
+        }
+        if link_pointer == d_bfi { break }
+    }
+    return true
+}
+
+function delaunay_initialize_first_tetrahedron() -> bool {
+    if d_vcl == null or d_fc == null or d_ht == null or d_bf == null { d_error = 305; return false }
+    d_cx = 0.0; d_cy = 0.0; d_cz = 0.0
+    let mut i: i32 = 1
+    while i <= 4 {
+        let point: i32 = d_vm[i]
+        d_cx = d_cx + d_vcl[d_v(1, point)]
+        d_cy = d_cy + d_vcl[d_v(2, point)]
+        d_cz = d_cz + d_vcl[d_v(3, point)]
+        i = i + 1
+    }
+    d_cx = d_cx * 0.25; d_cy = d_cy * 0.25; d_cz = d_cz * 0.25
+    d_vcl[d_v(1, d_npt + 1)] = d_cx
+    d_vcl[d_v(2, d_npt + 1)] = d_cy
+    d_vcl[d_v(3, d_npt + 1)] = d_cz
+    d_nbf = 4; d_nfc = 4; d_ntetra = 1
+    d_hdavbf = 0; d_hdavfc = 0
+    i = 0
+    while i < d_sizht { d_ht[i] = 0; i = i + 1 }
+    i = 1
+    while i <= 4 {
+        let mut field: i32 = 1
+        while field <= 7 { d_fc[d_f(field, i)] = 0; field = field + 1 }
+        field = 1
+        while field <= 3 { d_bf[d_b(field, i)] = 0; field = field + 1 }
+        i = i + 1
+    }
+    d_htins(1, 1, 2, 3, 4, -1)
+    d_htins(2, 1, 2, 4, 3, -2)
+    d_htins(3, 1, 3, 4, 2, -3)
+    d_htins(4, 2, 3, 4, 1, -4)
+    d_bf[d_b(1, 1)] = 4; d_bf[d_b(2, 1)] = 3; d_bf[d_b(3, 1)] = 2
+    d_bf[d_b(1, 2)] = 4; d_bf[d_b(2, 2)] = 3; d_bf[d_b(3, 2)] = 1
+    d_bf[d_b(1, 3)] = 4; d_bf[d_b(2, 3)] = 2; d_bf[d_b(3, 3)] = 1
+    d_bf[d_b(1, 4)] = 3; d_bf[d_b(2, 4)] = 2; d_bf[d_b(3, 4)] = 1
+    d_ifac = 4; d_error = 0
+    return true
+}
+
+function d_insert_at(point_index: i32, validate_faces: bool) -> bool {
+    if point_index < 5 or point_index > d_npt { d_error = 302; return false }
+    d_last_insert = point_index; d_last_stage = 1
+    d_ivrt = if d_fc[d_f(5, d_ifac)] == point_index - 1 { 5 } else { 4 }
+    if d_walkt3(d_vm[point_index]) == false { return false }
+    d_last_ivrt = d_ivrt
+    d_last_stage = 2
+    let mut inserted: bool = false
+    if d_ivrt == 6 { inserted = d_nwthfc(point_index, d_ifac) }
+    elif d_ivrt >= 4 { inserted = d_nwthin(point_index, d_ifac, d_ivrt) }
+    if d_ivrt == 0 {
+        if d_vbfac(d_vm[point_index], d_ifac, 0) == false { return false }
+        inserted = d_nwthou(point_index)
+    }
+    if d_ivrt >= 1 and d_ivrt <= 3 { inserted = d_nwthed(point_index, d_ifac, d_ivrt) }
+    if inserted == false { return false }
+    d_last_stage = 3
+    if d_swapes(point_index) == false { return false }
+    if d_validate_boundary() == false { d_error = 780; return false }
+    if validate_faces and d_validate_faces() == false { d_error = 777; return false }
+    return true
+}
+
+function delaunay_insert_one() -> bool {
+    return d_insert_at(5, true)
+}
+
+function delaunay_build() -> bool {
+    if delaunay_initialize_first_tetrahedron() == false { return false }
+    let mut point_index: i32 = 5
+    while point_index <= d_npt {
+        if d_insert_at(point_index, false) == false { return false }
+        point_index = point_index + 1
+    }
+    if d_validate_boundary() == false { d_error = 780; return false }
+    if d_validate_faces() == false { d_error = 777; return false }
+    return true
+}
+
+function delaunay_walk_result() -> i32 { return d_ivrt }
+function delaunay_face_count() -> i32 { return d_nfc }
+function delaunay_tetra_count() -> i32 { return d_ntetra }
+function delaunay_face_capacity() -> i32 { return d_fccap }
+function delaunay_boundary_capacity() -> i32 { return d_bfcap }
+
+function delaunay_release() -> void {
+    if d_vcl != null { free(d_vcl as ptr<void>); d_vcl = null }
+    if d_vm != null { free(d_vm as ptr<void>); d_vm = null }
+    if d_bf != null { free(d_bf as ptr<void>); d_bf = null }
+    if d_fc != null { free(d_fc as ptr<void>); d_fc = null }
+    if d_ht != null { free(d_ht as ptr<void>); d_ht = null }
+    d_bfcap = 0
+    d_fccap = 0
+}
+
+function delaunay_initialize() -> bool {
+    delaunay_release()
+    d_npt = nd
+    if d_npt < 4 or d_npt > 46340 { d_error = 302; return false }
+    d_sizht = 12 * d_npt
+    d_maxbf = d_npt * d_npt
+    d_maxfc = d_npt * d_npt
+    if d_sizht <= 0 { d_error = 302; return false }
+    d_bfcap = if d_maxbf < 64 { d_maxbf } else { 64 }
+    d_fccap = if d_maxfc < 64 { d_maxfc } else { 64 }
+    d_vcl = calloc(((d_npt + 2) * 4) as i64, sizeof<f64>()) as ptr<f64>
+    d_vm = calloc((d_npt + 1) as i64, sizeof<i32>()) as ptr<i32>
+    d_bf = calloc(((d_bfcap + 1) * 4) as i64, sizeof<i32>()) as ptr<i32>
+    d_fc = calloc(((d_fccap + 1) * 8) as i64, sizeof<i32>()) as ptr<i32>
+    d_ht = calloc(d_sizht as i64, sizeof<i32>()) as ptr<i32>
+    if d_vcl == null or d_vm == null or d_bf == null or d_fc == null or d_ht == null { d_error = 305; delaunay_release(); return false }
+    let mut point: i32 = 1
+    while point <= d_npt {
+        d_vcl[d_v(1, point)] = node[point].x
+        d_vcl[d_v(2, point)] = node[point].y
+        d_vcl[d_v(3, point)] = node[point].z
+        d_vm[point] = point
+        point = point + 1
+    }
+    d_nbf = 0; d_nfc = 0; d_nface = 0; d_ntetra = 0
+    d_hdavbf = 0; d_hdavfc = 0; d_ifac = 0; d_error = 0
+    return d_frstet()
+}
+
+struct DelaunayBarycentric {
+    a1: f64,
+    a2: f64,
+    a3: f64,
+    a4: f64,
+    degenerate: bool
+}
+
+function d_max3(a: f64, b: f64, c: f64) -> f64 {
+    if a > b {
+        if a > c { return a }
+        return c
+    }
+    if b > c { return b }
+    return c
+}
+
+function d_max4(a: f64, b: f64, c: f64, d: f64) -> f64 {
+    if a > b {
+        if a > c {
+            if a > d { return a }
+            return d
+        }
+        if c > d { return c }
+        return d
+    }
+    if b > c {
+        if b > d { return b }
+        return d
+    }
+    if c > d { return c }
+    return d
+}
+
+function d_baryth(ia: i32, ib: i32, ic: i32, id: i32, ex: f64, ey: f64, ez: f64) -> DelaunayBarycentric {
+    let ax: f64 = d_vcl[d_v(1, ia)]; let ay: f64 = d_vcl[d_v(2, ia)]; let az: f64 = d_vcl[d_v(3, ia)]
+    let bx: f64 = d_vcl[d_v(1, ib)]; let by: f64 = d_vcl[d_v(2, ib)]; let bz: f64 = d_vcl[d_v(3, ib)]
+    let cx: f64 = d_vcl[d_v(1, ic)]; let cy: f64 = d_vcl[d_v(2, ic)]; let cz: f64 = d_vcl[d_v(3, ic)]
+    let dx: f64 = d_vcl[d_v(1, id)]; let dy: f64 = d_vcl[d_v(2, id)]; let dz: f64 = d_vcl[d_v(3, id)]
+    let dax: f64 = ax - dx; let day: f64 = ay - dy; let daz: f64 = az - dz
+    let dbx: f64 = bx - dx; let dby: f64 = by - dy; let dbz: f64 = bz - dz
+    let dcx: f64 = cx - dx; let dcy: f64 = cy - dy; let dcz: f64 = cz - dz
+    let amax: f64 = d_max3(fabs(ax), fabs(ay), fabs(az))
+    let bmax: f64 = d_max3(fabs(bx), fabs(by), fabs(bz))
+    let cmax: f64 = d_max3(fabs(cx), fabs(cy), fabs(cz))
+    let dmax: f64 = d_max3(fabs(dx), fabs(dy), fabs(dz))
+    let cp1: f64 = dby * dcz - dbz * dcy
+    let cp2: f64 = dbz * dcx - dbx * dcz
+    let cp3: f64 = dbx * dcy - dby * dcx
+    let determinant: f64 = dax * cp1 + day * cp2 + daz * cp3
+    let tol: f64 = 2.2204460492503131e-14
+    let maxabcd: f64 = d_max4(amax, bmax, cmax, dmax)
+    if fabs(determinant) <= 0.01 * tol * maxabcd { return DelaunayBarycentric { a1: 0.0, a2: 0.0, a3: 0.0, a4: 0.0, degenerate: true } }
+    let dex: f64 = ex - dx; let dey: f64 = ey - dy; let dez: f64 = ez - dz
+    let eax: f64 = ax - ex; let eay: f64 = ay - ey; let eaz: f64 = az - ez
+    let ebx: f64 = bx - ex; let eby: f64 = by - ey; let ebz: f64 = bz - ez
+    let ecx: f64 = cx - ex; let ecy: f64 = cy - ey; let ecz: f64 = cz - ez
+    let alpha1: f64 = dex * cp1 + dey * cp2 + dez * cp3
+    let q1: f64 = day * dez - daz * dey
+    let q2: f64 = daz * dex - dax * dez
+    let q3: f64 = dax * dey - day * dex
+    let alpha2: f64 = dcx * q1 + dcy * q2 + dcz * q3
+    let alpha3: f64 = dbx * q1 + dby * q2 + dbz * q3
+    let mut alpha4: f64 = eax * (eby * ecz - ebz * ecy) + eay * (ebz * ecx - ebx * ecz) + eaz * (ebx * ecy - eby * ecx)
+    let mut out1: f64 = alpha1; let mut out2: f64 = alpha2; let mut out3: f64 = alpha3
+    if determinant < 0.0 { out1 = 0.0 - alpha1; out2 = 0.0 - alpha2; alpha4 = 0.0 - alpha4 }
+    else { out3 = 0.0 - alpha3 }
+    let emax: f64 = d_max3(fabs(ex), fabs(ey), fabs(ez))
+    if fabs(out1) <= tol * d_max4(bmax, cmax, dmax, emax) { out1 = 0.0 }
+    if fabs(out2) <= tol * d_max4(amax, cmax, dmax, emax) { out2 = 0.0 }
+    if fabs(out3) <= tol * d_max4(amax, bmax, dmax, emax) { out3 = 0.0 }
+    if fabs(alpha4) <= tol * d_max4(amax, bmax, cmax, emax) { alpha4 = 0.0 }
+    return DelaunayBarycentric { a1: out1, a2: out2, a3: out3, a4: alpha4, degenerate: false }
+}
+
+function d_walkt3(point: i32) -> bool {
+    let mut count: i32 = 0
+    while true {
+        if d_fc[d_f(d_ivrt, d_ifac)] <= 0 { d_ivrt = 0; return true }
+        count = count + 1
+        if count > d_ntetra { d_error = 307; return false }
+        let a: i32 = d_fc[d_f(1, d_ifac)]
+        let b: i32 = d_fc[d_f(2, d_ifac)]
+        let c: i32 = d_fc[d_f(3, d_ifac)]
+        let d: i32 = d_fc[d_f(d_ivrt, d_ifac)]
+        let va: i32 = d_vm[a]; let vb: i32 = d_vm[b]; let vc: i32 = d_vm[c]; let vd: i32 = d_vm[d]
+        let bary = d_baryth(va, vb, vc, vd, d_vcl[d_v(1, point)], d_vcl[d_v(2, point)], d_vcl[d_v(3, point)])
+        if bary.degenerate { d_error = 301; return false }
+        let t1: f64 = bary.a1; let t2: f64 = bary.a2; let t3: f64 = bary.a3; let t4: f64 = bary.a4
+        if t1 > 0.0 and t2 > 0.0 and t3 > 0.0 and t4 > 0.0 { return true }
+        if t4 < 0.0 { d_ivrt = 9 - d_ivrt; continue }
+        if t1 < 0.0 {
+            d_ifac = d_htsrc(b, c, d)
+            if d_ifac <= 0 { d_error = 300; return false }
+            d_ivrt = if d_fc[d_f(4, d_ifac)] == a { 5 } else { 4 }
+            continue
+        }
+        if t2 < 0.0 {
+            d_ifac = d_htsrc(a, c, d)
+            if d_ifac <= 0 { d_error = 300; return false }
+            d_ivrt = if d_fc[d_f(4, d_ifac)] == b { 5 } else { 4 }
+            continue
+        }
+        if t3 < 0.0 {
+            d_ifac = d_htsrc(a, b, d)
+            if d_ifac <= 0 { d_error = 300; return false }
+            d_ivrt = if d_fc[d_f(4, d_ifac)] == c { 5 } else { 4 }
+            continue
+        }
+
+        let zero1: bool = t1 == 0.0; let zero2: bool = t2 == 0.0
+        let zero3: bool = t3 == 0.0; let zero4: bool = t4 == 0.0
+        let mut zero_count: i32 = 0
+        if zero1 { zero_count = zero_count + 1 }
+        if zero2 { zero_count = zero_count + 1 }
+        if zero3 { zero_count = zero_count + 1 }
+        if zero4 { zero_count = zero_count + 1 }
+        if zero_count == 1 {
+            d_ivrt = 6
+            if zero1 { d_ifac = d_htsrc(b, c, d) }
+            elif zero2 { d_ifac = d_htsrc(a, c, d) }
+            elif zero3 { d_ifac = d_htsrc(a, b, d) }
+            if d_ifac <= 0 { d_error = 300 }
+            return d_error == 0
+        }
+        if zero_count == 2 {
+            if zero4 {
+                if zero3 { d_ivrt = 1 }
+                elif zero1 { d_ivrt = 2 }
+                else { d_ivrt = 3 }
+            } else {
+                let mut edge_a: i32 = 0
+                if zero3 {
+                    d_ifac = d_htsrc(a, b, d)
+                    edge_a = if zero2 { a } else { b }
+                } else {
+                    d_ifac = d_htsrc(a, c, d)
+                    edge_a = c
+                }
+                if d_ifac <= 0 { d_error = 300; return false }
+                let mut edge_b: i32 = d
+                if edge_a > edge_b { let swap: i32 = edge_a; edge_a = edge_b; edge_b = swap }
+                if d_fc[d_f(1, d_ifac)] == edge_a {
+                    d_ivrt = if d_fc[d_f(2, d_ifac)] == edge_b { 1 } else { 3 }
+                } else { d_ivrt = 2 }
+            }
+            return true
+        }
+        if not zero1 { d_ivrt = -1 }
+        elif not zero2 { d_ivrt = -2 }
+        elif not zero3 { d_ivrt = -3 }
+        else {
+            d_ifac = d_htsrc(a, b, d)
+            if d_ifac <= 0 { d_error = 300; return false }
+            if d_fc[d_f(1, d_ifac)] == d { d_ivrt = -1 }
+            elif d_fc[d_f(2, d_ifac)] == d { d_ivrt = -2 }
+            else { d_ivrt = -3 }
+        }
+        return true
+    }
+    return true
+}
+
+function d_frstet() -> bool {
+    let tol: f64 = 2.2204460492503131e-14
+    let mut limit: i32 = 1
+    let mut m1: i32 = d_vm[1]
+    let mut m: i32 = 0
+    let mut i: i32 = 1
+    while i <= limit {
+        m = m1
+        m1 = d_vm[i + 1]
+        let mut k: i32 = 1
+        let mut distinct: bool = false
+        while k <= 3 {
+            let x: f64 = d_vcl[d_v(k, m)]
+            let y: f64 = d_vcl[d_v(k, m1)]
+            let cmax: f64 = if fabs(x) > fabs(y) { fabs(x) } else { fabs(y) }
+            if fabs(x - y) > tol * cmax and cmax > tol { distinct = true }
+            k = k + 1
+        }
+        if distinct == false { d_error = 302; return false }
+        i = i + 1
+    }
+
+    let first: i32 = d_vm[1]
+    let second: i32 = d_vm[2]
+    let x1: f64 = d_vcl[d_v(1, second)] - d_vcl[d_v(1, first)]
+    let y1: f64 = d_vcl[d_v(2, second)] - d_vcl[d_v(2, first)]
+    let z1: f64 = d_vcl[d_v(3, second)] - d_vcl[d_v(3, first)]
+    let mut cmax: f64 = fabs(d_vcl[d_v(1, first)])
+    let mut k: i32 = 2
+    while k <= 3 {
+        if fabs(d_vcl[d_v(k, first)]) > cmax { cmax = fabs(d_vcl[d_v(k, first)]) }
+        if fabs(d_vcl[d_v(k, second)]) > cmax { cmax = fabs(d_vcl[d_v(k, second)]) }
+        k = k + 1
+    }
+
+    let mut third_position: i32 = 2
+    let mut cp1: f64 = 0.0
+    let mut cp2: f64 = 0.0
+    let mut cp3: f64 = 0.0
+    let mut dmax: f64 = 0.0
+    while true {
+        third_position = third_position + 1
+        if third_position > d_npt { d_error = 303; return false }
+        let third: i32 = d_vm[third_position]
+        let dx: f64 = d_vcl[d_v(1, third)] - d_vcl[d_v(1, first)]
+        let dy: f64 = d_vcl[d_v(2, third)] - d_vcl[d_v(2, first)]
+        let dz: f64 = d_vcl[d_v(3, third)] - d_vcl[d_v(3, first)]
+        dmax = cmax
+        if fabs(d_vcl[d_v(1, third)]) > dmax { dmax = fabs(d_vcl[d_v(1, third)]) }
+        if fabs(d_vcl[d_v(2, third)]) > dmax { dmax = fabs(d_vcl[d_v(2, third)]) }
+        if fabs(d_vcl[d_v(3, third)]) > dmax { dmax = fabs(d_vcl[d_v(3, third)]) }
+        cp1 = y1 * dz - z1 * dy
+        cp2 = z1 * dx - x1 * dz
+        cp3 = x1 * dy - y1 * dx
+        let largest_cross: f64 = d_max3(fabs(cp1), fabs(cp2), fabs(cp3))
+        if largest_cross > tol * dmax { break }
+    }
+
+    let mut fourth_position: i32 = third_position
+    let mut found: bool = false
+    while found == false {
+        fourth_position = fourth_position + 1
+        if fourth_position > d_npt { d_error = 304; return false }
+        let fourth: i32 = d_vm[fourth_position]
+        let dx: f64 = d_vcl[d_v(1, fourth)] - d_vcl[d_v(1, first)]
+        let dy: f64 = d_vcl[d_v(2, fourth)] - d_vcl[d_v(2, first)]
+        let dz: f64 = d_vcl[d_v(3, fourth)] - d_vcl[d_v(3, first)]
+        dmax = cmax
+        if fabs(d_vcl[d_v(1, fourth)]) > dmax { dmax = fabs(d_vcl[d_v(1, fourth)]) }
+        if fabs(d_vcl[d_v(2, fourth)]) > dmax { dmax = fabs(d_vcl[d_v(2, fourth)]) }
+        if fabs(d_vcl[d_v(3, fourth)]) > dmax { dmax = fabs(d_vcl[d_v(3, fourth)]) }
+        if fabs(dx * cp1 + dy * cp2 + dz * cp3) > tol * dmax { found = true }
+    }
+
+    if third_position > 3 { let t: i32 = d_vm[3]; d_vm[3] = d_vm[third_position]; d_vm[third_position] = t }
+    if fourth_position > 4 { let t: i32 = d_vm[4]; d_vm[4] = d_vm[fourth_position]; d_vm[fourth_position] = t }
+    d_i3 = third_position
+    d_i4 = fourth_position
+    return true
+}
+
+function delaunay_map_at(position: i32) -> i32 {
+    if d_vm == null or position < 1 or position > d_npt { return 0 }
+    return d_vm[position]
+}
+
+function delaunay_coordinate(point: i32, axis: i32) -> f64 {
+    if d_vcl == null or point < 1 or point > d_npt or axis < 1 or axis > 3 { return 0.0 }
+    return d_vcl[d_v(axis, point)]
+}
+
+function delaunay_set_coordinate(point: i32, axis: i32, value: f64) -> bool {
+    if d_vcl == null or point < 1 or point > d_npt or axis < 1 or axis > 3 { return false }
+    d_vcl[d_v(axis, point)] = value
+    return true
+}
+
+function delaunay_error() -> i32 { return d_error }
+function delaunay_last_insert() -> i32 { return d_last_insert }
+function delaunay_last_stage() -> i32 { return d_last_stage }
+function delaunay_last_ivrt() -> i32 { return d_last_ivrt }
+function delaunay_last_swap_type() -> i32 { return d_last_swap_type }
+function delaunay_bad_hash_index() -> i32 { return d_bad_hash_index }
+function delaunay_bad_boundary_face() -> i32 { return d_bad_boundary_face }
+function delaunay_bad_boundary_side() -> i32 { return d_bad_boundary_side }
+function delaunay_bad_boundary_neighbor() -> i32 { return d_bad_boundary_neighbor }
+function delaunay_validate_boundary() -> bool { return d_validate_boundary() }
+function delaunay_face_vertex(index: i32, slot: i32) -> i32 { if index < 1 or index > d_nfc or slot < 1 or slot > 5 { return 0 }; return d_fc[d_f(slot, index)] }
+function delaunay_face_bf(index: i32, slot: i32) -> i32 { if index < 1 or index > d_nfc or slot < 1 or slot > 3 or d_fc[d_f(5, index)] >= 0 { return 0 }; return d_bf[d_b(slot, 0 - d_fc[d_f(5, index)])] }
+function delaunay_validate_faces() -> bool { return d_validate_faces() }
+
+export d_order3, d_htins, d_htsrc, d_frstet, d_baryth, d_walkt3, d_nwthfc, d_nwthin, d_nwthed, d_nwthou, d_vbfac, delaunay_initialize, delaunay_initialize_first_tetrahedron, delaunay_insert_one, delaunay_build, delaunay_walk_result, delaunay_face_count, delaunay_tetra_count, delaunay_face_capacity, delaunay_boundary_capacity, delaunay_release, delaunay_error, delaunay_last_insert, delaunay_last_stage, delaunay_last_ivrt, delaunay_last_swap_type, delaunay_bad_hash_index, delaunay_bad_boundary_face, delaunay_bad_boundary_side, delaunay_bad_boundary_neighbor, delaunay_validate_boundary, delaunay_face_vertex, delaunay_face_bf, delaunay_validate_faces, delaunay_map_at, delaunay_coordinate, delaunay_set_coordinate, DelaunayBarycentric

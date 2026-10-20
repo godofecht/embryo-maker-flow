@@ -1,0 +1,30 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, ncels, ng, ffu, kadh, kadh_ld }
+import embryo.genetic { metadata_error, diffu, degradation, kindof, npre, npost, pre, post, t, gene_matrix_index, gene_effects, gene_effect_index, gene_form_index, ww_count, ww_source, ww_target, ww_rate, ww_ld, kind_count, kind_genes, gene_kind_ld, npag, whonpag, nw, w, nwpre, nwpost, wpre, wpost, nwpre_index, nwpost_index, wpre_index, wpost_index }
+
+function check(path: string, expected_nodes: i32) -> i32 {
+    if read_snapshot_parameters(path) != 0 { return 1 }
+    if nd != expected_nodes { return 2 }
+    if metadata_error != 0 { return 90 + metadata_error }
+    return 0
+}
+
+function main() -> i32 {
+    if check("../reference/examples/apoptosis/apoptosis.txt", 518) != 0 { return 1 }
+    if ffu[9] != 1 or ffu[12] != 1 { return 11 }
+    if check("../reference/examples/blastula-like_initial_conditions/Epithelial_blastula.dat", 744) != 0 { return 12 }
+    if ncels != 372 or ng != 3 { return 13 }
+    if check("../reference/examples/blastula-like_initial_conditions/Epithelial_blastula_filled_with_mesenchyme.dat", 1144) != 0 { return 14 }
+    if ncels != 772 or ng != 22 { return 15 }
+    if check("../reference/examples/differential_adhesion/differential_adhesion.txt", 168) != 0 { return 20 + metadata_error }
+    if kadh_ld != 3 or kadh[1 * kadh_ld + 1] != 100.0 or kadh[1 * kadh_ld + 2] != 10.0 or kadh[2 * kadh_ld + 1] != 10.0 or kadh[2 * kadh_ld + 2] != 1.0 { return 21 }
+    if check("../reference/examples/migration/migration.txt", 364) != 0 { return 3 }
+    if ffu[9] != 0 or ffu[12] != 1 { return 31 }
+    if check("../reference/examples/polar_growth/polar_growth.txt", 98) != 0 { return 4 }
+    if check("../reference/examples/apical_contraction/apical_contraction.txt", 1274) != 0 { return 5 }
+    if check("../reference/examples/ecm_secretion/ecm_secretion.txt", 1073) != 0 { return 6 }
+    if check("../reference/examples/figure_6/gastrula.txt", 576) != 0 { return 7 }
+    if check("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", 3534) != 0 { return 8 }
+    if metadata_error != 0 { return 90 + metadata_error }
+    return 0
+}

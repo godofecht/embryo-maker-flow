@@ -1,0 +1,25 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nda, node_capacity, resize_node_buffers }
+import embryo.genetic {
+    gex, agex, dgex, checkn, gex_ld, gene_expression_index,
+    gene_resize_nodes
+}
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/migration/migration.txt") != 0 { return 1 }
+    let old_capacity: i32 = node_capacity
+    let new_capacity: i32 = old_capacity + 17
+    gex[gene_expression_index(1, 1)] = 0.125
+    agex[gene_expression_index(2, 1)] = 0.25
+    dgex[gene_expression_index(3, 1)] = -0.5
+    checkn[4] = 19
+    if gene_resize_nodes(old_capacity, new_capacity) == false { return 2 }
+    if resize_node_buffers(new_capacity) == false { return 3 }
+    if nda != new_capacity or node_capacity != new_capacity { return 4 }
+    if gex[gene_expression_index(1, 1)] != 0.125 { return 5 }
+    if agex[gene_expression_index(2, 1)] != 0.25 { return 6 }
+    if dgex[gene_expression_index(3, 1)] != -0.5 { return 7 }
+    if checkn[4] != 19 { return 8 }
+    if gex[gene_expression_index(new_capacity, gex_ld - 1)] != 0.0 { return 9 }
+    return 0
+}

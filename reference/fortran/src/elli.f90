@@ -47,6 +47,7 @@ use view_modifier
 use function_plotter
 use inicial
 use automaticon
+use iso_c_binding, only: c_ptr, c_null_ptr, c_char, c_loc, c_null_char
 
 implicit none
 character*400 caordre,ordre !!>>HC 18-11-2020 these should be a bit longer for evolution
@@ -60,6 +61,8 @@ integer*4 iu,id
 
 integer*8 iv
 type(c_ptr) point
+character(kind=c_char), target :: gui_arg0(12)
+type(c_ptr), target :: gui_argv(2)
 
 !this is necessary to accomadate to different versions of linux
 call random_seed(size = nseed)
@@ -171,11 +174,15 @@ if (aut/=1.and.aut/=5) then !>>> Is 22-1-14
   !Initializations
 !  allocate(point)
   pgm="thePgm"
-  point=c_null_ptr
+  gui_arg0 = transfer('EmbryoMaker'//c_null_char, gui_arg0)
+  gui_argv(1)=c_loc(gui_arg0(1))
+  gui_argv(2)=c_null_ptr
+  point=c_loc(gui_argv(1))
+  iu=1
 !  call glutInit(1,iv)
-  call glutinit(1,point) 
+  call glutinit(iu,point)
   call glutInitDisplayMode(mode) 
-  call glutInitWindowPosition(1000,1000)        !>>>>>>Miquel21-2-14
+  call glutInitWindowPosition(100,50)           !>>>>>>Miquel21-2-14
   call glutInitWindowSize(windW,windH)        !>>>>>>Miquel26-11-13
 
   winid = glutCreateWindow(winame)

@@ -1,0 +1,329 @@
+import embryo.general {
+    ncels, ncals, nd, ndepi, ndmes, ncelsepi, ncelsmes, cels, node, nodeo,
+    cell_capacity, resize_cell_buffers, ffu, nneigh, neigh, dneigh, neigh_ld,
+    reqmin, desmax, delta, mmae, maxcycl, newfase
+}
+import embryo.genetic { ng, npag, whonpag, gex, gene_effects, gene_expression_index, gene_effect_index }
+import embryo.growth { append_growth_nodes }
+import embryo.rng { rng_real }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(value: ptr<void>)
+    function sqrt(value: f64) -> f64
+    function pow(base: f64, exponent: f64) -> f64
+}
+
+let mut single_node_error: i32 = 0
+const SINGLE_NODE_POLARIZATION_PARAM: i32 = 43
+const SINGLE_NODE_EPSILON: f64 = 2.2204460492503131e-15
+
+function polarization_single() -> bool {
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if node[node_id].tipus == 2 {
+            let partner: i32 = node[node_id].altre
+            if partner < 1 or partner > nd { single_node_error = 7; return false }
+            let cell_id: i32 = node[node_id].icel
+            let mut vx: f64 = 0.0; let mut vy: f64 = 0.0; let mut vz: f64 = 0.0
+            if ffu[9] == 0 {
+                let mut center_signal: f64 = 0.0
+                let mut gene_slot: i32 = 1
+                while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                    let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
+                    let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                    if expression > 0.0 { center_signal = center_signal + expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)] }
+                    gene_slot = gene_slot + 1
+                }
+                let mut side: i32 = 0
+                while side < 2 {
+                    let origin: i32 = if side == 0 { node_id } else { partner }
+                    let mut slot: i32 = 1
+                    while slot <= nneigh[origin] {
+                        let other: i32 = neigh[origin * neigh_ld + slot]
+                        if node[other].tipus == node[origin].tipus {
+                            let dx: f64 = node[other].x - node[origin].x
+                            let dy: f64 = node[other].y - node[origin].y
+                            let dz: f64 = node[other].z - node[origin].z
+                            let distance: f64 = sqrt(dx * dx + dy * dy + dz * dz)
+                            if distance >= SINGLE_NODE_EPSILON {
+                                let inverse_distance: f64 = 1.0 / distance
+                                let mut signal: f64 = 0.0
+                                gene_slot = 1
+                                while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                                    let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
+                                    let expression: f64 = gex[gene_expression_index(other, gene_id)]
+                                    if expression > 0.0 {
+                                        signal = ((signal + expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)]) as f32) as f64
+                                        # The reference leaves s as default real and ix2, iy2, iz2
+                                        # as default integers in this routine.
+                                        vx = (vx + ((node[other].x - node[origin].x) * inverse_distance) * (signal - center_signal)) as i32 as f64
+                                        vy = (vy + ((node[other].y - node[origin].y) * inverse_distance) * (signal - center_signal)) as i32 as f64
+                                        vz = (vz + ((node[other].z - node[origin].z) * inverse_distance) * (signal - center_signal)) as i32 as f64
+                                    }
+                                    gene_slot = gene_slot + 1
+                                }
+                            }
+                        }
+                        slot = slot + 1
+                    }
+                    side = side + 1
+                }
+            } else {
+                let mut side: i32 = 0
+                while side < 2 {
+                    let origin: i32 = if side == 0 { node_id } else { partner }
+                    let mut slot: i32 = 1
+                    while slot <= nneigh[origin] {
+                        let other: i32 = neigh[origin * neigh_ld + slot]
+                        if node[other].tipus == node[origin].tipus {
+                            let dx: f64 = node[other].x - node[origin].x
+                            let dy: f64 = node[other].y - node[origin].y
+                            let dz: f64 = node[other].z - node[origin].z
+                            let inverse_distance: f64 = 1.0 / dneigh[origin * neigh_ld + slot]
+                            let mut gene_slot: i32 = 1
+                            while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                                let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
+                                let expression: f64 = gex[gene_expression_index(other, gene_id)]
+                                if expression > 0.0 {
+                                    let weight: f64 = expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)] * inverse_distance
+                                    vx = vx + dx * weight; vy = vy + dy * weight; vz = vz + dz * weight
+                                }
+                                gene_slot = gene_slot + 1
+                            }
+                        }
+                        slot = slot + 1
+                    }
+                    side = side + 1
+                }
+            }
+            let mut magnitude_squared: f64 = (vx * vx) + (vy * vy) + (vz * vz)
+            if vx == 0.0 and vy == 0.0 and vz == 0.0 { magnitude_squared = 0.0 }
+            let inverse_magnitude: f64 = if magnitude_squared == 0.0 { 0.0 } else { 1.0 / sqrt(magnitude_squared) }
+            cels[cell_id].polx = vx * inverse_magnitude
+            cels[cell_id].poly = vy * inverse_magnitude
+            cels[cell_id].polz = vz * inverse_magnitude
+        } elif node[node_id].tipus == 3 {
+            let cell_id: i32 = node[node_id].icel
+            let mut vx: f64 = 0.0; let mut vy: f64 = 0.0; let mut vz: f64 = 0.0
+            let mut slot: i32 = 1
+            while slot <= nneigh[node_id] {
+                let other: i32 = neigh[node_id * neigh_ld + slot]
+                let dx: f64 = node[other].x - node[node_id].x
+                let dy: f64 = node[other].y - node[node_id].y
+                let dz: f64 = node[other].z - node[node_id].z
+                let inverse_distance: f64 = 1.0 / dneigh[node_id * neigh_ld + slot]
+                let mut gene_slot: i32 = 1
+                while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                    let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
+                    let expression: f64 = gex[gene_expression_index(other, gene_id)]
+                    if expression > 0.0 {
+                        let weight: f64 = expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)] * inverse_distance
+                        vx = vx + dx * weight; vy = vy + dy * weight; vz = vz + dz * weight
+                    }
+                    gene_slot = gene_slot + 1
+                }
+                slot = slot + 1
+            }
+            let mut magnitude_squared: f64 = (vx * vx) + (vy * vy) + (vz * vz)
+            if vx == 0.0 and vy == 0.0 and vz == 0.0 { magnitude_squared = 0.0 }
+            let inverse_magnitude: f64 = if magnitude_squared == 0.0 { 0.0 } else { 1.0 / sqrt(magnitude_squared) }
+            cels[cell_id].polx = vx * inverse_magnitude
+            cels[cell_id].poly = vy * inverse_magnitude
+            cels[cell_id].polz = vz * inverse_magnitude
+        }
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function should_i_divide_single() -> bool {
+    single_node_error = 0
+    let original_cells: i32 = ncels
+    let increments: ptr<f64> = calloc((original_cells + 1) as i64, sizeof<f64>()) as ptr<f64>
+    if increments == null { single_node_error = 6; return false }
+    let mut total: f64 = 0.0
+    let mut cell_id: i32 = 1
+    while cell_id <= original_cells {
+        let primary: i32 = cels[cell_id].node[1]
+        if node[primary].fix < 1 {
+            let epithelial: bool = cels[cell_id].ctipus < 3
+            let paired: i32 = if epithelial { node[primary].altre } else { 0 }
+            let factor: f64 = if epithelial { 1.0 - 0.5 * (node[primary].dif + node[paired].dif) } else { 1.0 - node[primary].dif }
+            let mut signal: f64 = 0.0
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[37] {
+                let gene_id: i32 = whonpag[37 * (ng + 1) + gene_slot]
+                let first_expression: f64 = gex[gene_expression_index(primary, gene_id)]
+                let second_expression: f64 = if epithelial { gex[gene_expression_index(paired, gene_id)] } else { 0.0 }
+                if first_expression > 0.0 or second_expression > 0.0 {
+                    signal = signal + (first_expression + second_expression) * gene_effects[gene_effect_index(gene_id, 37)] * factor
+                }
+                gene_slot = gene_slot + 1
+            }
+            if epithelial { signal = signal * 0.5 }
+            increments[cell_id] = signal * delta
+            total = total + increments[cell_id]
+        }
+        cell_id = cell_id + 1
+    }
+    if ffu[25] == 0 and total > maxcycl and total > 0.0 {
+        let scale: f64 = maxcycl / total
+        cell_id = 1
+        while cell_id <= original_cells { increments[cell_id] = increments[cell_id] * scale; cell_id = cell_id + 1 }
+    }
+    cell_id = 1
+    while cell_id <= original_cells {
+        let primary: i32 = cels[cell_id].node[1]
+        if node[primary].fix < 1 {
+            cels[cell_id].fase = cels[cell_id].fase + increments[cell_id]
+            let epithelial: bool = cels[cell_id].ctipus < 3
+            let paired: i32 = if epithelial { node[primary].altre } else { 0 }
+            let eligible_size: bool = (epithelial and (node[primary].eqd >= mmae or node[paired].eqd >= mmae)) or (epithelial == false and node[primary].eqd >= mmae)
+            if cels[cell_id].fase >= 1.0 and (ffu[18] != 0 or eligible_size) {
+                if divide_single_node(cell_id) == false { free(increments as ptr<void>); return false }
+                cels[cell_id].fase = rng_real() * newfase
+                cels[ncels].fase = rng_real() * newfase
+            }
+        }
+        cell_id = cell_id + 1
+    }
+    free(increments as ptr<void>)
+    return true
+}
+
+function divide_single_node(cell_id: i32) -> bool {
+    single_node_error = 0
+    if cell_id < 1 or cell_id > ncels or cels[cell_id].nunodes < 1 { single_node_error = 1; return false }
+    if ncels + 1 >= cell_capacity {
+        if resize_cell_buffers(cell_capacity + 20) == false { single_node_error = 2; return false }
+        ncals = cell_capacity
+    }
+    let primary: i32 = cels[cell_id].node[1]
+    let epithelial: bool = cels[cell_id].ctipus < 3
+    let paired: i32 = if epithelial { node[primary].altre } else { 0 }
+    let node_kind: i32 = node[primary].tipus
+    let mut bx: f64 = 0.0; let mut by: f64 = 0.0; let mut bz: f64 = 0.0
+    let mut longest: f64 = 0.0
+    let mut valid_pairs: i32 = 0
+    let mut i: i32 = 1
+    while i < nneigh[primary] {
+        let first: i32 = neigh[primary * neigh_ld + i]
+        let first_contact: bool = dneigh[primary * neigh_ld + i] < node[primary].add + node[first].add
+        let first_type: bool = epithelial == false or node[first].tipus == node_kind
+        if first_contact and first_type {
+            let mut j: i32 = i + 1
+            while j <= nneigh[primary] {
+                let second: i32 = neigh[primary * neigh_ld + j]
+                let second_contact: bool = dneigh[primary * neigh_ld + j] < node[primary].add + node[second].add
+                let second_type: bool = epithelial == false or node[second].tipus == node_kind
+                if second_contact and second_type {
+                    valid_pairs = valid_pairs + 1
+                    let dx: f64 = node[second].x - node[first].x
+                    let dy: f64 = node[second].y - node[first].y
+                    let dz: f64 = node[second].z - node[first].z
+                    # Keep the Fortran power operation here. Symmetric axis lengths can
+                    # differ by one rounding bit when written as multiplication.
+                    let length: f64 = sqrt(pow(dx, 2.0) + pow(dy, 2.0) + pow(dz, 2.0))
+                    if length > longest { longest = length; bx = dx; by = dy; bz = dz }
+                }
+                j = j + 1
+            }
+        }
+        i = i + 1
+    }
+    if (epithelial and ((nneigh[primary] <= 2) or (ffu[9] == 0 and valid_pairs < 2))) or (epithelial == false and nneigh[primary] <= 1) {
+        bx = rng_real(); by = rng_real(); bz = rng_real()
+        longest = sqrt(bx * bx + by * by + bz * bz)
+    }
+    if longest <= 0.0 { single_node_error = 3; return false }
+    if epithelial {
+        bx = bx / longest; by = by / longest; bz = bz / longest
+        let dx: f64 = node[paired].x - node[primary].x
+        let dy: f64 = node[paired].y - node[primary].y
+        let dz: f64 = node[paired].z - node[primary].z
+        let inverse: f64 = 1.0 / sqrt(dx * dx + dy * dy + dz * dz)
+        let ux: f64 = dx * inverse; let uy: f64 = dy * inverse; let uz: f64 = dz * inverse
+        let projection: f64 = ux * bx + uy * by + uz * bz
+        bx = bx - ux * projection; by = by - uy * projection; bz = bz - uz * projection
+    }
+    let property: i32 = if ffu[19] == 0 { 43 } else { 46 }
+    let mut chemical: f64 = 0.0
+    let mut gene_slot: i32 = 1
+    while gene_slot <= npag[property] {
+        let gene_id: i32 = whonpag[property * (ng + 1) + gene_slot]
+        if epithelial {
+            chemical = chemical + (gex[gene_expression_index(primary, gene_id)] + gex[gene_expression_index(paired, gene_id)]) * gene_effects[gene_effect_index(gene_id, property)]
+        } else {
+            chemical = chemical + gex[gene_expression_index(primary, gene_id)] * gene_effects[gene_effect_index(gene_id, property)]
+        }
+        gene_slot = gene_slot + 1
+    }
+    let physical_weight: f64 = 1.0 / (1.0 + chemical)
+    let mut ax: f64 = (1.0 - physical_weight) * cels[cell_id].polx + physical_weight * bx
+    let mut ay: f64 = (1.0 - physical_weight) * cels[cell_id].poly + physical_weight * by
+    let mut az: f64 = (1.0 - physical_weight) * cels[cell_id].polz + physical_weight * bz
+    let inverse_axis: f64 = 1.0 / sqrt(ax * ax + ay * ay + az * az)
+    ax = ax * inverse_axis; ay = ay * inverse_axis; az = az * inverse_axis
+
+    let old_nd: i32 = nd
+    if append_growth_nodes(cell_id, if epithelial { 2 } else { 1 }) == false { single_node_error = 4; return false }
+    let daughter: i32 = ncels + 1
+    let first_new: i32 = old_nd + 1
+    if epithelial {
+        node[first_new].x = node[paired].x + desmax * ax
+        node[first_new].y = node[paired].y + desmax * ay
+        node[first_new].z = node[paired].z + desmax * az
+        node[first_new + 1].x = node[primary].x + desmax * ax
+        node[first_new + 1].y = node[primary].y + desmax * ay
+        node[first_new + 1].z = node[primary].z + desmax * az
+        nodeo[first_new].x = node[first_new].x; nodeo[first_new].y = node[first_new].y; nodeo[first_new].z = node[first_new].z
+        nodeo[first_new + 1].x = node[first_new + 1].x; nodeo[first_new + 1].y = node[first_new + 1].y; nodeo[first_new + 1].z = node[first_new + 1].z
+        if ffu[18] == 0 {
+            node[first_new].eqd = reqmin; node[first_new + 1].eqd = reqmin
+            node[first_new].add = reqmin + node[paired].add - node[paired].eqd
+            node[first_new + 1].add = reqmin + node[primary].add - node[primary].eqd
+        }
+        cels[cell_id].nunodes = 2
+        cels[cell_id].node[1] = primary; cels[cell_id].node[2] = paired
+        let members: ptr<i32> = calloc(3, sizeof<i32>()) as ptr<i32>
+        if members == null { single_node_error = 5; return false }
+        members[1] = first_new + 1; members[2] = first_new
+        cels[daughter] = cels[cell_id]
+        cels[daughter].node = members; cels[daughter].nunodes = 2; cels[daughter].nodela = 2
+        node[first_new].icel = daughter; node[first_new + 1].icel = daughter
+        cels[daughter].cex = node[first_new].x; cels[daughter].cey = node[first_new].y; cels[daughter].cez = node[first_new].z
+        node[primary].ndiv = node[primary].ndiv + 1; node[paired].ndiv = node[paired].ndiv + 1
+        node[first_new].ndiv = node[paired].ndiv; node[first_new + 1].ndiv = node[primary].ndiv
+        node[first_new].marge = node[paired].marge; node[first_new + 1].marge = node[primary].marge
+        ncelsepi = ncelsepi + 1
+    } else {
+        node[first_new].x = node[primary].x + desmax * ax
+        node[first_new].y = node[primary].y + desmax * ay
+        node[first_new].z = node[primary].z + desmax * az
+        nodeo[first_new].x = node[first_new].x; nodeo[first_new].y = node[first_new].y; nodeo[first_new].z = node[first_new].z
+        if ffu[18] == 0 { node[first_new].eqd = reqmin; node[first_new].add = reqmin + node[primary].add - node[primary].eqd }
+        cels[cell_id].nunodes = 1; cels[cell_id].node[1] = primary
+        let members: ptr<i32> = calloc(2, sizeof<i32>()) as ptr<i32>
+        if members == null { single_node_error = 5; return false }
+        members[1] = first_new
+        cels[daughter] = cels[cell_id]
+        cels[daughter].node = members; cels[daughter].nunodes = 1; cels[daughter].nodela = 1
+        node[first_new].icel = daughter
+        cels[daughter].cex = node[first_new].x; cels[daughter].cey = node[first_new].y; cels[daughter].cez = node[first_new].z
+        node[primary].ndiv = node[primary].ndiv + 1; node[first_new].ndiv = 0
+        node[first_new].marge = 0
+        ncelsmes = ncelsmes + 1
+    }
+    if prop_noise == 0.0 {
+        node[first_new].e = 0.0
+        if epithelial { node[first_new + 1].e = 0.0 }
+    }
+    cels[daughter].polx = 0.0; cels[daughter].poly = 0.0; cels[daughter].polz = 0.0
+    cels[daughter].hpolx = 0.0; cels[daughter].hpoly = 0.0; cels[daughter].hpolz = 0.0
+    ncels = daughter
+    return true
+}
+
+export single_node_error, divide_single_node
+export should_i_divide_single

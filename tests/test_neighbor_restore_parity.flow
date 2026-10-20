@@ -1,0 +1,120 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, nparti, nneigh, neigh, dneigh }
+import embryo.aleas { inialea3d }
+import embryo.neighboring { neighbor_build, neighbor_error, neighbor_index, fill_co_griders, restore_neighbors }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = start
+    while pos < length and bytes[pos] != 10 and bytes[pos] != 13 { pos = pos + 1 }
+    return pos
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = end
+    if pos < length and bytes[pos] == 13 { pos = pos + 1 }
+    if pos < length and bytes[pos] == 10 { pos = pos + 1 }
+    return pos
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut i: i32 = start
+    let mut j: i32 = 0
+    while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+    line[j] = 0
+    return line as string
+}
+
+function remove_first_edge() -> void {
+    let second: i32 = neigh[neighbor_index(1, 1)]
+    let endpoint: i32 = 1
+    while endpoint <= 2 {
+        let first: i32 = if endpoint == 1 { 1 } else { second }
+        let other: i32 = if endpoint == 1 { second } else { 1 }
+        let slot: i32 = 1
+        while slot <= nneigh[first] {
+            if neigh[neighbor_index(first, slot)] == other {
+                let shift: i32 = slot
+                while shift < nneigh[first] {
+                    neigh[neighbor_index(first, shift)] = neigh[neighbor_index(first, shift + 1)]
+                    dneigh[neighbor_index(first, shift)] = dneigh[neighbor_index(first, shift + 1)]
+                    shift = shift + 1
+                }
+                nneigh[first] = nneigh[first] - 1
+                break
+            }
+            slot = slot + 1
+        }
+        endpoint = endpoint + 1
+    }
+}
+
+function check_restore(input_path: string, fixture_path: string, remove_one: bool) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    inialea3d(nparti)
+    if neighbor_build() == false { return 10 + neighbor_error }
+    if fill_co_griders() == false { return 20 + neighbor_error }
+    let mut node_id: i32 = 1
+    if remove_one {
+        remove_first_edge()
+    } else {
+        while node_id <= nd {
+            nneigh[node_id] = 0
+            node_id = node_id + 1
+        }
+    }
+    if restore_neighbors() == false { return 30 + neighbor_error }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 40 }
+    let mut cursor: i32 = 0
+    node_id = 1
+    while node_id <= nd {
+        let count_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let count_line: string = copy_line(reference.data, cursor, count_end)
+        let count: ParseI64 = str_parse_i64_at(count_line, 0)
+        if count.ok == false or count.value != nneigh[node_id] as i64 { return 41 }
+        let ids_start: i32 = line_next(reference.data, reference.len as i32, count_end)
+        let ids_end: i32 = line_end(reference.data, reference.len as i32, ids_start)
+        let ids_line: string = copy_line(reference.data, ids_start, ids_end)
+        let distances_start: i32 = line_next(reference.data, reference.len as i32, ids_end)
+        let distances_end: i32 = line_end(reference.data, reference.len as i32, distances_start)
+        let distances_line: string = copy_line(reference.data, distances_start, distances_end)
+        let mut ids_pos: i32 = 0
+        let mut distances_pos: i32 = 0
+        let mut slot: i32 = 1
+        while slot <= nneigh[node_id] {
+            let id: ParseI64 = str_parse_i64_at(ids_line, ids_pos)
+            let distance: ParseF64 = str_parse_f64_at(distances_line, distances_pos)
+            if id.ok == false or distance.ok == false { return 42 }
+            let index: i32 = neighbor_index(node_id, slot)
+            if neigh[index] as i64 != id.value { println(node_id, slot, neigh[index], id.value); return 43 }
+            if fabs(dneigh[index] - distance.value) > 1.0e-7 { return 44 }
+            ids_pos = id.end
+            distances_pos = distance.end
+            slot = slot + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, distances_end)
+        node_id = node_id + 1
+    }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_restore("../reference/examples/migration/migration.txt", "fixtures/migration_neighbors_restored.ref", false)
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_restore("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_neighbors_restored.ref", false)
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_restore("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_neighbors_restored.ref", false)
+    if adhesion != 0 { return adhesion }
+    return check_restore("../reference/examples/migration/migration.txt", "fixtures/migration_neighbors_one_restored.ref", true)
+}

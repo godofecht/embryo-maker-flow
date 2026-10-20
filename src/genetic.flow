@@ -1,0 +1,971 @@
+import embryo.general { nd, ng, nda, node, nneigh, neigh, dneigh, neigh_ld, rdiffmax, delta, ffu }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+    function malloc(size: i64) -> ptr<void>
+    function sqrt(x: f64) -> f64
+    function fabs(x: f64) -> f64
+}
+
+let mut gex: ptr<f64> = null
+let mut agex: ptr<f64> = null
+let mut dgex: ptr<f64> = null
+let mut checkn: ptr<i32> = null
+let mut gex_ld: i32 = 0
+let mut t: ptr<f64> = null
+let mut gene_effects: ptr<f64> = null
+let mut diffu: ptr<f64> = null
+let mut idiffu: ptr<f64> = null
+let mut degradation: ptr<f64> = null
+let mut mich: ptr<f64> = null
+let mut kindof: ptr<f64> = null
+let mut npre: ptr<i32> = null
+let mut npost: ptr<i32> = null
+let mut pre: ptr<i32> = null
+let mut post: ptr<i32> = null
+let mut t_ld: i32 = 0
+let mut effect_ld: i32 = 0
+let mut form_ld: i32 = 0
+let mut matrix_error: i32 = 0
+let mut metadata_error: i32 = 0
+let mut ww_count: ptr<i32> = null
+let mut ww_source: ptr<f64> = null
+let mut ww_target: ptr<f64> = null
+let mut ww_rate: ptr<f64> = null
+let mut ww_ld: i32 = 0
+let mut kind_count: ptr<i32> = null
+let mut kind_genes: ptr<i32> = null
+let mut gene_kind_ld: i32 = 0
+let mut npag: ptr<i32> = null
+let mut whonpag: ptr<i32> = null
+let mut nw: ptr<i32> = null
+let mut w: ptr<i32> = null
+let mut nwpre: ptr<i32> = null
+let mut nwpost: ptr<i32> = null
+let mut wpre: ptr<f64> = null
+let mut wpost: ptr<f64> = null
+let mut pre_ld: i32 = 0
+let mut post_ld: i32 = 0
+
+function gene_expression_index(node_id: i32, gene_id: i32) -> i32 {
+    return node_id * gex_ld + gene_id
+}
+
+function gene_matrix_index(gene_id: i32, column: i32) -> i32 { return gene_id * t_ld + column }
+function gene_effect_index(gene_id: i32, property_id: i32) -> i32 { return gene_id * effect_ld + property_id }
+function gene_form_index(gene_id: i32, form_id: i32) -> i32 { return gene_id * form_ld + form_id }
+
+function gene_allocate() -> void {
+    if gex != null { free(gex as ptr<void>) }
+    if agex != null { free(agex as ptr<void>) }
+    if dgex != null { free(dgex as ptr<void>) }
+    if checkn != null { free(checkn as ptr<void>) }
+    if t != null { free(t as ptr<void>) }
+    if gene_effects != null { free(gene_effects as ptr<void>) }
+    if diffu != null { free(diffu as ptr<void>) }
+    if idiffu != null { free(idiffu as ptr<void>) }
+    if degradation != null { free(degradation as ptr<void>) }
+    if mich != null { free(mich as ptr<void>) }
+    if kindof != null { free(kindof as ptr<void>) }
+    if npre != null { free(npre as ptr<void>) }
+    if npost != null { free(npost as ptr<void>) }
+    if pre != null { free(pre as ptr<void>) }
+    if post != null { free(post as ptr<void>) }
+    if ww_count != null { free(ww_count as ptr<void>) }
+    if ww_source != null { free(ww_source as ptr<void>) }
+    if ww_target != null { free(ww_target as ptr<void>) }
+    if ww_rate != null { free(ww_rate as ptr<void>) }
+    if kind_count != null { free(kind_count as ptr<void>) }
+    if kind_genes != null { free(kind_genes as ptr<void>) }
+    if npag != null { free(npag as ptr<void>) }
+    if whonpag != null { free(whonpag as ptr<void>) }
+    if nw != null { free(nw as ptr<void>) }
+    if w != null { free(w as ptr<void>) }
+    if nwpre != null { free(nwpre as ptr<void>) }
+    if nwpost != null { free(nwpost as ptr<void>) }
+    if wpre != null { free(wpre as ptr<void>) }
+    if wpost != null { free(wpost as ptr<void>) }
+    nwpre = null
+    nwpost = null
+    wpre = null
+    wpost = null
+    gex_ld = ng + 1
+    t_ld = ng + 1
+    effect_ld = 53
+    form_ld = ng + 1
+    gex = calloc(((nda + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
+    agex = calloc(((nda + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
+    dgex = calloc(((nda + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
+    checkn = calloc((nda + 1) as i64, sizeof<i32>()) as ptr<i32>
+    t = calloc(((ng + 1) * t_ld) as i64, sizeof<f64>()) as ptr<f64>
+    gene_effects = calloc(((ng + 1) * effect_ld) as i64, sizeof<f64>()) as ptr<f64>
+    diffu = calloc((ng + 1) as i64, sizeof<f64>()) as ptr<f64>
+    idiffu = calloc((ng + 1) as i64, sizeof<f64>()) as ptr<f64>
+    degradation = calloc((ng + 1) as i64, sizeof<f64>()) as ptr<f64>
+    mich = calloc((ng + 1) as i64, sizeof<f64>()) as ptr<f64>
+    kindof = calloc((ng + 1) as i64, sizeof<f64>()) as ptr<f64>
+    npre = calloc((ng + 1) as i64, sizeof<i32>()) as ptr<i32>
+    npost = calloc((ng + 1) as i64, sizeof<i32>()) as ptr<i32>
+    pre = calloc(((ng + 1) * form_ld) as i64, sizeof<i32>()) as ptr<i32>
+    post = calloc(((ng + 1) * form_ld) as i64, sizeof<i32>()) as ptr<i32>
+    ww_ld = ng * ng + 1
+    ww_count = calloc((ng + 1) as i64, sizeof<i32>()) as ptr<i32>
+    ww_source = calloc(((ng + 1) * ww_ld) as i64, sizeof<f64>()) as ptr<f64>
+    ww_target = calloc(((ng + 1) * ww_ld) as i64, sizeof<f64>()) as ptr<f64>
+    ww_rate = calloc(((ng + 1) * ww_ld) as i64, sizeof<f64>()) as ptr<f64>
+    gene_kind_ld = ng + 1
+    kind_count = calloc(9 as i64, sizeof<i32>()) as ptr<i32>
+    kind_genes = calloc((9 * gene_kind_ld) as i64, sizeof<i32>()) as ptr<i32>
+    npag = calloc(53 as i64, sizeof<i32>()) as ptr<i32>
+    whonpag = calloc((53 * (ng + 1)) as i64, sizeof<i32>()) as ptr<i32>
+    nw = calloc((ng + 1) as i64, sizeof<i32>()) as ptr<i32>
+    w = calloc(((ng + 1) * (ng + 1)) as i64, sizeof<i32>()) as ptr<i32>
+}
+
+function gene_resize_nodes(old_capacity: i32, new_capacity: i32) -> bool {
+    if new_capacity <= old_capacity { return true }
+    let new_gex: ptr<f64> = calloc(((new_capacity + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
+    let new_agex: ptr<f64> = calloc(((new_capacity + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
+    let new_dgex: ptr<f64> = calloc(((new_capacity + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
+    let new_checkn: ptr<i32> = calloc((new_capacity + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if new_gex == null or new_agex == null or new_dgex == null or new_checkn == null { return false }
+    let mut row: i32 = 0
+    while row <= old_capacity {
+        let mut gene_id: i32 = 0
+        while gene_id < gex_ld {
+            let old_index: i32 = row * gex_ld + gene_id
+            new_gex[old_index] = gex[old_index]
+            new_agex[old_index] = agex[old_index]
+            new_dgex[old_index] = dgex[old_index]
+            gene_id = gene_id + 1
+        }
+        new_checkn[row] = checkn[row]
+        row = row + 1
+    }
+    if gex != null { free(gex as ptr<void>) }
+    if agex != null { free(agex as ptr<void>) }
+    if dgex != null { free(dgex as ptr<void>) }
+    if checkn != null { free(checkn as ptr<void>) }
+    gex = new_gex; agex = new_agex; dgex = new_dgex; checkn = new_checkn
+    return true
+}
+
+function gene_remove_node_slot(deleted_id: i32, old_node_count: i32) -> bool {
+    if deleted_id < 1 or deleted_id > old_node_count { return false }
+    let mut row: i32 = deleted_id
+    while row < old_node_count {
+        let mut gene_id: i32 = 0
+        while gene_id < gex_ld {
+            let destination: i32 = row * gex_ld + gene_id
+            let source: i32 = (row + 1) * gex_ld + gene_id
+            gex[destination] = gex[source]
+            agex[destination] = agex[source]
+            dgex[destination] = dgex[source]
+            gene_id = gene_id + 1
+        }
+        checkn[row] = checkn[row + 1]
+        row = row + 1
+    }
+    let mut gene_id: i32 = 0
+    while gene_id < gex_ld {
+        let last: i32 = old_node_count * gex_ld + gene_id
+        gex[last] = 0.0; agex[last] = 0.0; dgex[last] = 0.0
+        gene_id = gene_id + 1
+    }
+    checkn[old_node_count] = 0
+    return true
+}
+
+function line_matches(data: string, start: i32, end: i32, marker: string) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let target: ptr<u8> = marker as ptr<u8>
+    let mut length: i32 = 0
+    while target[length] != 0 { length = length + 1 }
+    if end - start != length { return false }
+    let mut i: i32 = 0
+    while i < length {
+        if bytes[start + i] != target[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+function line_contains(data: string, start: i32, end: i32, marker: string) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let target: ptr<u8> = marker as ptr<u8>
+    let mut size: i32 = 0
+    while target[size] != 0 { size = size + 1 }
+    let mut at: i32 = start
+    while at + size <= end {
+        let mut j: i32 = 0
+        while j < size {
+            let mut left: u8 = bytes[at + j]
+            let mut right: u8 = target[j]
+            if left >= 65 and left <= 90 { left = (left + 32) as u8 }
+            if right >= 65 and right <= 90 { right = (right + 32) as u8 }
+            if left != right { break }
+            j = j + 1
+        }
+        if j == size { return true }
+        at = at + 1
+    }
+    return false
+}
+
+function line_starts_with(data: string, start: i32, end: i32, marker: string) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let target: ptr<u8> = marker as ptr<u8>
+    let mut first: i32 = start
+    while first < end and (bytes[first] == 32 or bytes[first] == 9) { first = first + 1 }
+    let mut size: i32 = 0
+    while target[size] != 0 { size = size + 1 }
+    if first + size > end { return false }
+    let mut i: i32 = 0
+    while i < size {
+        let mut left: u8 = bytes[first + i]
+        let mut right: u8 = target[i]
+        if left >= 65 and left <= 90 { left = (left + 32) as u8 }
+        if right >= 65 and right <= 90 { right = (right + 32) as u8 }
+        if left != right { return false }
+        i = i + 1
+    }
+    return true
+}
+
+function matrix_section(data: string, length: i32, marker: string, row_count: i32, column_count: i32, target: ptr<f64>, stride: i32, allow_short: bool) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = 0
+    while cursor < length {
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        if line_starts_with(data, cursor, end, marker) {
+            cursor = end
+            if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+            if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+            while cursor < length and (bytes[cursor] == 10 or bytes[cursor] == 13) { cursor = cursor + 1 }
+            while cursor < length {
+                let mut candidate_end: i32 = cursor
+                while candidate_end < length and bytes[candidate_end] != 10 and bytes[candidate_end] != 13 { candidate_end = candidate_end + 1 }
+                if line_starts_with(data, cursor, candidate_end, "gen") { break }
+                cursor = candidate_end
+                if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+                if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+            }
+            let mut row: i32 = 1
+            while row <= row_count {
+                end = cursor
+                while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+                let mut start: i32 = cursor
+                while start < end and (bytes[start] == 32 or bytes[start] == 9) { start = start + 1 }
+                if end - start < 3 { return false }
+                let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+                let mut i: i32 = start
+                let mut j: i32 = 0
+                while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+                line[j] = 0
+                let row_id: ParseI64 = str_parse_i64_at(line as string, 3)
+                if row_id.ok == false or row_id.value != row as i64 { return false }
+                let mut pos: i32 = row_id.end
+                let mut col: i32 = 1
+                while col <= column_count {
+                    let value: ParseF64 = str_parse_f64_at(line as string, pos)
+                    if value.ok == false {
+                        if allow_short { break }
+                        return false
+                    }
+                    target[row * stride + col] = value.value
+                    pos = value.end
+                    col = col + 1
+                }
+                cursor = end
+                if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+                if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+                row = row + 1
+            }
+            return true
+        }
+        cursor = end
+        if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+        if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    }
+    return false
+}
+
+function nwpre_index(gene_id: i32, form_id: i32) -> i32 { return gene_id * pre_ld + form_id }
+function nwpost_index(gene_id: i32, form_id: i32) -> i32 { return gene_id * post_ld + form_id }
+function wpre_index(gene_id: i32, form_id: i32, enzyme_id: i32, field: i32) -> i32 {
+    return ((gene_id * pre_ld + form_id) * (ng + 1) + enzyme_id) * 3 + field
+}
+function wpost_index(gene_id: i32, form_id: i32, enzyme_id: i32, field: i32) -> i32 {
+    return ((gene_id * post_ld + form_id) * (ng + 1) + enzyme_id) * 3 + field
+}
+
+function gene_reaction_indices_build() -> bool {
+    if nwpre != null { free(nwpre as ptr<void>) }
+    if nwpost != null { free(nwpost as ptr<void>) }
+    if wpre != null { free(wpre as ptr<void>) }
+    if wpost != null { free(wpost as ptr<void>) }
+    nwpre = null
+    nwpost = null
+    wpre = null
+    wpost = null
+    let mut max_pre: i32 = 0
+    let mut max_post: i32 = 0
+    let mut gene_id: i32 = 1
+    while gene_id <= ng {
+        if npre[gene_id] > max_pre { max_pre = npre[gene_id] }
+        if npost[gene_id] > max_post { max_post = npost[gene_id] }
+        gene_id = gene_id + 1
+    }
+    pre_ld = max_pre + 1
+    post_ld = max_post + 1
+    nwpre = calloc(((ng + 1) * pre_ld) as i64, sizeof<i32>()) as ptr<i32>
+    nwpost = calloc(((ng + 1) * post_ld) as i64, sizeof<i32>()) as ptr<i32>
+    wpre = calloc(((ng + 1) * pre_ld * (ng + 1) * 3) as i64, sizeof<f64>()) as ptr<f64>
+    wpost = calloc(((ng + 1) * post_ld * (ng + 1) * 3) as i64, sizeof<f64>()) as ptr<f64>
+    let mut enzyme: i32 = 1
+    while enzyme <= ng {
+        let mut reaction: i32 = 1
+        while reaction <= ww_count[enzyme] {
+            let substrate: i32 = ww_source[enzyme * ww_ld + reaction] as i32
+            let product: i32 = ww_target[enzyme * ww_ld + reaction] as i32
+            let mut target_gene: i32 = 1
+            while target_gene <= ng {
+                let mut form: i32 = 1
+                while form <= npre[target_gene] {
+                    if substrate == pre[gene_form_index(target_gene, form)] and product == target_gene {
+                        let index: i32 = nwpre_index(target_gene, form)
+                        nwpre[index] = nwpre[index] + 1
+                        let slot: i32 = nwpre[index]
+                        wpre[wpre_index(target_gene, form, slot, 1)] = enzyme as f64
+                        wpre[wpre_index(target_gene, form, slot, 2)] = ww_rate[enzyme * ww_ld + reaction]
+                    }
+                    form = form + 1
+                }
+                form = 1
+                while form <= npost[target_gene] {
+                    if substrate == target_gene and product == post[gene_form_index(target_gene, form)] {
+                        let index: i32 = nwpost_index(target_gene, form)
+                        nwpost[index] = nwpost[index] + 1
+                        let slot: i32 = nwpost[index]
+                        wpost[wpost_index(target_gene, form, slot, 1)] = enzyme as f64
+                        wpost[wpost_index(target_gene, form, slot, 2)] = ww_rate[enzyme * ww_ld + reaction]
+                    }
+                    form = form + 1
+                }
+                target_gene = target_gene + 1
+            }
+            reaction = reaction + 1
+        }
+        enzyme = enzyme + 1
+    }
+    return true
+}
+
+# Evaluate one reaction-diffusion derivative using the same expression and
+# neighbor order as genetic.mod.f90.
+function genestep() -> bool {
+    if dgex == null or checkn == null or node == null or nneigh == null { return false }
+    let mut i: i32 = 1
+    while i <= nd {
+        checkn[i] = 0
+        let mut j: i32 = 1
+        while j <= ng { dgex[gene_expression_index(i, j)] = 0.0; j = j + 1 }
+        j = 1
+        while j <= ng {
+            let gene: i32 = j
+            let kind: i32 = kindof[gene] as i32
+            let value: f64 = gex[gene_expression_index(i, gene)]
+            let mut diffusion: f64 = 0.0
+            let mut lateral_reaction: f64 = 0.0
+            let other_apical: i32 = node[i].altre
+            if node[i].tipus < 3 and other_apical >= 1 and other_apical <= nd {
+                let dx: f64 = node[i].x - node[other_apical].x
+                let dy: f64 = node[i].y - node[other_apical].y
+                let dz: f64 = node[i].z - node[other_apical].z
+                let distance_apical: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+                let inverse_distance_apical: f64 = 1.0 / (1.0 + distance_apical)
+                let apical_value: f64 = gex[gene_expression_index(other_apical, gene)]
+                if kind <= 4 {
+                    diffusion = diffusion + diffu[gene] * (apical_value - value) * inverse_distance_apical
+                } elif kind == 5 or kind == 6 {
+                    if node[i].tipus == 2 {
+                        diffusion = diffusion - diffu[gene] * value * inverse_distance_apical
+                    } elif node[i].tipus == 1 {
+                        diffusion = diffusion + diffu[gene] * apical_value * inverse_distance_apical
+                    }
+                }
+            }
+            let mut n: i32 = 1
+            while n <= nneigh[i] {
+                let other: i32 = neigh[i * neigh_ld + n]
+                let distance: f64 = dneigh[i * neigh_ld + n]
+                let other_value: f64 = gex[gene_expression_index(other, gene)]
+                let same_cell: bool = node[i].icel == node[other].icel
+                let same_type: bool = node[i].tipus == node[other].tipus
+                let apical_bas: bool = node[i].tipus < 3 and other == node[i].altre
+                if kind <= 3 {
+                    if apical_bas {
+                        if node[i].tipus < 3 {
+                            diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                        }
+                    } elif same_cell and distance < rdiffmax {
+                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    }
+                } elif kind == 4 {
+                    if distance < rdiffmax and not ((node[i].tipus == 1 and node[other].tipus == 2) or (node[i].tipus == 2 and node[other].tipus == 1)) {
+                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    }
+                } elif kind == 5 or kind == 6 {
+                    if node[i].tipus < 3 and apical_bas {
+                        if node[i].tipus == 2 { diffusion = diffusion - diffu[gene] * value * (1.0 / (1.0 + distance)) }
+                        if node[i].tipus == 1 { diffusion = diffusion + diffu[gene] * other_value * (1.0 / (1.0 + distance)) }
+                    } elif distance < rdiffmax and same_type {
+                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    }
+                } elif kind == 7 {
+                    if node[i].tipus < 4 and node[i].icel != node[other].icel and same_type and distance <= node[i].add + node[other].add {
+                        checkn[i] = 1
+                        let mut form: i32 = 1
+                        while form <= npost[gene] {
+                            let product: i32 = post[gene_form_index(gene, form)]
+                            let mut enzyme: i32 = 1
+                            let mut dissociation: f64 = 0.0
+                            while enzyme <= nwpost[nwpost_index(gene, form)] {
+                                let enzyme_gene: i32 = wpost[wpost_index(gene, form, enzyme, 1)] as i32
+                                let other_form: i32 = post[gene_form_index(enzyme_gene, 1)]
+                                let rate: f64 = wpost[wpost_index(gene, form, enzyme, 2)]
+                                dissociation = rate * value * gex[gene_expression_index(other, other_form)]
+                                enzyme = enzyme + 1
+                            }
+                            dgex[gene_expression_index(i, product)] = dgex[gene_expression_index(i, product)] + dissociation
+                            lateral_reaction = lateral_reaction - dissociation
+                            form = form + 1
+                        }
+                        form = 1
+                        while form <= npre[gene] {
+                            let precursor: i32 = pre[gene_form_index(gene, form)]
+                            let mut enzyme: i32 = 1
+                            let mut binding: f64 = 0.0
+                            while enzyme <= nwpre[nwpre_index(gene, form)] {
+                                let enzyme_gene: i32 = wpre[wpre_index(gene, form, enzyme, 1)] as i32
+                                let rate: f64 = wpre[wpre_index(gene, form, enzyme, 2)]
+                                binding = rate * gex[gene_expression_index(i, precursor)] * gex[gene_expression_index(other, enzyme_gene)]
+                                enzyme = enzyme + 1
+                            }
+                            dgex[gene_expression_index(i, precursor)] = dgex[gene_expression_index(i, precursor)] - binding
+                            lateral_reaction = lateral_reaction + binding
+                            form = form + 1
+                        }
+                    } elif same_cell and same_type and distance < rdiffmax {
+                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    }
+                } elif kind == 8 {
+                    if same_cell and same_type and distance < rdiffmax {
+                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    }
+                }
+                n = n + 1
+            }
+
+            let mut transcription: f64 = 0.0
+            if node[i].marge == 0 and node[i].tipus < 4 and (kind == 1 or kind == 2 or kind == 4) {
+                let mut regulator: i32 = 1
+                while regulator <= nw[gene] {
+                    let regulator_gene: i32 = w[gene * (ng + 1) + regulator]
+                    transcription = transcription + t[gene_matrix_index(gene, regulator_gene)] * gex[gene_expression_index(i, regulator_gene)]
+                    regulator = regulator + 1
+                }
+                if transcription < 0.0 { transcription = 0.0 }
+                transcription = transcription / (mich[gene] + transcription)
+            }
+            let mut derivative: f64 = diffusion - degradation[gene] * value + lateral_reaction
+            if kind == 1 or kind == 2 or kind == 4 { derivative = derivative + transcription }
+
+            if kind >= 2 and kind <= 7 {
+                let mut form: i32 = 1
+                while form <= npost[gene] {
+                    let product: i32 = post[gene_form_index(gene, form)]
+                    if kindof[product] as i32 != 8 {
+                        let mut rate_sum: f64 = 0.0
+                        let mut enzyme: i32 = 1
+                        while enzyme <= nwpost[nwpost_index(gene, form)] {
+                            let enzyme_gene: i32 = wpost[wpost_index(gene, form, enzyme, 1)] as i32
+                            rate_sum = rate_sum + wpost[wpost_index(gene, form, enzyme, 2)] * gex[gene_expression_index(i, enzyme_gene)]
+                            enzyme = enzyme + 1
+                        }
+                        if rate_sum < 0.0 { rate_sum = 0.0 }
+                        let transfer: f64 = rate_sum * value / (mich[gene] + value)
+                        dgex[gene_expression_index(i, product)] = dgex[gene_expression_index(i, product)] + transfer
+                        derivative = derivative - transfer
+                    }
+                    form = form + 1
+                }
+            }
+            if kind == 8 {
+                if npost[gene] >= 2 {
+                    let first_product: i32 = post[gene_form_index(gene, 1)]
+                    let second_product: i32 = post[gene_form_index(gene, 2)]
+                    let dissociation: f64 = wpost[wpost_index(gene, 1, 1, 2)] * value
+                    dgex[gene_expression_index(i, first_product)] = dgex[gene_expression_index(i, first_product)] + dissociation
+                    dgex[gene_expression_index(i, second_product)] = dgex[gene_expression_index(i, second_product)] + dissociation
+                    derivative = derivative - dissociation
+                }
+                if npre[gene] >= 2 {
+                    let first_precursor: i32 = pre[gene_form_index(gene, 1)]
+                    let second_precursor: i32 = pre[gene_form_index(gene, 2)]
+                    let binding: f64 = wpre[wpre_index(gene, 1, 1, 2)] * gex[gene_expression_index(i, second_precursor)] * gex[gene_expression_index(i, first_precursor)]
+                    dgex[gene_expression_index(i, first_precursor)] = dgex[gene_expression_index(i, first_precursor)] - binding
+                    dgex[gene_expression_index(i, second_precursor)] = dgex[gene_expression_index(i, second_precursor)] - binding
+                    derivative = derivative + binding
+                }
+            }
+            dgex[gene_expression_index(i, gene)] = dgex[gene_expression_index(i, gene)] + derivative
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return true
+}
+
+function gene_stuff() -> bool {
+    if genestep() == false { return false }
+    if ffu != null and (ffu[5] == 2 or ffu[12] == 2) {
+        if gene_rungekutta4() == false { return false }
+    } else {
+        let mut i: i32 = 1
+        while i <= nd {
+            let mut gene: i32 = 1
+            while gene <= ng {
+                let index: i32 = gene_expression_index(i, gene)
+                agex[index] = gex[index] + delta * dgex[index]
+                gene = gene + 1
+            }
+            i = i + 1
+        }
+    }
+
+    let mut i: i32 = 1
+    while i <= nd {
+        let mut gene: i32 = 1
+        while gene <= ng {
+            let index: i32 = gene_expression_index(i, gene)
+            if fabs(agex[index]) < 1.1920928955078125e-6 { gex[index] = 0.0 }
+            gene = gene + 1
+        }
+        if checkn[i] == 0 {
+            let mut n: i32 = 1
+            while n <= kind_count[7] {
+                let signal_gene: i32 = kind_genes[7 * gene_kind_ld + n]
+                if npre[signal_gene] > 0 {
+                    let precursor: i32 = pre[gene_form_index(signal_gene, 1)]
+                    agex[gene_expression_index(i, precursor)] = agex[gene_expression_index(i, precursor)] + gex[gene_expression_index(i, signal_gene)]
+                    agex[gene_expression_index(i, signal_gene)] = 0.0
+                }
+                n = n + 1
+            }
+        }
+        i = i + 1
+    }
+    return true
+}
+
+function gene_rungekutta4() -> bool {
+    let count: i32 = (nd + 1) * gex_ld
+    let saved: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
+    let k1: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
+    let k2: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
+    let k3: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
+    let k4: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
+    if saved == null or k1 == null or k2 == null or k3 == null or k4 == null { return false }
+    let mut i: i32 = 1
+    while i <= nd {
+        let mut gene: i32 = 1
+        while gene <= ng {
+            let index: i32 = gene_expression_index(i, gene)
+            saved[index] = gex[index]
+            k1[index] = dgex[index]
+            gex[index] = saved[index] + delta * 0.5 * k1[index]
+            gene = gene + 1
+        }
+        i = i + 1
+    }
+    if genestep() == false { return false }
+    i = 1
+    while i <= nd {
+        let mut gene: i32 = 1
+        while gene <= ng {
+            let index: i32 = gene_expression_index(i, gene)
+            k2[index] = dgex[index]
+            gex[index] = gex[index] + delta * 0.5 * k2[index]
+            gene = gene + 1
+        }
+        i = i + 1
+    }
+    if genestep() == false { return false }
+    i = 1
+    while i <= nd {
+        let mut gene: i32 = 1
+        while gene <= ng {
+            let index: i32 = gene_expression_index(i, gene)
+            k3[index] = dgex[index]
+            gex[index] = gex[index] + delta * k3[index]
+            gene = gene + 1
+        }
+        i = i + 1
+    }
+    if genestep() == false { return false }
+    i = 1
+    while i <= nd {
+        let mut gene: i32 = 1
+        while gene <= ng {
+            let index: i32 = gene_expression_index(i, gene)
+            k4[index] = dgex[index]
+            agex[index] = saved[index] + (delta / 6.0) * (k1[index] + 2.0 * k2[index] + 2.0 * k3[index] + k4[index])
+            gene = gene + 1
+        }
+        i = i + 1
+    }
+    free(saved as ptr<void>); free(k1 as ptr<void>); free(k2 as ptr<void>); free(k3 as ptr<void>); free(k4 as ptr<void>)
+    return true
+}
+
+function gene_network_indices_build() -> bool {
+    if kind_count == null or npag == null or nw == null { return false }
+    let mut i: i32 = 0
+    while i < 9 { kind_count[i] = 0; i = i + 1 }
+    i = 0
+    while i < 53 { npag[i] = 0; i = i + 1 }
+    i = 0
+    while i <= ng {
+        nw[i] = 0
+        i = i + 1
+    }
+    let mut gene_id: i32 = 1
+    while gene_id <= ng {
+        let mut kind: i32 = kindof[gene_id] as i32
+        if kind == 0 { kind = 1; kindof[gene_id] = 1.0 }
+        if kind < 1 or kind > 8 { return false }
+        kind_count[kind] = kind_count[kind] + 1
+        kind_genes[kind * gene_kind_ld + kind_count[kind]] = gene_id
+        let mut property: i32 = 1
+        while property <= 52 {
+            let eff_value: f64 = gene_effects[gene_effect_index(gene_id, property)]
+            if eff_value != 0.0 {
+                npag[property] = npag[property] + 1
+                whonpag[property * (ng + 1) + npag[property]] = gene_id
+            }
+            property = property + 1
+        }
+        let mut source_gene: i32 = 1
+        while source_gene <= ng {
+            if t[gene_matrix_index(gene_id, source_gene)] != 0.0 {
+                nw[gene_id] = nw[gene_id] + 1
+                w[gene_id * (ng + 1) + nw[gene_id]] = source_gene
+            }
+            source_gene = source_gene + 1
+        }
+        gene_id = gene_id + 1
+    }
+    return true
+}
+
+function read_ww_values(data: string, length: i32, at: i32, gene_id: i32, count: i32, values: ptr<f64>) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = at
+    let mut filled: i32 = 0
+    while filled < count {
+        cursor = next_nonblank(data, length, cursor)
+        if cursor < 0 { return -1 }
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        let line: ptr<u8> = malloc((end - cursor + 1) as i64) as ptr<u8>
+        let mut copy_i: i32 = cursor
+        let mut copy_j: i32 = 0
+        while copy_i < end { line[copy_j] = bytes[copy_i]; copy_i = copy_i + 1; copy_j = copy_j + 1 }
+        line[copy_j] = 0
+        let mut pos: i32 = 0
+        while filled < count {
+            let value: ParseF64 = str_parse_f64_at(line as string, pos)
+            if value.ok == false { break }
+            values[gene_id * ww_ld + filled + 1] = value.value
+            pos = value.end
+            filled = filled + 1
+        }
+        cursor = following_line(data, length, cursor)
+    }
+    return cursor
+}
+
+function read_ww_matrix(data: string, length: i32) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = 0
+    while cursor < length {
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        if line_starts_with(data, cursor, end, "ww matrix") { break }
+        cursor = following_line(data, length, cursor)
+    }
+    if cursor >= length { return true }
+    cursor = following_line(data, length, cursor)
+    let mut gene_id: i32 = 1
+    while gene_id <= ng {
+        cursor = next_nonblank(data, length, cursor)
+        if cursor < 0 { return false }
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        let line: ptr<u8> = malloc((end - cursor + 1) as i64) as ptr<u8>
+        let mut copy_i: i32 = cursor
+        let mut copy_j: i32 = 0
+        while copy_i < end { line[copy_j] = bytes[copy_i]; copy_i = copy_i + 1; copy_j = copy_j + 1 }
+        line[copy_j] = 0
+        let id: ParseI64 = str_parse_i64_at(line as string, 0)
+        if id.ok == false or id.value != gene_id as i64 { return false }
+        let count: ParseI64 = str_parse_i64_at(line as string, id.end)
+        if count.ok == false or count.value < 0 or count.value >= ww_ld as i64 { return false }
+        ww_count[gene_id] = count.value as i32
+        cursor = following_line(data, length, cursor)
+        if ww_count[gene_id] > 0 {
+            cursor = read_ww_values(data, length, cursor, gene_id, ww_count[gene_id], ww_source)
+            if cursor < 0 { return false }
+            cursor = read_ww_values(data, length, cursor, gene_id, ww_count[gene_id], ww_target)
+            if cursor < 0 { return false }
+            cursor = read_ww_values(data, length, cursor, gene_id, ww_count[gene_id], ww_rate)
+            if cursor < 0 { return false }
+        }
+        gene_id = gene_id + 1
+    }
+    return true
+}
+
+function read_gene_network_matrices(data: string, length: i32) -> bool {
+    if read_ww_matrix(data, length) == false { matrix_error = 4; return false }
+    let w_ok: bool = matrix_section(data, length, "W matrix:", ng, ng, t, t_ld, false)
+    if w_ok == false { matrix_error = 1; return false }
+    let mut e_ok: bool = matrix_section(data, length, "E and C matrix:", ng, 52, gene_effects, effect_ld, true)
+    if e_ok == false { e_ok = matrix_section(data, length, "WA matrix:", ng, 52, gene_effects, effect_ld, true) }
+    if e_ok == false { matrix_error = 2; return false }
+    matrix_error = 0
+    if read_gene_metadata(data, length) == false { matrix_error = 3; return false }
+    if gene_network_indices_build() == false { matrix_error = 5; return false }
+    if gene_reaction_indices_build() == false { matrix_error = 6; return false }
+    return true
+}
+
+function next_nonblank(data: string, length: i32, at: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = at
+    while cursor >= 0 and cursor < length {
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        let mut first: i32 = cursor
+        while first < end and (bytes[first] == 32 or bytes[first] == 9) { first = first + 1 }
+        if first < end { return cursor }
+        cursor = end
+        if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+        if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    }
+    return -1
+}
+
+function following_line(data: string, length: i32, at: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = at
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function parse_f64_first(data: string, start: i32, end: i32) -> ParseF64 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut i: i32 = start
+    let mut j: i32 = 0
+    while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+    line[j] = 0
+    return str_parse_f64_at(line as string, 0)
+}
+
+function parse_i64_first(data: string, start: i32, end: i32) -> ParseI64 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut i: i32 = start
+    let mut j: i32 = 0
+    while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+    line[j] = 0
+    return str_parse_i64_at(line as string, 0)
+}
+
+function read_form_list(data: string, length: i32, cursor: i32, gene_id: i32, form_count: i32, destination: ptr<i32>) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut filled: i32 = 0
+    let mut line_start: i32 = cursor
+    while filled < form_count {
+        let mut end: i32 = line_start
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        let line: ptr<u8> = malloc((end - line_start + 1) as i64) as ptr<u8>
+        let mut i: i32 = line_start
+        let mut j: i32 = 0
+        while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+        line[j] = 0
+        let mut pos: i32 = 0
+        while filled < form_count {
+            let value: ParseI64 = str_parse_i64_at(line as string, pos)
+            if value.ok == false { break }
+            destination[gene_id * form_ld + filled + 1] = value.value as i32
+            pos = value.end
+            filled = filled + 1
+        }
+        line_start = following_line(data, length, end)
+        if line_start >= length and filled < form_count { return -1 }
+    }
+    return line_start
+}
+
+function read_gene_metadata(data: string, length: i32) -> bool {
+    metadata_error = 0
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = 0
+    while cursor < length {
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        if line_contains(data, cursor, end, "other gene characteristics") { break }
+        cursor = following_line(data, length, cursor)
+    }
+    if cursor >= length { metadata_error = 1; return false }
+    cursor = following_line(data, length, cursor)
+    let mut gene_id: i32 = 1
+    while gene_id <= ng {
+        cursor = next_nonblank(data, length, cursor)
+        if cursor < 0 { metadata_error = 2; return false }
+        let mut end: i32 = cursor
+        while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+        if line_contains(data, cursor, end, "gene") == false { metadata_error = 3; return false }
+        cursor = following_line(data, length, cursor)
+        let mut found_diffu: bool = false
+        let mut found_mu: bool = false
+        let mut found_kind: bool = false
+        let mut found_pre: bool = false
+        let mut found_post: bool = false
+        while cursor >= 0 and cursor < length and found_post == false {
+            cursor = next_nonblank(data, length, cursor)
+            if cursor < 0 { break }
+            end = cursor
+            while end < length and bytes[end] != 10 and bytes[end] != 13 { end = end + 1 }
+            if line_contains(data, cursor, end, "gene") { break }
+            if line_contains(data, cursor, end, "diffusivity") {
+                let value: ParseF64 = parse_f64_first(data, cursor, end)
+                if value.ok == false { metadata_error = 4; return false }
+                diffu[gene_id] = value.value
+                found_diffu = true
+            } elif line_contains(data, cursor, end, "Mich-Menten") {
+                let value: ParseF64 = parse_f64_first(data, cursor, end)
+                if value.ok { mich[gene_id] = value.value }
+            } elif line_contains(data, cursor, end, "degradation rate") {
+                let value: ParseF64 = parse_f64_first(data, cursor, end)
+                if value.ok == false { metadata_error = 5; return false }
+                degradation[gene_id] = value.value
+                found_mu = true
+            } elif line_contains(data, cursor, end, "type,") {
+                let value: ParseF64 = parse_f64_first(data, cursor, end)
+                if value.ok == false { metadata_error = 6; return false }
+                kindof[gene_id] = value.value
+                found_kind = true
+            } elif line_contains(data, cursor, end, "number of pre forms") {
+                let value: ParseI64 = parse_i64_first(data, cursor, end)
+                if value.ok == false { metadata_error = 7; return false }
+                npre[gene_id] = value.value as i32
+                found_pre = true
+                cursor = following_line(data, length, cursor)
+                if npre[gene_id] > 0 {
+                    cursor = read_form_list(data, length, cursor, gene_id, npre[gene_id], pre)
+                    if cursor < 0 { metadata_error = 8; return false }
+                }
+                continue
+            } elif line_contains(data, cursor, end, "number of post form") {
+                let value: ParseI64 = parse_i64_first(data, cursor, end)
+                if value.ok == false { metadata_error = 9; return false }
+                npost[gene_id] = value.value as i32
+                found_post = true
+                cursor = following_line(data, length, cursor)
+                if npost[gene_id] > 0 {
+                    cursor = read_form_list(data, length, cursor, gene_id, npost[gene_id], post)
+                    if cursor < 0 { metadata_error = 10; return false }
+                }
+                continue
+            }
+            cursor = following_line(data, length, cursor)
+        }
+        if found_diffu == false or found_mu == false or found_kind == false or found_pre == false or found_post == false {
+            metadata_error = 11
+            return false
+        }
+        if found_mu and mich[gene_id] == 0.0 { mich[gene_id] = 1.0 }
+        gene_id = gene_id + 1
+    }
+    return true
+}
+
+function read_gex_matrix(data: string, length: i32) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = 0
+    while cursor < length {
+        let mut end: i32 = cursor
+        let mut line_end: i32 = end
+        while line_end < length and bytes[line_end] != 10 and bytes[line_end] != 13 { line_end = line_end + 1 }
+        let mut first: i32 = cursor
+        while first < line_end and (bytes[first] == 32 or bytes[first] == 9) { first = first + 1 }
+        if line_matches(data, first, line_end, "G matrix: gene expression") or line_matches(data, first, line_end, "gene expression") {
+                cursor = line_end
+                if bytes[cursor] == 13 { cursor = cursor + 1 }
+                if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+                # Skip the blank separator and column header.
+                while cursor < length and (bytes[cursor] == 10 or bytes[cursor] == 13) { cursor = cursor + 1 }
+                while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+                if bytes[cursor] == 13 { cursor = cursor + 1 }
+                if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+                let mut row: i32 = 1
+                while row <= nd and cursor < length {
+                    line_end = cursor
+                    while line_end < length and bytes[line_end] != 10 and bytes[line_end] != 13 { line_end = line_end + 1 }
+                    let line_buffer: ptr<u8> = malloc((line_end - cursor + 1) as i64) as ptr<u8>
+                    let mut b: i32 = cursor
+                    let mut out: i32 = 0
+                    while b < line_end { line_buffer[out] = bytes[b]; out = out + 1; b = b + 1 }
+                    line_buffer[out] = 0
+                    let line: string = line_buffer as string
+                    let row_id: ParseI64 = str_parse_i64_at(line as string, 0)
+                    if row_id.ok == false or row_id.value != row as i64 { return false }
+                    let mut pos: i32 = row_id.end
+                    let mut gene: i32 = 1
+                    while gene <= ng {
+                        let value: ParseF64 = str_parse_f64_at(line as string, pos)
+                        if value.ok == false { return false }
+                        gex[gene_expression_index(row, gene)] = value.value
+                        pos = value.end
+                        gene = gene + 1
+                    }
+                    row = row + 1
+                    cursor = line_end
+                    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+                    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+                }
+                return row == nd + 1
+        }
+        cursor = line_end
+        if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+        if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    }
+    return ng == 0
+}
+
+export gex, agex, dgex, checkn, gex_ld, gene_expression_index, gene_allocate, gene_resize_nodes, gene_remove_node_slot, read_gex_matrix
+export t, gene_effects, diffu, idiffu, degradation, mich, kindof, npre, npost, pre, post
+export matrix_error, metadata_error, ww_count, ww_source, ww_target, ww_rate, ww_ld
+export kind_count, kind_genes, gene_kind_ld, npag, whonpag, nw, w, gene_network_indices_build
+export nwpre, nwpost, wpre, wpost, pre_ld, post_ld, nwpre_index, nwpost_index, wpre_index, wpost_index
+export t_ld, effect_ld, form_ld, gene_matrix_index, gene_effect_index, gene_form_index, read_gene_network_matrices
+export genestep, gene_stuff, gene_rungekutta4

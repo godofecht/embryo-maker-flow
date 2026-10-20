@@ -1,0 +1,18 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.aleas { inialea3d }
+import embryo.general { nparti }
+import embryo.model { advance_model_iteration, model_error }
+import embryo.neighboring { triangulation_warning }
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/apical_contraction/apical_contraction.txt") != 0 { return 1 }
+    inialea3d(nparti)
+    let mut iteration: i32 = 1
+    while iteration <= 5 {
+        if advance_model_iteration() == false { println("model status", model_error, "iteration", iteration); return 10 + model_error }
+        if model_error != 0 { return 20 }
+        if iteration == 2 and triangulation_warning != 301 { println("expected Delaunay 301 recovery", triangulation_warning); return 21 }
+        iteration = iteration + 1
+    }
+    return 0
+}

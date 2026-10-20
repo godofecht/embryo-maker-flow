@@ -12,7 +12,15 @@ MODS = aleas.mod.f90 general.mod.f90 geompack3.f90 gnuplotter.mod.f90 \
        nexus.mod.f03 inicial.mod.f90 model.mod.f90 automaticon.mod.f90 \
        headless.f90
 
+GUI_MODS = OpenGL_gl.f90 OpenGL_glu.f90 OpenGL_glut.f90 \
+           $(filter-out headless.f90,$(MODS)) editor.mod.f90 drawer.mod.f90 elli.f90
+
 all: $(BUILD)/emaker_ref
+
+gui:
+	mkdir -p $(BUILD)/gui
+	cd $(BUILD)/gui && for f in $(GUI_MODS); do $(FC) $(FFLAGS) -c ../../$(SRC)/$$f || exit 1; done
+	cd $(BUILD)/gui && $(FC) $(FFLAGS) -o ../emaker_gui *.o -framework GLUT -framework OpenGL
 
 $(BUILD)/emaker_ref: $(addprefix $(SRC)/,$(MODS))
 	mkdir -p $(BUILD)
@@ -22,4 +30,4 @@ $(BUILD)/emaker_ref: $(addprefix $(SRC)/,$(MODS))
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean
+.PHONY: all gui clean

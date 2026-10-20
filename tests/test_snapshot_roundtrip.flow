@@ -1,0 +1,46 @@
+import embryo.io { read_snapshot_parameters, write_snapshot }
+import embryo.general { nd, ng, node, cels }
+import embryo.genetic { gex, gene_expression_index }
+import embryo.general { idum, idumoriginal }
+
+extern {
+    function remove(path: string) -> i32
+    function fabs(x: f64) -> f64
+}
+
+function roundtrip(path: string) -> i32 {
+    if read_snapshot_parameters(path) != 0 { return 1 }
+    let old_nodes: i32 = nd
+    let old_genes: i32 = ng
+    let x: f64 = node[1].x
+    let y: f64 = node[nd].y
+    let expression: f64 = if ng > 0 { gex[gene_expression_index(1, 1)] } else { 0.0 }
+    let last_expression: f64 = if ng > 0 { gex[gene_expression_index(nd, ng)] } else { 0.0 }
+    let first_seed: i32 = idum[0]
+    let original_seed: i32 = idumoriginal[0]
+    let first_cell_nodes: i32 = cels[1].nunodes
+    if write_snapshot("roundtrip_snapshot.dat") == false { return 2 }
+    if read_snapshot_parameters("roundtrip_snapshot.dat") != 0 { return 3 }
+    let removed: i32 = remove("roundtrip_snapshot.dat")
+    if nd != old_nodes or ng != old_genes { return 4 }
+    if fabs(node[1].x - x) > 1.0e-14 { return 5 }
+    if ng > 0 and fabs(gex[gene_expression_index(1, 1)] - expression) > 1.0e-14 { return 6 }
+    if fabs(node[nd].y - y) > 1.0e-14 { return 7 }
+    if ng > 0 and fabs(gex[gene_expression_index(nd, ng)] - last_expression) > 1.0e-14 { return 8 }
+    if idum[0] != first_seed or idumoriginal[0] != original_seed { return 9 }
+    if cels[1].nunodes != first_cell_nodes { return 10 }
+    if removed != 0 { return 11 }
+    return 0
+}
+
+function main() -> i32 {
+    let mut result: i32 = roundtrip("../reference/examples/migration/migration.txt"); if result != 0 { return 20 + result }
+    result = roundtrip("../reference/examples/apoptosis/apoptosis.txt"); if result != 0 { return 30 + result }
+    result = roundtrip("../reference/examples/differential_adhesion/differential_adhesion.txt"); if result != 0 { return 40 + result }
+    result = roundtrip("../reference/examples/polar_growth/polar_growth.txt"); if result != 0 { return 50 + result }
+    result = roundtrip("../reference/examples/apical_contraction/apical_contraction.txt"); if result != 0 { return 60 + result }
+    result = roundtrip("../reference/examples/ecm_secretion/ecm_secretion.txt"); if result != 0 { return 70 + result }
+    result = roundtrip("../reference/examples/figure_6/gastrula.txt"); if result != 0 { return 80 + result }
+    result = roundtrip("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt"); if result != 0 { return 90 + result }
+    return 0
+}

@@ -1,0 +1,807 @@
+import embryo.general {
+    Nod, nod_zero, iniarrays, node, nodeo, cels, nda, ncals, idum, idumoriginal,
+    getot, temp, nparti, desmax, mmae, dmax, rv, min_comp,
+    ntipusadh, nd, resmax, ndmax, rtime, ttalone, reqmin, ecmmax,
+    deltamax, ncels, ng, prop_noise, mnn, ramax, prec, deltamin,
+    dif_req, screen_radius, df_reqmax, angletor, ldi, maxad,
+    maxbox, maxcycl, newfase, maxelong, ffu, ffufi, NFU, NFI, whichend, kadh, kadh_ld,
+    nvarglobal_out, varglobal_out, itacc,
+    rtime, mnn, ramax, deltamin, dif_req, screen_radius, df_reqmax, angletor, ldi
+}
+import embryo.rng { rng_seed }
+import embryo.rng { rng_get }
+import embryo.neighboring { neighbor_reset }
+import embryo.genetic {
+    gene_allocate, read_gex_matrix, read_gene_network_matrices,
+    t, t_ld, ww_count, ww_source, ww_target, ww_rate, ww_ld,
+    gene_effects, effect_ld, diffu, mich, degradation, kindof,
+    npre, npost, pre, post, form_ld, gex, gex_ld,
+    gene_matrix_index, gene_effect_index, gene_form_index, gene_expression_index
+}
+import std.io { FileRead, io_read_file, io_write_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at, str_format_i64 }
+
+let mut param: array<f64, 36> = []
+let mut snapshot_error: i32 = 0
+let mut cleaned_length: i32 = 0
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+}
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+    function strlen(s: string) -> i64
+}
+
+function clean_nuls(data: string, length: i32) -> string {
+    let src: ptr<u8> = data as ptr<u8>
+    let dst: ptr<u8> = malloc((length * 2 + 1) as i64) as ptr<u8>
+    let mut i: i32 = 0
+    let mut j: i32 = 0
+    while i < length {
+        if src[i] != 0 {
+            if (src[i] == 43 or src[i] == 45) and i > 0 and i + 1 < length and src[i - 1] >= 48 and src[i - 1] <= 57 and src[i + 1] >= 48 and src[i + 1] <= 57 {
+                let mut token_start: i32 = i - 1
+                while token_start > 0 and src[token_start - 1] != 32 and src[token_start - 1] != 9 and src[token_start - 1] != 10 and src[token_start - 1] != 13 { token_start = token_start - 1 }
+                let mut scan: i32 = token_start
+                let mut has_point: bool = false
+                let mut has_exponent: bool = false
+                while scan < i {
+                    if src[scan] == 46 { has_point = true }
+                    if src[scan] == 69 or src[scan] == 101 or src[scan] == 68 or src[scan] == 100 { has_exponent = true }
+                    scan = scan + 1
+                }
+                if has_point and has_exponent == false { dst[j] = 69; j = j + 1 }
+            }
+            dst[j] = src[i]
+            j = j + 1
+        }
+        i = i + 1
+    }
+    dst[j] = 0
+    cleaned_length = j
+    return dst as string
+}
+
+function bounded_line_end(data: string, start: i32, length: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut i: i32 = start
+    while i < length and bytes[i] != 10 and bytes[i] != 13 { i = i + 1 }
+    return i
+}
+
+function bounded_line_next(data: string, end: i32, length: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    if end >= length { return -1 }
+    if bytes[end] == 13 {
+        if end + 1 < length and bytes[end + 1] == 10 { return end + 2 }
+        return end + 1
+    }
+    if bytes[end] == 10 { return end + 1 }
+    return -1
+}
+
+function copy_span(data: string, start: i32, end: i32) -> string {
+    let source: ptr<u8> = data as ptr<u8>
+    let length: i32 = end - start
+    let result: ptr<u8> = malloc((length + 1) as i64) as ptr<u8>
+    let mut i: i32 = 0
+    while i < length { result[i] = source[start + i]; i = i + 1 }
+    result[length] = 0
+    return result as string
+}
+
+function parse_i64_span(data: string, start: i32, end: i32) -> ParseI64 {
+    let line: string = copy_span(data, start, end)
+    let mut parsed: ParseI64 = str_parse_i64_at(line, 0)
+    if parsed.ok and parsed.end > end - start { parsed.ok = false }
+    free(line as ptr<void>)
+    return parsed
+}
+
+function parse_f64_span(data: string, start: i32, end: i32) -> ParseF64 {
+    let line: string = copy_span(data, start, end)
+    let mut parsed: ParseF64 = str_parse_f64_at(line, 0)
+    if parsed.ok and parsed.end > end - start { parsed.ok = false }
+    free(line as ptr<void>)
+    return parsed
+}
+
+function line_is(data: string, start: i32, end: i32, needle: string) -> bool {
+    let p: ptr<u8> = data as ptr<u8>
+    let q: ptr<u8> = needle as ptr<u8>
+    let mut first: i32 = start
+    while first < end and (p[first] == 32 or p[first] == 9 or p[first] == 13) { first = first + 1 }
+    let mut last: i32 = end
+    while last > first and (p[last - 1] == 32 or p[last - 1] == 9 or p[last - 1] == 13) { last = last - 1 }
+    let mut n: i32 = 0
+    while q[n] != 0 { n = n + 1 }
+    if last - first != n { return false }
+    let mut i: i32 = 0
+    while i < n {
+        if p[first + i] != q[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+function find_line(data: string, length: i32, marker: string) -> i32 {
+    let mut cursor: i32 = 0
+    while cursor >= 0 and cursor < length {
+        let end: i32 = bounded_line_end(data, cursor, length)
+        if line_is(data, cursor, end, marker) { return cursor }
+        cursor = bounded_line_next(data, end, length)
+    }
+    return -1
+}
+
+function node_from_line(line: string) -> Nod {
+    let mut out: Nod = nod_zero()
+    let mut pos: i32 = 0
+    let mut v: array<f64, 28> = []
+    let mut n: i32 = 0
+    while n < 28 {
+        let value: ParseF64 = str_parse_f64_at(line, pos)
+        if value.ok == false { snapshot_error = 4; return out }
+        v[n] = value.value
+        pos = value.end
+        n = n + 1
+    }
+    let mut integers: array<i32, 7> = []
+    n = 0
+    while n < 7 {
+        let value: ParseI64 = str_parse_i64_at(line, pos)
+        if value.ok == false { snapshot_error = 4; return out }
+        integers[n] = value.value as i32
+        pos = value.end
+        n = n + 1
+    }
+    out.x = v[0]; out.y = v[1]; out.z = v[2]; out.e = v[3]
+    out.eqd = v[4]; out.add = v[5]; out.you = v[6]; out.adh = v[7]
+    out.rep = v[8]; out.rec = v[9]; out.erp = v[10]; out.est = v[11]
+    out.eqs = v[12]; out.hoo = v[13]; out.mov = v[14]; out.dmo = v[15]
+    out.orix = v[16]; out.oriy = v[17]; out.oriz = v[18]; out.ecm = v[19]
+    out.cod = v[20]; out.grd = v[21]; out.pld = v[22]; out.vod = v[23]
+    out.dif = v[24]; out.kfi = v[25]; out.pla = v[26]; out.kvol = v[27]
+    out.tipus = integers[0]; out.icel = integers[1]; out.altre = integers[2]
+    out.marge = integers[3]; out.talone = integers[4]; out.fix = integers[5]; out.ndiv = integers[6]
+    return out
+}
+
+function read_node_section(data: string, length: i32, marker: string, destination: ptr<Nod>, count: i32) -> bool {
+    let section: i32 = find_line(data, length, marker)
+    if section < 0 { return false }
+    let end_marker: i32 = bounded_line_end(data, section, length)
+    let mut cursor: i32 = bounded_line_next(data, end_marker, length)
+    let blank_end: i32 = bounded_line_end(data, cursor, length)
+    cursor = bounded_line_next(data, blank_end, length)
+    let header_end: i32 = bounded_line_end(data, cursor, length)
+    cursor = bounded_line_next(data, header_end, length)
+    let mut row: i32 = 1
+    while row <= count and cursor >= 0 {
+        let line_end: i32 = bounded_line_end(data, cursor, length)
+        let line: string = copy_span(data, cursor, line_end)
+        let record: Nod = node_from_line(line)
+        free(line as ptr<void>)
+        if snapshot_error != 0 { return false }
+        destination[row] = record
+        cursor = bounded_line_next(data, line_end, length)
+        row = row + 1
+    }
+    return row == count + 1
+}
+
+function parse_f64_line(data: string, length: i32, start: i32, count: i32, values: ptr<f64>) -> bool {
+    let end: i32 = bounded_line_end(data, start, length)
+    let line: string = copy_span(data, start, end)
+    let mut pos: i32 = 0
+    let mut i: i32 = 0
+    while i < count {
+        let parsed: ParseF64 = str_parse_f64_at(line, pos)
+        if parsed.ok == false { free(line as ptr<void>); return false }
+        values[i] = parsed.value
+        pos = parsed.end
+        i = i + 1
+    }
+    free(line as ptr<void>)
+    return true
+}
+
+function skip_blank_lines(data: string, length: i32, cursor: i32) -> i32 {
+    let mut pos: i32 = cursor
+    while pos >= 0 and pos < length {
+        let end: i32 = bounded_line_end(data, pos, length)
+        let bytes: ptr<u8> = data as ptr<u8>
+        let mut first: i32 = pos
+        while first < end and (bytes[first] == 32 or bytes[first] == 9 or bytes[first] == 13) { first = first + 1 }
+        if first < end { return pos }
+        pos = bounded_line_next(data, end, length)
+    }
+    return -1
+}
+
+function read_cell_section(data: string, length: i32) -> bool {
+    let section: i32 = find_line(data, length, "cell properties")
+    if section < 0 { return false }
+    let cursor0: i32 = bounded_line_next(data, bounded_line_end(data, section, length), length)
+    let cursor1: i32 = skip_blank_lines(data, length, cursor0)
+    if cursor1 < 0 { return false }
+    let count_end: i32 = bounded_line_end(data, cursor1, length)
+    let count: ParseI64 = parse_i64_span(data, cursor1, count_end)
+    if count.ok == false or count.value != ncels as i64 { return false }
+    let mut cursor: i32 = bounded_line_next(data, bounded_line_end(data, cursor1, length), length)
+    let mut cell_index: i32 = 1
+    while cell_index <= ncels {
+        cursor = skip_blank_lines(data, length, cursor)
+        if cursor < 0 { return false }
+        # Cell title and the total cell energy precede the serialized fields.
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        let mut vals: array<f64, 4> = []
+        if parse_f64_line(data, length, cursor, 1, &vals[0]) == false { return false }
+        cels[cell_index].minsize_for_div = vals[0]
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if parse_f64_line(data, length, cursor, 1, &vals[0]) == false { return false }
+        cels[cell_index].maxsize_for_div = vals[0]
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if parse_f64_line(data, length, cursor, 3, &vals[0]) == false { return false }
+        cels[cell_index].cex = vals[0]; cels[cell_index].cey = vals[1]; cels[cell_index].cez = vals[2]
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if parse_f64_line(data, length, cursor, 3, &vals[0]) == false { return false }
+        cels[cell_index].polx = vals[0]; cels[cell_index].poly = vals[1]; cels[cell_index].polz = vals[2]
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if parse_f64_line(data, length, cursor, 1, &vals[0]) == false { return false }
+        cels[cell_index].fase = vals[0]
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if parse_f64_line(data, length, cursor, 1, &vals[0]) == false { return false }
+        cels[cell_index].temt = vals[0]
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        let int_end: i32 = bounded_line_end(data, cursor, length)
+        let n_nodes: ParseI64 = parse_i64_span(data, cursor, int_end)
+        if n_nodes.ok == false { return false }
+        cels[cell_index].nunodes = n_nodes.value as i32
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        let size_end: i32 = bounded_line_end(data, cursor, length)
+        let node_size: ParseI64 = parse_i64_span(data, cursor, size_end)
+        if node_size.ok == false or n_nodes.value > node_size.value { return false }
+        cels[cell_index].nodela = node_size.value as i32
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        let type_end: i32 = bounded_line_end(data, cursor, length)
+        let cell_type: ParseI64 = parse_i64_span(data, cursor, type_end)
+        if cell_type.ok == false { return false }
+        cels[cell_index].ctipus = cell_type.value as i32
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if cels[cell_index].node != null { free(cels[cell_index].node as ptr<void>) }
+        cels[cell_index].node = calloc((cels[cell_index].nodela + 1) as i64, sizeof<i32>()) as ptr<i32>
+        let mut filled: i32 = 0
+        while filled < cels[cell_index].nunodes {
+            let end: i32 = bounded_line_end(data, cursor, length)
+            let line: string = copy_span(data, cursor, end)
+            let mut pos: i32 = 0
+            while filled < cels[cell_index].nunodes {
+                let id: ParseI64 = str_parse_i64_at(line, pos)
+                if id.ok == false { break }
+                cels[cell_index].node[filled + 1] = id.value as i32
+                pos = id.end
+                filled = filled + 1
+            }
+            free(line as ptr<void>)
+            cursor = bounded_line_next(data, end, length)
+            if cursor < 0 and filled < cels[cell_index].nunodes { return false }
+        }
+        cell_index = cell_index + 1
+    }
+    return true
+}
+
+function line_starts_with(data: string, start: i32, end: i32, marker: string) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let target: ptr<u8> = marker as ptr<u8>
+    let mut first: i32 = start
+    while first < end and (bytes[first] == 32 or bytes[first] == 9) { first = first + 1 }
+    let mut i: i32 = 0
+    while target[i] != 0 {
+        if first + i >= end { return false }
+        let mut left: u8 = bytes[first + i]
+        let mut right: u8 = target[i]
+        if left >= 65 and left <= 90 { left = (left + 32) as u8 }
+        if right >= 65 and right <= 90 { right = (right + 32) as u8 }
+        if left != right { return false }
+        i = i + 1
+    }
+    return true
+}
+
+function find_line_containing(data: string, length: i32, marker: string) -> i32 {
+    let mut cursor: i32 = 0
+    while cursor >= 0 and cursor < length {
+        let end: i32 = bounded_line_end(data, cursor, length)
+        let bytes: ptr<u8> = data as ptr<u8>
+        let target: ptr<u8> = marker as ptr<u8>
+        let mut size: i32 = 0
+        while target[size] != 0 { size = size + 1 }
+        let mut at: i32 = cursor
+        while at + size <= end {
+            let mut j: i32 = 0
+            while j < size {
+                let mut left: u8 = bytes[at + j]
+                let mut right: u8 = target[j]
+                if left >= 65 and left <= 90 { left = (left + 32) as u8 }
+                if right >= 65 and right <= 90 { right = (right + 32) as u8 }
+                if left != right { break }
+                j = j + 1
+            }
+            if j == size { return cursor }
+            at = at + 1
+        }
+        cursor = bounded_line_next(data, end, length)
+    }
+    return -1
+}
+
+function read_adhesion_matrix(data: string, length: i32) -> bool {
+    if ntipusadh <= 0 { return true }
+    let mut section: i32 = find_line(data, length, "B matrix: adhesion molecules")
+    if section < 0 { section = find_line(data, length, "adhesion molecules: kadh matrix") }
+    if section < 0 { return false }
+    let mut cursor: i32 = skip_blank_lines(data, length, bounded_line_next(data, bounded_line_end(data, section, length), length))
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut row: i32 = 1
+    while row <= ntipusadh {
+        if cursor < 0 { return false }
+        let end: i32 = bounded_line_end(data, cursor, length)
+        if line_starts_with(data, cursor, end, "adh") == false { return false }
+        let id: ParseI64 = parse_i64_span(data, cursor + 3, end)
+        if id.ok == false or id.value != row as i64 { return false }
+        let mut pos: i32 = cursor + 3 + id.end
+        let mut column: i32 = 1
+        while column <= ntipusadh {
+            let value: ParseF64 = parse_f64_span(data, pos, end)
+            if value.ok == false { return false }
+            kadh[row * kadh_ld + column] = value.value
+            pos = pos + value.end
+            column = column + 1
+        }
+        cursor = bounded_line_next(data, end, length)
+        row = row + 1
+    }
+    return true
+}
+
+function read_seed_line(data: string, length: i32, marker: string, seed: ptr<i32>, minimum_count: i32) -> bool {
+    let section: i32 = find_line(data, length, marker)
+    if section < 0 { return false }
+    let marker_end: i32 = bounded_line_end(data, section, length)
+    let blank: i32 = bounded_line_next(data, marker_end, length)
+    let seed_start: i32 = skip_blank_lines(data, length, blank)
+    if seed_start < 0 { return false }
+    let end: i32 = bounded_line_end(data, seed_start, length)
+    let mut pos: i32 = seed_start
+    let mut i: i32 = 0
+    while i < 12 { seed[i] = 0; i = i + 1 }
+    i = 0
+    while i < 12 {
+        let value: ParseI64 = parse_i64_span(data, pos, end)
+        if value.ok == false {
+            if i < minimum_count { return false }
+            break
+        }
+        seed[i] = value.value as i32
+        pos = pos + value.end
+        i = i + 1
+    }
+    return true
+}
+
+# Load simulation parameters, random seeds, gene data, nodes, cells, and gene
+# expression from an EmbryoMaker snapshot.
+function read_function_flags(data: string, length: i32) -> bool {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = 0
+    let mut count: i32 = -1
+    while cursor < length {
+        let end: i32 = bounded_line_end(data, cursor, length)
+        if line_contains(data, cursor, end, "functions") {
+            let parsed: ParseI64 = parse_i64_span(data, cursor, end)
+            if parsed.ok == false { return false }
+            count = parsed.value as i32
+            cursor = bounded_line_next(data, end, length)
+            break
+        }
+        cursor = bounded_line_next(data, end, length)
+    }
+    if count < 0 or count > NFU { return false }
+    cursor = skip_blank_lines(data, length, cursor)
+    let mut index: i32 = 1
+    while index <= count {
+        if cursor < 0 { return false }
+        let end: i32 = bounded_line_end(data, cursor, length)
+        let value: ParseI64 = parse_i64_span(data, cursor, end)
+        if value.ok == false { return false }
+        ffu[index] = value.value as i32
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+        if index < count { cursor = skip_blank_lines(data, length, cursor) }
+        index = index + 1
+    }
+    return true
+}
+
+function read_snapshot_parameters(path: string) -> i32 {
+    snapshot_error = 0
+    neighbor_reset()
+    let input: FileRead = io_read_file(path)
+    if input.ok == false { snapshot_error = 1; return 1 }
+    let data: string = clean_nuls(input.data, input.len as i32)
+    let status: i32 = parse_snapshot_data(data, cleaned_length)
+    free(data as ptr<void>)
+    free(input.data as ptr<void>)
+    return status
+}
+
+function parse_snapshot_data(data: string, length: i32) -> i32 {
+    let section: i32 = find_line(data, length, "parameters")
+    if section < 0 { snapshot_error = 2; return 2 }
+    let marker_end: i32 = bounded_line_end(data, section, length)
+    let mut cursor: i32 = bounded_line_next(data, marker_end, length)
+    let mut clear_index: i32 = 0
+    while clear_index < 36 {
+        param[clear_index] = 0.0
+        clear_index = clear_index + 1
+    }
+    let mut rows: i32 = 0
+    while cursor >= 0 and cursor < length and rows < 35 {
+        let end: i32 = bounded_line_end(data, cursor, length)
+        let bytes: ptr<u8> = data as ptr<u8>
+        let mut first: i32 = cursor
+        while first < end and (bytes[first] == 32 or bytes[first] == 9 or bytes[first] == 13) { first = first + 1 }
+        if first == end {
+            cursor = bounded_line_next(data, end, length)
+            continue
+        }
+        let id: ParseI64 = parse_i64_span(data, first, end)
+        if id.ok and id.value == (rows + 1) as i64 {
+            let value: ParseF64 = parse_f64_span(data, first + id.end, end)
+            if value.ok and id.value > 0 and id.value <= 35 {
+                param[id.value as i32] = value.value
+                rows = rows + 1
+            }
+        } elif rows > 0 and id.ok {
+            break
+        }
+        cursor = bounded_line_next(data, end, length)
+    }
+    if rows < 30 { snapshot_error = 3; return 3 }
+    get_param_from_matrix_read(&param[0])
+    if read_seed_line(data, length, "random seed at the first iteration", &idumoriginal[0], 1) == false { snapshot_error = 7; return 7 }
+    if read_seed_line(data, length, "random seed at this iteration", &idum[0], 8) == false { snapshot_error = 8; return 8 }
+    if read_global_output_variables(data, length) == false { snapshot_error = 13; return 13 }
+    rng_seed(&idum[0], 8)
+    nda = nd + 10
+    ncals = ncels + 10
+    iniarrays(nda, ncals)
+    if read_function_flags(data, length) == false { snapshot_error = 11; return 11 }
+    gene_allocate()
+    if read_gene_network_matrices(data, length) == false { snapshot_error = 10; return 10 }
+    if read_node_section(data, length, "node properties", node, nd) == false { snapshot_error = 4; return 4 }
+    if find_line(data, length, "node properties at time 0 (nodeo)") < 0 {
+        let mut i: i32 = 1
+        while i <= nd { nodeo[i] = node[i]; i = i + 1 }
+    } elif read_node_section(data, length, "node properties at time 0 (nodeo)", nodeo, nd) == false {
+        snapshot_error = 5
+        return 5
+    }
+    if read_cell_section(data, length) == false { snapshot_error = 6; return 6 }
+    if read_adhesion_matrix(data, length) == false { snapshot_error = 12; return 12 }
+    if read_gex_matrix(data, length) == false { snapshot_error = 9; return 9 }
+    snapshot_error = 0
+    return 0
+}
+
+function read_global_output_variables(data: string, length: i32) -> bool {
+    let count_line: i32 = find_line_containing(data, length, "number of global variables")
+    if count_line < 0 { return false }
+    let count_value: ParseI64 = parse_i64_span(data, count_line, bounded_line_end(data, count_line, length))
+    if count_value.ok == false or count_value.value < 0 or count_value.value > 64 { return false }
+    nvarglobal_out = count_value.value as i32
+    let section: i32 = find_line(data, length, "global output variables")
+    if section < 0 { return false }
+    let mut cursor: i32 = bounded_line_next(data, bounded_line_end(data, section, length), length)
+    let mut index: i32 = 1
+    while index <= nvarglobal_out {
+        cursor = skip_blank_lines(data, length, cursor)
+        if cursor < 0 or cursor >= length { return false }
+        let parsed: ParseF64 = parse_f64_span(data, cursor, bounded_line_end(data, cursor, length))
+        # Older snapshots can contain uninitialized subnormal values in
+        # unused global slots. Keep readable values and zero those slots.
+        varglobal_out[index] = if parsed.ok { parsed.value } else { 0.0 }
+        index = index + 1
+        cursor = bounded_line_next(data, bounded_line_end(data, cursor, length), length)
+    }
+    if nvarglobal_out > 0 { itacc = varglobal_out[1] as i32 }
+    return true
+}
+
+# Copy the original 1-based parameter vector into shared model state.
+function get_param_from_matrix_read(para: ptr<f64>) -> void {
+    getot = para[1] as i32
+    temp = para[2]
+    nparti = para[3] as i32
+    desmax = para[4]
+    mmae = para[5]
+    dmax = para[6]
+    rv = para[7]
+    min_comp = para[8]
+    ntipusadh = para[9] as i32
+    nd = para[10] as i32
+    resmax = para[11]
+    ndmax = para[12] as i32
+    rtime = para[13]
+    ttalone = para[14]
+    reqmin = para[15]
+    ecmmax = para[16]
+    deltamax = para[17]
+    ncels = para[18] as i32
+    ng = para[19] as i32
+    prop_noise = para[21]
+    mnn = para[22] as i32
+    ramax = para[23]
+    prec = para[24]
+    deltamin = para[25]
+    dif_req = para[26]
+    screen_radius = para[27]
+    df_reqmax = para[28]
+    angletor = para[29]
+    ldi = para[30]
+    maxad = para[31]
+    maxbox = para[32]
+    maxcycl = para[33]
+    newfase = para[34]
+    maxelong = para[35]
+}
+
+let mut snapshot_buffer: ptr<u8> = null
+let mut snapshot_capacity: i64 = 0
+let mut snapshot_length: i64 = 0
+
+function snapshot_reset() -> void {
+    if snapshot_buffer != null { free(snapshot_buffer as ptr<void>) }
+    snapshot_capacity = 1048576 + (nd as i64) * (700 + (ng as i64) * 80) + (ng as i64) * (ng as i64) * 100
+    if snapshot_capacity < 1048576 { snapshot_capacity = 1048576 }
+    snapshot_buffer = calloc(snapshot_capacity, 1) as ptr<u8>
+    snapshot_length = 0
+}
+
+function snapshot_append(value: string) -> void {
+    let length: i64 = strlen(value)
+    if snapshot_length + length + 1 >= snapshot_capacity {
+        let capacity: i64 = snapshot_capacity * 2
+        let expanded: ptr<u8> = calloc(capacity, 1) as ptr<u8>
+        let mut i: i64 = 0
+        while i < snapshot_length { expanded[i as i32] = snapshot_buffer[i as i32]; i = i + 1 }
+        free(snapshot_buffer as ptr<void>)
+        snapshot_buffer = expanded
+        snapshot_capacity = capacity
+    }
+    let source: ptr<u8> = value as ptr<u8>
+    let mut i: i64 = 0
+    while i < length { snapshot_buffer[(snapshot_length + i) as i32] = source[i as i32]; i = i + 1 }
+    snapshot_length = snapshot_length + length
+    snapshot_buffer[snapshot_length as i32] = 0
+}
+
+function snapshot_flush(path: string) -> bool {
+    return io_write_file(path, snapshot_buffer as string)
+}
+
+export function format_i64(value: i64) -> string {
+    let buffer: ptr<u8> = calloc(40, 1) as ptr<u8>
+    let length: i32 = str_format_i64(buffer, 40, value)
+    if length < 0 { return "0" }
+    return buffer as string
+}
+
+function left_pad(value: string, width: i32) -> string {
+    let mut padded: string = value
+    while padded.len() < width { padded = " " + padded }
+    return padded
+}
+
+function format_f64_field(value: f64) -> string { return left_pad(format_f64(value), 24) }
+function format_i64_field(value: i64, width: i32) -> string { return left_pad(format_i64(value), width) }
+
+export function format_f64(value: f64) -> string {
+    if value == 0.0 { return "0.0000000000000000e+00" }
+    let negative: bool = value < 0.0
+    let mut mantissa: f64 = if negative { 0.0 - value } else { value }
+    let mut exponent: i32 = 0
+    while mantissa >= 10.0 { mantissa = mantissa / 10.0; exponent = exponent + 1 }
+    while mantissa < 1.0 { mantissa = mantissa * 10.0; exponent = exponent - 1 }
+    let mut digits: i64 = (mantissa * 10000000000000000.0 + 0.5) as i64
+    if digits >= 100000000000000000 {
+        digits = digits / 10
+        exponent = exponent + 1
+    }
+    let raw: string = format_i64(digits)
+    let mut padded: string = raw
+    while padded.len() < 17 { padded = "0" + padded }
+    let sign: string = if negative { "-" } else { "" }
+    let exponent_sign: string = if exponent < 0 { "-" } else { "+" }
+    let exponent_magnitude: i32 = if exponent < 0 { 0 - exponent } else { exponent }
+    let exponent_text: string = format_i64(exponent_magnitude as i64)
+    let padded_exp: string = if exponent_magnitude < 10 { "0" + exponent_text } else { exponent_text }
+    return sign + copy_span(padded, 0, 1) + "." + copy_span(padded, 1, 17) + "e" + exponent_sign + padded_exp
+}
+
+function write_snapshot(path: string) -> bool {
+    snapshot_reset()
+    snapshot_append("THIS FILE WAS WRITTEN IN THE FORMAT OF the 14-7-21 VERSION\nEmbryoMaker Flow\n35 number of node parameters\n" + format_i64(nvarglobal_out as i64) + " number of global variables\n\n28 functions\n\n")
+    let mut i: i32 = 1
+    while i <= NFU {
+        snapshot_append(format_i64(ffu[i] as i64) + " function_" + format_i64(i as i64) + "\n")
+        i = i + 1
+    }
+    snapshot_append("\n" + format_i64(NFI as i64) + " filters: active, lethal, how often is checked")
+    if whichend > 0 { snapshot_append(", this individual was filtered by whichend: " + format_i64(whichend as i64)) }
+    snapshot_append("\n\n")
+    i = 1
+    while i <= NFI {
+        snapshot_append(format_i64(ffufi[i * 4 + 1] as i64) + " " + format_i64(ffufi[i * 4 + 2] as i64) + " " + format_i64(ffufi[i * 4 + 3] as i64) + " filter_" + format_i64(i as i64) + "\n")
+        i = i + 1
+    }
+    snapshot_append("\nparameters\n\n")
+    param[1] = getot as f64; param[2] = temp; param[3] = nparti as f64
+    param[4] = desmax; param[5] = mmae; param[6] = dmax; param[7] = rv
+    param[8] = min_comp; param[9] = ntipusadh as f64; param[10] = nd as f64
+    param[11] = resmax; param[12] = ndmax as f64; param[13] = rtime
+    param[14] = ttalone; param[15] = reqmin; param[16] = ecmmax
+    param[17] = deltamax; param[18] = ncels as f64; param[19] = ng as f64
+    param[20] = 0.0
+    param[21] = prop_noise; param[22] = mnn as f64; param[23] = ramax
+    param[24] = prec; param[25] = deltamin; param[26] = dif_req
+    param[27] = screen_radius; param[28] = df_reqmax; param[29] = angletor
+    param[30] = ldi; param[31] = maxad; param[32] = maxbox
+    param[33] = maxcycl; param[34] = newfase; param[35] = maxelong
+    i = 1
+    while i <= 35 {
+        snapshot_append(format_i64_field(i as i64, 2) + format_f64_field(param[i]) + " parameter_" + format_i64(i as i64) + "\n")
+        i = i + 1
+    }
+    snapshot_append("\nrandom seed at the first iteration\n\n")
+    i = 0
+    snapshot_append(format_i64(idumoriginal[0] as i64))
+    i = 12
+    snapshot_append("\n\nrandom seed at this iteration\n\n")
+    rng_get(&idum[0], 8)
+    i = 0
+    while i < 12 { snapshot_append(format_i64(idum[i] as i64) + " "); i = i + 1 }
+    snapshot_append("\n\nglobal output variables\n\n")
+    i = 1
+    while i <= nvarglobal_out {
+        let value: f64 = if i == 1 { itacc as f64 } else { varglobal_out[i] }
+        snapshot_append(format_f64_field(value) + " global variable " + format_i64(i as i64) + "\n")
+        i = i + 1
+    }
+    snapshot_append("\n")
+    if ng > 0 {
+        snapshot_append(format_i64(ng as i64) + " genes\n\nW matrix: gene expression\n\n")
+        i = 1
+        while i <= ng {
+            snapshot_append("gen" + format_i64_field(i as i64, 4))
+            let mut j: i32 = 1
+            while j <= ng { snapshot_append(format_f64_field(t[gene_matrix_index(i, j)])); j = j + 1 }
+            snapshot_append("\n")
+            i = i + 1
+        }
+        snapshot_append("\nWW matrix: gene\n\n")
+        i = 1
+        while i <= ng {
+            snapshot_append(format_i64(i as i64) + " " + format_i64(ww_count[i] as i64) + "\n")
+            if ww_count[i] > 0 {
+                let mut j: i32 = 1
+                while j <= ww_count[i] { snapshot_append(format_f64(ww_source[i * ww_ld + j]) + " "); j = j + 1 }
+                snapshot_append("\n")
+                j = 1
+                while j <= ww_count[i] { snapshot_append(format_f64(ww_target[i * ww_ld + j]) + " "); j = j + 1 }
+                snapshot_append("\n")
+                j = 1
+                while j <= ww_count[i] { snapshot_append(format_f64(ww_rate[i * ww_ld + j]) + " "); j = j + 1 }
+                snapshot_append("\n")
+            }
+            i = i + 1
+        }
+        snapshot_append("\nE and C matrix: node properties\n\n")
+        i = 1
+        while i <= ng {
+            snapshot_append("gen" + format_i64_field(i as i64, 4))
+            let mut j: i32 = 1
+            while j <= 52 { snapshot_append(format_f64_field(gene_effects[gene_effect_index(i, j)])); j = j + 1 }
+            snapshot_append("\n")
+            i = i + 1
+        }
+        snapshot_append("\nother gene characteristics\n\n")
+        i = 1
+        while i <= ng {
+            snapshot_append("gene " + format_i64(i as i64) + "\n")
+            snapshot_append(format_f64_field(diffu[i]) + " diffusivity\n")
+            snapshot_append(format_f64_field(mich[i]) + " Mich-Menten\n")
+            snapshot_append(format_f64_field(degradation[i]) + " degradation rate\n")
+            snapshot_append(format_f64_field(kindof[i]) + " type, 0 TF, 1 modifiable FT, 2 form\n")
+            snapshot_append(format_i64(npre[i] as i64) + " number of pre forms\n")
+            let mut j: i32 = 1
+            while j <= npre[i] { snapshot_append(format_i64(pre[gene_form_index(i, j)] as i64) + " "); j = j + 1 }
+            snapshot_append("\n" + format_i64(npost[i] as i64) + " number of post forms\n")
+            j = 1
+            while j <= npost[i] { snapshot_append(format_i64(post[gene_form_index(i, j)] as i64) + " "); j = j + 1 }
+            snapshot_append("\n")
+            i = i + 1
+        }
+        if ntipusadh > 0 {
+            snapshot_append("B matrix: adhesion molecules\n")
+            i = 1
+            while i <= ntipusadh {
+                snapshot_append("adh" + format_i64_field(i as i64, 4))
+                let mut j: i32 = 1
+                while j <= ntipusadh { snapshot_append(format_f64_field(kadh[i * kadh_ld + j])); j = j + 1 }
+                snapshot_append("\n")
+                i = i + 1
+            }
+        }
+        snapshot_append("\nG matrix: gene expression\n\nnode gene values\n")
+        i = 1
+        while i <= nd {
+            snapshot_append(format_i64_field(i as i64, 6))
+            let mut j: i32 = 1
+            while j <= ng { snapshot_append(format_f64_field(gex[gene_expression_index(i, j)])); j = j + 1 }
+            snapshot_append("\n")
+            i = i + 1
+        }
+    }
+    snapshot_append("\nnode properties\n\n")
+    write_node_rows(node, true)
+    snapshot_append("\nnode properties at time 0 (nodeo)\n\n")
+    write_node_rows(nodeo, false)
+    snapshot_append("\ncell properties\n\n" + format_i64(ncels as i64) + " number of cells\n\n")
+    i = 1
+    while i <= ncels {
+        snapshot_append("cell " + format_i64(i as i64) + "\n0.0000000000000000e+00\n")
+        snapshot_append(format_f64_field(cels[i].minsize_for_div) + " minimal number of nodes\n")
+        snapshot_append(format_f64_field(cels[i].maxsize_for_div) + " maximal number of nodes\n")
+        snapshot_append(format_f64_field(cels[i].cex) + format_f64_field(cels[i].cey) + format_f64_field(cels[i].cez) + " centroid\n")
+        snapshot_append(format_f64_field(cels[i].polx) + format_f64_field(cels[i].poly) + format_f64_field(cels[i].polz) + " polarity\n")
+        snapshot_append(format_f64_field(cels[i].fase) + " phase\n" + format_f64_field(cels[i].temt) + " transition\n")
+        snapshot_append(format_i64(cels[i].nunodes as i64) + " nodes\n")
+        snapshot_append(format_i64(cels[i].nodela as i64) + " capacity\n")
+        snapshot_append(format_i64(cels[i].ctipus as i64) + " type\nlist of nodes\n")
+        let mut j: i32 = 1
+        while j <= cels[i].nunodes { snapshot_append(format_i64(cels[i].node[j] as i64) + " "); j = j + 1 }
+        snapshot_append("\n\n")
+        i = i + 1
+    }
+    return snapshot_flush(path)
+}
+
+function write_node_rows(records: ptr<Nod>, clear_energy: bool) -> void {
+    snapshot_append("node parameters\n")
+    let mut i: i32 = 1
+    while i <= nd {
+        let n: Nod = records[i]
+        if clear_energy { n.e = 0.0 }
+        snapshot_append(format_f64_field(n.x) + format_f64_field(n.y) + format_f64_field(n.z) + format_f64_field(n.e))
+        snapshot_append(format_f64_field(n.eqd) + format_f64_field(n.add) + format_f64_field(n.you) + format_f64_field(n.adh))
+        snapshot_append(format_f64_field(n.rep) + format_f64_field(n.rec) + format_f64_field(n.erp) + format_f64_field(n.est))
+        snapshot_append(format_f64_field(n.eqs) + format_f64_field(n.hoo) + format_f64_field(n.mov) + format_f64_field(n.dmo))
+        snapshot_append(format_f64_field(n.orix) + format_f64_field(n.oriy) + format_f64_field(n.oriz) + format_f64_field(n.ecm))
+        snapshot_append(format_f64_field(n.cod) + format_f64_field(n.grd) + format_f64_field(n.pld) + format_f64_field(n.vod))
+        snapshot_append(format_f64_field(n.dif) + format_f64_field(n.kfi) + format_f64_field(n.pla) + format_f64_field(n.kvol))
+        snapshot_append(format_i64_field(n.tipus as i64, 16) + format_i64_field(n.icel as i64, 16) + format_i64_field(n.altre as i64, 16))
+        snapshot_append(format_i64_field(n.marge as i64, 16) + format_i64_field(n.talone as i64, 16) + format_i64_field(n.fix as i64, 16) + format_i64_field(n.ndiv as i64, 16) + "\n")
+        i = i + 1
+    }
+}
+
+export get_param_from_matrix_read, read_snapshot_parameters, param, snapshot_error, write_snapshot

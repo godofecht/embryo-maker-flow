@@ -1,0 +1,287 @@
+import embryo.general {
+    nd, node, nneigh, neigh, neigh_ld, ffu, angletor,
+    erep, erepcel, eyou, eadh, etor, espring, kadh, kadh_ld
+}
+import embryo.genetic {
+    gex, gene_expression_index, npag, whonpag, gene_effects,
+    gene_effect_index, ng
+}
+
+extern {
+    function sqrt(x: f64) -> f64
+    function fabs(x: f64) -> f64
+}
+
+const EPSILON_D: f64 = 2.2204460492503131e-15
+let mut energy_error: i32 = 0
+
+function energy_neighbor_index(row: i32, column: i32) -> i32 {
+    return row * neigh_ld + column
+}
+
+function gene_property_type(gene_id: i32) -> i32 {
+    return gene_effects[gene_effect_index(gene_id, 1)] as i32
+}
+
+function energia(node_id: i32) -> bool {
+    energy_error = 0
+    if node_id < 1 or node_id > nd { energy_error = 1; return false }
+    if node[node_id].fix == 2 {
+        node[node_id].e = 1.7976931348623157e308
+        return true
+    }
+    let ix: f64 = node[node_id].x
+    let iy: f64 = node[node_id].y
+    let iz: f64 = node[node_id].z
+    let tipus: i32 = node[node_id].tipus
+    let nodda: f64 = node[node_id].add
+    let mut cx: f64 = 0.0
+    let mut cy: f64 = 0.0
+    let mut cz: f64 = 0.0
+    let mut spring_energy: f64 = 0.0
+    let mut inverse_spring_length: f64 = 0.0
+    if tipus < 3 {
+        let altre: i32 = node[node_id].altre
+        if altre < 1 or altre > nd { energy_error = 2; return false }
+        let ax: f64 = node[altre].x
+        let ay: f64 = node[altre].y
+        let az: f64 = node[altre].z
+        cx = ax - ix
+        cy = ay - iy
+        cz = az - iz
+        let spring_length: f64 = sqrt((cx * cx) + (cy * cy) + (cz * cz))
+        if spring_length == 0.0 { energy_error = 3; return false }
+        inverse_spring_length = 1.0 / spring_length
+        let spring_delta: f64 = fabs(spring_length - node[node_id].eqs)
+        spring_energy = node[node_id].hoo * (spring_delta * spring_delta)
+    }
+    let mut total: f64 = spring_energy
+    let mut rep_sum: f64 = 0.0
+    let mut repcel_sum: f64 = 0.0
+    let mut adh_sum: f64 = 0.0
+    let mut adhcel_sum: f64 = 0.0
+    let mut tor_sum: f64 = 0.0
+    let mut interaction: i32 = 1
+    while interaction <= nneigh[node_id] {
+        let other: i32 = neigh[energy_neighbor_index(node_id, interaction)]
+        if other < 1 or other > nd { energy_error = 5; return false }
+        let bx: f64 = node[other].x
+        let by: f64 = node[other].y
+        let bz: f64 = node[other].z
+        let ccx: f64 = bx - ix
+        let ccy: f64 = by - iy
+        let ccz: f64 = bz - iz
+        let d: f64 = sqrt((ccx * ccx) + (ccy * ccy) + (ccz * ccz))
+        let other_tipus: i32 = node[other].tipus
+        let mut twoep: i32 = 0
+        let mut fd: f64 = d
+        let mut icx: f64 = 0.0
+        let mut icy: f64 = 0.0
+        let mut icz: f64 = 0.0
+        let mut idd: f64 = 0.0
+        let mut ad: f64 = 0.0
+        let mut a: f64 = 0.0
+        let mut dotp: f64 = 0.0
+        let mut accepted: bool = false
+        if tipus < 3 {
+            if other_tipus < 3 {
+                let other_altere: i32 = node[other].altre
+                if other_altere < 1 or other_altere > nd { energy_error = 6; return false }
+                icx = node[other_altere].x - bx
+                icy = node[other_altere].y - by
+                icz = node[other_altere].z - bz
+                idd = sqrt((icx * icx) + (icy * icy) + (icz * icz))
+                if idd == 0.0 { energy_error = 7; return false }
+                let inverse_other_spring: f64 = 1.0 / idd
+                let posca: f64 = (icx * cx) + (icy * cy) + (icz * cz)
+                if tipus == other_tipus {
+                    if posca > EPSILON_D {
+                        let mcx: f64 = icx + cx
+                        let mcy: f64 = icy + cy
+                        let mcz: f64 = icz + cz
+                        let md: f64 = 1.0 / sqrt((mcx * mcx) + (mcy * mcy) + (mcz * mcz))
+                        let projected: f64 = fabs(((mcx * ccx) + (mcy * ccy) + (mcz * ccz)) * md)
+                        ad = (d * d) - (projected * projected)
+                        if ad < EPSILON_D { ad = EPSILON_D }
+                        ad = sqrt(ad)
+                        if ad - nodda - node[other].add <= EPSILON_D {
+                            fd = ad
+                            twoep = 1
+                            accepted = true
+                        }
+                    } else {
+                        let mcx: f64 = icx + cx
+                        let mcy: f64 = icy + cy
+                        let mcz: f64 = icz + cz
+                        let mut md: f64 = sqrt((mcx * mcx) + (mcy * mcy) + (mcz * mcz))
+                        if md < EPSILON_D {
+                            dotp = (cx * ccx) + (cy * ccy) + (cz * ccz)
+                            if dotp < EPSILON_D {
+                                let vertical: f64 = (0.0 - dotp) * inverse_spring_length
+                                a = nodda + node[other].add
+                                if vertical - a < EPSILON_D {
+                                    let mut lateral_squared: f64 = (d * d) - (ad * ad)
+                                    if lateral_squared < EPSILON_D { lateral_squared = EPSILON_D }
+                                    let lateral: f64 = sqrt(lateral_squared)
+                                    if ad - a <= EPSILON_D {
+                                        fd = lateral
+                                        twoep = 2
+                                        accepted = true
+                                    }
+                                }
+                            }
+                        } else {
+                            md = 1.0 / md
+                            dotp = ((mcx * ccx) + (mcy * ccy) + (mcz * ccz))
+                            ad = fabs(dotp) * md
+                            a = nodda + node[other].add
+                            if ad - a < EPSILON_D {
+                                let mut lateral_squared: f64 = (d * d) - (ad * ad)
+                                if lateral_squared < EPSILON_D { lateral_squared = EPSILON_D }
+                                let lateral: f64 = sqrt(lateral_squared)
+                                if lateral - a <= EPSILON_D {
+                                    fd = lateral
+                                    twoep = 2
+                                    accepted = true
+                                }
+                            }
+                        }
+                    }
+                } elif posca < 0.0 {
+                    dotp = (cx * ccx) + (cy * ccy) + (cz * ccz)
+                    if dotp < EPSILON_D {
+                        let vertical: f64 = (0.0 - dotp) * inverse_spring_length
+                        a = nodda + node[other].add
+                        if vertical - a < EPSILON_D {
+                            ad = (d * d) - (vertical * vertical)
+                            if ad < EPSILON_D { ad = EPSILON_D }
+                            ad = sqrt(ad)
+                            if ad - a <= EPSILON_D {
+                                fd = vertical
+                                twoep = 2
+                                accepted = true
+                            }
+                        }
+                    }
+                }
+            } else {
+                dotp = (cx * ccx) + (cy * ccy) + (cz * ccz)
+                if dotp < 0.0 {
+                    let vertical: f64 = fabs(dotp) * inverse_spring_length
+                    a = nodda + node[other].add
+                    if vertical - a < 0.0 {
+                        ad = (d * d) - (vertical * vertical)
+                        if ad < EPSILON_D { ad = EPSILON_D }
+                        ad = sqrt(ad)
+                        if ad - a <= EPSILON_D {
+                            fd = vertical
+                            accepted = true
+                        }
+                    }
+                }
+            }
+        } elif other_tipus < 3 {
+            let other_altere: i32 = node[other].altre
+            if other_altere < 1 or other_altere > nd { energy_error = 8; return false }
+            icx = node[other_altere].x - bx
+            icy = node[other_altere].y - by
+            icz = node[other_altere].z - bz
+            idd = sqrt((icx * icx) + (icy * icy) + (icz * icz))
+            if idd == 0.0 { energy_error = 9; return false }
+            let inverse_other_spring: f64 = 1.0 / idd
+            dotp = (icx * ccx) + (icy * ccy) + (icz * ccz)
+            if dotp > 0.0 {
+                let vertical: f64 = dotp * inverse_other_spring
+                a = nodda + node[other].add
+                if vertical - a < 0.0 {
+                    ad = (d * d) - (vertical * vertical)
+                    if ad < EPSILON_D { ad = EPSILON_D }
+                    ad = sqrt(ad)
+                    if ad - a <= EPSILON_D {
+                        fd = vertical
+                        accepted = true
+                    }
+                }
+            }
+        } else {
+            fd = d
+            accepted = fd - nodda - node[other].add <= EPSILON_D
+        }
+        if accepted {
+            let mut rep: f64 = 0.0
+            let mut repcel: f64 = 0.0
+            let mut adh: f64 = 0.0
+            let mut adhcel: f64 = 0.0
+            let mut tor: f64 = 0.0
+            let deqe: f64 = node[node_id].eqd + node[other].eqd
+            let ideqe: f64 = ((nodda + node[other].add - deqe) / deqe) * ((nodda + node[other].add - deqe) / deqe)
+            if node[node_id].icel == node[other].icel {
+                let youe: f64 = 0.5 * (node[node_id].you + node[other].you)
+                let repe: f64 = 0.5 * (node[node_id].rep + node[other].rep)
+                let normalized: f64 = (fd - deqe) / deqe
+                if fd - deqe < (0.0 - EPSILON_D) {
+                    rep = rep + (repe * (normalized * normalized)) - (youe * ideqe)
+                } else {
+                    adh = adh + (youe * (normalized * normalized)) - (youe * ideqe)
+                }
+            } else {
+                let mut adhe: f64 = 0.5 * (node[node_id].adh + node[other].adh)
+                let repcele: f64 = 0.5 * (node[node_id].rec + node[other].rec)
+                if npag[1] > 0 {
+                    let mut j: i32 = 1
+                    while j <= npag[1] {
+                        let first_gene: i32 = whonpag[1 * (ng + 1) + j]
+                        let mut jj: i32 = 1
+                        while jj <= npag[1] {
+                            let second_gene: i32 = whonpag[1 * (ng + 1) + jj]
+                            if gex[gene_expression_index(node_id, first_gene)] > 0.0 and gex[gene_expression_index(other, second_gene)] > 0.0 {
+                                let first_type: i32 = gene_property_type(first_gene)
+                                let second_type: i32 = gene_property_type(second_gene)
+                                adhe = adhe + (gex[gene_expression_index(node_id, first_gene)] * gex[gene_expression_index(other, second_gene)] * kadh[first_type * kadh_ld + second_type])
+                            }
+                            jj = jj + 1
+                        }
+                        j = j + 1
+                    }
+                }
+                let normalized: f64 = (fd - deqe) / deqe
+                if fd - deqe < (0.0 - EPSILON_D) {
+                    repcel = repcel + (repcele * (normalized * normalized)) - (adhe * ideqe)
+                } else {
+                    adhcel = adhcel + (adhe * (normalized * normalized)) - (adhe * ideqe)
+                }
+            }
+            if ffu[3] == 0 and twoep == 1 {
+                let mcx: f64 = icx + cx
+                let mcy: f64 = icy + cy
+                let mcz: f64 = icz + cz
+                let md: f64 = sqrt((mcx * mcx) + (mcy * mcy) + (mcz * mcz))
+                dotp = (((mcx * ccx) + (mcy * ccy) + (mcz * ccz)) / md)
+                dotp = dotp * dotp
+                if fabs(dotp) - (angletor * d) > EPSILON_D {
+                    tor = tor + (dotp * (node[node_id].est + node[other].est))
+                    dotp = (((cx * ccx) + (cy * ccy) + (cz * ccz)) * inverse_spring_length)
+                    dotp = dotp * dotp
+                    tor = tor + (dotp * (node[node_id].erp + node[other].erp))
+                }
+            }
+            total = total + rep + repcel + adh + adhcel + tor
+            rep_sum = rep_sum + rep
+            repcel_sum = repcel_sum + repcel
+            adh_sum = adh_sum + adh
+            adhcel_sum = adhcel_sum + adhcel
+            tor_sum = tor_sum + tor
+        }
+        interaction = interaction + 1
+    }
+    node[node_id].e = total
+    erep[node_id] = rep_sum
+    erepcel[node_id] = repcel_sum
+    eyou[node_id] = adh_sum
+    eadh[node_id] = adhcel_sum
+    etor[node_id] = tor_sum
+    espring[node_id] = spring_energy
+    return true
+}
+
+export energy_error, energia, energy_neighbor_index

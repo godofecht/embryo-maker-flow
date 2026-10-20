@@ -1,0 +1,291 @@
+import embryo.general { ncels, nd, cels, node, px, py, pz, dmax, rdiffmax, ffu, delta, deltamin, prop_noise, getot, rtime }
+import embryo.genetic { ng, gex, agex, gene_expression_index, gene_stuff, npag, whonpag, gene_effects, gene_effect_index }
+import embryo.neighboring { neighbor_build, restore_neighbors }
+import embryo.biomechanic { iterdiferencial, rungekutta4, adaptive_rungekutta }
+import embryo.nexus { nexe_gradual, nexus_error }
+import embryo.rng { rng_real }
+import embryo.noise { itera_energy, noise_error }
+import embryo.aleas { nvaloq, particions_esfera, partition_index }
+
+extern { function sqrt(value: f64) -> f64 }
+
+let mut model_error: i32 = 0
+
+struct ModelBatchProgress {
+    ok: bool,
+    complete: bool
+}
+
+let mut model_batch_active: bool = false
+let mut model_batch_token: i32 = 0
+let mut model_batch_iteration_mode: bool = false
+let mut model_batch_target_iteration: i32 = 0
+let mut model_batch_target_time: f64 = 0.0
+let mut model_batch_elapsed: f64 = 0.0
+
+function model_batch_reset() -> void {
+    model_batch_active = false
+    model_batch_token = 0
+    model_batch_iteration_mode = false
+    model_batch_target_iteration = 0
+    model_batch_target_time = 0.0
+    model_batch_elapsed = 0.0
+}
+
+function model_batch_begin(token: i32, requested: i32) -> bool {
+    model_batch_reset()
+    if token <= 0 or requested < 0 { model_error = 1; return false }
+    if requested > 2147483647 - getot { model_error = 1; return false }
+    model_batch_active = true
+    model_batch_token = token
+    model_batch_iteration_mode = ffu[7] != 0 or ffu[14] != 0
+    model_batch_target_iteration = getot + requested
+    model_batch_target_time = requested as f64
+    model_batch_elapsed = 0.0
+    return true
+}
+
+function model_batch_advance_chunk(token: i32, maximum_iterations: i32) -> ModelBatchProgress {
+    model_error = 0
+    if model_batch_active == false or token != model_batch_token or maximum_iterations < 1 {
+        model_error = 1
+        model_batch_reset()
+        return ModelBatchProgress { ok: false, complete: false }
+    }
+    let mut completed: i32 = 0
+    if model_batch_iteration_mode {
+        while getot < model_batch_target_iteration and completed < maximum_iterations {
+            if advance_model_iteration() == false {
+                model_batch_reset()
+                return ModelBatchProgress { ok: false, complete: false }
+            }
+            completed = completed + 1
+        }
+    } else {
+        while model_batch_elapsed < model_batch_target_time and completed < maximum_iterations {
+            if advance_model_iteration() == false {
+                model_batch_reset()
+                return ModelBatchProgress { ok: false, complete: false }
+            }
+            model_batch_elapsed = model_batch_elapsed + delta
+            completed = completed + 1
+        }
+    }
+    let complete: bool = if model_batch_iteration_mode { getot >= model_batch_target_iteration } else { model_batch_elapsed >= model_batch_target_time }
+    if complete { model_batch_reset() }
+    return ModelBatchProgress { ok: true, complete: complete }
+}
+
+function advance_model_iteration() -> bool {
+    model_error = 0
+    getot = getot + 1
+    if prepare_model_iteration() == false { return false }
+    if nd > 1 {
+        if neighbor_build() == false { model_error = 3; return false }
+        if ffu[24] == 0 and restore_neighbors() == false { model_error = 4; return false }
+    }
+    if ffu[16] == 0 {
+        if iterdiferencial() == false { model_error = 5; return false }
+    } else {
+        delta = deltamin
+    }
+    if gene_stuff() == false { model_error = 6; return false }
+    if nexe_gradual() == false { model_error = 70 + nexus_error; return false }
+    if ffu[12] == 0 {
+        if ffu[5] == 1 {
+            let mut node_id: i32 = 1
+            while node_id <= nd {
+                node[node_id].x = node[node_id].x + delta * px[node_id]
+                node[node_id].y = node[node_id].y + delta * py[node_id]
+                node[node_id].z = node[node_id].z + delta * pz[node_id]
+                node_id = node_id + 1
+            }
+        } elif rungekutta4(delta) == false { model_error = 8; return false }
+    } elif adaptive_rungekutta() == false { model_error = 8; return false }
+    commit_gene_expression()
+    if ffu[16] == 0 {
+        let noise_count: f64 = nd as f64 * prop_noise * delta / deltamin
+        if noise_count > 1.0 {
+            let repetitions: i32 = noise_count as i32
+            let mut attempt: i32 = 0
+            while attempt < repetitions {
+                let noise_ok: bool = if ffu[15] == 1 { itera_energy() } else { itera_unbiased() }
+                if noise_ok == false { model_error = if ffu[15] == 1 { 90 + noise_error } else { 9 }; return false }
+                attempt = attempt + 1
+            }
+        } else {
+            let selection: f64 = rng_real()
+            if selection < noise_count {
+                let noise_ok: bool = if ffu[15] == 1 { itera_energy() } else { itera_unbiased() }
+                if noise_ok == false { model_error = if ffu[15] == 1 { 90 + noise_error } else { 9 }; return false }
+            }
+        }
+    } else {
+        let mut attempt: i32 = 0
+        while attempt < nd {
+            if itera_energy() == false { model_error = 90 + noise_error; return false }
+            attempt = attempt + 1
+        }
+    }
+    rtime = rtime + delta
+    return true
+}
+
+# Run the same batch that the OG iteracio(tf) command requests. With a dynamic
+# time step, OG counts simulated time unless ffu(14) selects real iterations.
+function advance_model_batch(requested: i32) -> bool {
+    model_error = 0
+    model_batch_reset()
+    if requested < 0 { model_error = 1; return false }
+    let iteration_mode: bool = ffu[7] != 0 or ffu[14] != 0
+    if iteration_mode {
+        let mut completed: i32 = 0
+        while completed < requested {
+            if advance_model_iteration() == false { return false }
+            completed = completed + 1
+        }
+        return true
+    }
+    let mut elapsed: f64 = 0.0
+    let target: f64 = requested as f64
+    while elapsed < target {
+        if advance_model_iteration() == false { return false }
+        elapsed = elapsed + delta
+    }
+    return true
+}
+
+function itera_unbiased() -> bool {
+    if nd <= 0 or nvaloq <= 0 or particions_esfera == null { return false }
+    let mut moved_node: i32 = 0
+    let mut tries: i32 = 0
+    while tries < nd * 2 {
+        moved_node = (rng_real() * nd as f64) as i32 + 1
+        if node[moved_node].fix != 2 { break }
+        moved_node = 0
+        tries = tries + 1
+    }
+    if moved_node == 0 { return true }
+    let mut displacement: f64 = rng_real() * node[moved_node].dmo
+    if ffu[9] == 0 { displacement = displacement * delta }
+    if displacement < 2.220446049250313e-15 { return true }
+
+    let old_x: f64 = node[moved_node].x
+    let old_y: f64 = node[moved_node].y
+    let old_z: f64 = node[moved_node].z
+    let cell_id: i32 = node[moved_node].icel
+    let mut old_cx: f64 = 0.0
+    let mut old_cy: f64 = 0.0
+    let mut old_cz: f64 = 0.0
+    let mut cell_nodes: i32 = 0
+    if node[moved_node].tipus < 4 {
+        if cell_id < 1 or cell_id > ncels { return false }
+        cell_nodes = cels[cell_id].nunodes
+        old_cx = cels[cell_id].cex
+        old_cy = cels[cell_id].cey
+        old_cz = cels[cell_id].cez
+    }
+
+    let mut direction_x: f64 = 0.0
+    let mut direction_y: f64 = 0.0
+    let mut direction_z: f64 = 0.0
+    if npag[51] > 0 and node[moved_node].tipus < 4 {
+        let mut bias: f64 = 0.0
+        let mut slot: i32 = 1
+        while slot <= npag[51] {
+            let gene_id: i32 = whonpag[51 * (ng + 1) + slot]
+            let expression: f64 = gex[gene_expression_index(moved_node, gene_id)]
+            if expression > 0.0 { bias = bias + expression * gene_effects[gene_effect_index(gene_id, 51)] }
+            slot = slot + 1
+        }
+        let random_value: f64 = rng_real()
+        let partition: i32 = (random_value * nvaloq as f64) as i32 + 1
+        direction_x = particions_esfera[partition_index(partition, 1)] + bias * cels[cell_id].polx
+        direction_y = particions_esfera[partition_index(partition, 2)] + bias * cels[cell_id].poly
+        direction_z = particions_esfera[partition_index(partition, 3)] + bias * cels[cell_id].polz
+        let length: f64 = sqrt(direction_x * direction_x + direction_y * direction_y + direction_z * direction_z)
+        if length == 0.0 { return true }
+        direction_x = direction_x / length
+        direction_y = direction_y / length
+        direction_z = direction_z / length
+    } else {
+        let random_value: f64 = rng_real()
+        let partition: i32 = (random_value * nvaloq as f64) as i32 + 1
+        direction_x = particions_esfera[partition_index(partition, 1)]
+        direction_y = particions_esfera[partition_index(partition, 2)]
+        direction_z = particions_esfera[partition_index(partition, 3)]
+    }
+    node[moved_node].x = old_x + direction_x * displacement
+    node[moved_node].y = old_y + direction_y * displacement
+    node[moved_node].z = old_z + direction_z * displacement
+    if node[moved_node].tipus == 1 or node[moved_node].tipus == 3 {
+        let divisor: f64 = if node[moved_node].tipus == 1 { 2.0 } else { 1.0 }
+        let scale: f64 = divisor / (cell_nodes as f32 as f64)
+        cels[cell_id].cex = cels[cell_id].cex + (node[moved_node].x - old_x) * scale
+        cels[cell_id].cey = cels[cell_id].cey + (node[moved_node].y - old_y) * scale
+        cels[cell_id].cez = cels[cell_id].cez + (node[moved_node].z - old_z) * scale
+    }
+    return true
+}
+
+function update_cell_centroids() -> bool {
+    model_error = 0
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        if cels[cell_id].nunodes <= 0 { cell_id = cell_id + 1; continue }
+        let mut x: f64 = 0.0
+        let mut y: f64 = 0.0
+        let mut z: f64 = 0.0
+        let mut slot: i32 = 1
+        while slot <= cels[cell_id].nunodes {
+            let node_id: i32 = cels[cell_id].node[slot]
+            if node[node_id].tipus == 1 or node[node_id].tipus == 3 {
+                x = x + node[node_id].x
+                y = y + node[node_id].y
+                z = z + node[node_id].z
+            }
+            slot = slot + 1
+        }
+        let mut inverse_count: f64 = 1.0 / ((cels[cell_id].nunodes as f32) as f64)
+        if node[cels[cell_id].node[1]].tipus < 3 { inverse_count = 2.0 * inverse_count }
+        cels[cell_id].cex = x * inverse_count
+        cels[cell_id].cey = y * inverse_count
+        cels[cell_id].cez = z * inverse_count
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+function update_maximum_displacement() -> bool {
+    if nd <= 0 { model_error = 2; return false }
+    let mut largest_radius: f64 = node[1].add
+    let mut node_id: i32 = 2
+    while node_id <= nd {
+        if node[node_id].add > largest_radius { largest_radius = node[node_id].add }
+        node_id = node_id + 1
+    }
+    rdiffmax = (2.0 * largest_radius) * dmax
+    return true
+}
+
+function prepare_model_iteration() -> bool {
+    if update_cell_centroids() == false { return false }
+    if update_maximum_displacement() == false { return false }
+    return true
+}
+
+function commit_gene_expression() -> void {
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let mut gene_id: i32 = 1
+        while gene_id <= ng {
+            let index: i32 = gene_expression_index(node_id, gene_id)
+            let value: f64 = agex[index]
+            gex[index] = if value < 0.0 { 0.0 } else { value }
+            gene_id = gene_id + 1
+        }
+        node_id = node_id + 1
+    }
+}
+
+export model_error, update_cell_centroids, update_maximum_displacement, prepare_model_iteration, advance_model_iteration, advance_model_batch, model_batch_reset, model_batch_begin, model_batch_advance_chunk, ModelBatchProgress, commit_gene_expression, itera_unbiased

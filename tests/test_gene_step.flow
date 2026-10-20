@@ -1,0 +1,37 @@
+import embryo.general { nd, ng, node, nneigh }
+import embryo.io { read_snapshot_parameters }
+import embryo.genetic { gex, dgex, kindof, degradation, npost, gene_expression_index, genestep }
+
+extern {
+    function fabs(x: f64) -> f64
+}
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/figure_6/gastrula.txt") != 0 { return 1 }
+    let mut i: i32 = 1
+    while i <= nd {
+        node[i].marge = 1
+        node[i].tipus = 4
+        nneigh[i] = 0
+        let mut gene: i32 = 1
+        while gene <= ng {
+            gex[gene_expression_index(i, gene)] = 0.0
+            gene = gene + 1
+        }
+        i = i + 1
+    }
+    let mut chosen: i32 = 0
+    let mut gene: i32 = 1
+    while gene <= ng {
+        if kindof[gene] == 1.0 and npost[gene] == 0 { chosen = gene; break }
+        gene = gene + 1
+    }
+    if chosen == 0 { return 2 }
+    let value: f64 = 0.75
+    gex[gene_expression_index(1, chosen)] = value
+    if genestep() == false { return 3 }
+    let expected: f64 = -degradation[chosen] * value
+    let actual: f64 = dgex[gene_expression_index(1, chosen)]
+    if fabs(actual - expected) > 1.0e-14 { return 4 }
+    return 0
+}

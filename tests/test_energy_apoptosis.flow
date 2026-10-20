@@ -1,0 +1,72 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, node, ffu }
+import embryo.neighboring { neighbor_build }
+import embryo.energy { energia, energy_error }
+import embryo.general { erep, erepcel, eyou, eadh, etor, espring }
+import std.io { FileRead, io_read_file }
+import std.string { ParseF64, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/apoptosis/apoptosis.txt") != 0 { return 1 }
+    if neighbor_build() == false { return 2 }
+    let reference: FileRead = io_read_file("fixtures/apoptosis_energy.ref")
+    if reference.ok == false { return 3 }
+    let mut cursor: i32 = 0
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if energia(node_id) == false { return 10 + energy_error }
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let mut pos: i32 = 0
+        let mut field: i32 = 0
+        while field < 7 {
+            let expected: ParseF64 = str_parse_f64_at(line, pos)
+            if expected.ok == false { return 20 }
+            let mut actual: f64 = 0.0
+            if field == 0 { actual = node[node_id].e }
+            elif field == 1 { actual = erep[node_id] }
+            elif field == 2 { actual = erepcel[node_id] }
+            elif field == 3 { actual = eyou[node_id] }
+            elif field == 4 { actual = eadh[node_id] }
+            elif field == 5 { actual = etor[node_id] }
+            else { actual = espring[node_id] }
+            let scale: f64 = if fabs(expected.value) > 1.0 { fabs(expected.value) } else { 1.0 }
+            if fabs(actual - expected.value) > 1.0e-9 * scale { println(node_id, field, actual, expected.value); return 30 + field }
+            pos = expected.end
+            field = field + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        node_id = node_id + 1
+    }
+    return 0
+}

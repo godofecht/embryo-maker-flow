@@ -3,3 +3,5 @@ reference/fortran/build/
 *.o
 *.mod
 runs/
+output/
+images/

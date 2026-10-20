@@ -1,0 +1,33 @@
+import embryo.io { read_snapshot_parameters, param, snapshot_error }
+import embryo.general { nd, ncels, ng, nparti, ntipusadh, mnn, node, nodeo, cels }
+import embryo.general { idum }
+import embryo.rng { rng_real }
+import embryo.genetic { gex, gene_expression_index, gene_effects, gene_effect_index, t, gene_matrix_index, matrix_error }
+
+function main() -> i32 {
+    let rc: i32 = read_snapshot_parameters("../reference/examples/apoptosis/apoptosis.txt")
+    if rc != 0 { return 20 + snapshot_error }
+    if nd != 518 { return 2 }
+    if ncels != 37 { return 3 }
+    if ng != 1 { return 4 }
+    if nparti != 1000 { return 5 }
+    if ntipusadh != 0 { return 6 }
+    if mnn != 500 { return 7 }
+    if param[30] != 2.2204460492503131e-15 { return 8 }
+    if node[1].x != 0.0 or node[1].eqd != 0.25 { return 9 }
+    if node[2].x != 0.5 or node[2].tipus != 2 { return 10 }
+    if nodeo[2].x != 0.5 { return 11 }
+    if cels[1].nunodes != 14 or cels[1].nodela != 29 { return 12 }
+    if cels[1].node[1] != 1 or cels[1].node[14] != 14 { return 13 }
+    if cels[1].minsize_for_div != 28.0 or cels[1].ctipus != 1 { return 14 }
+    if idum[0] != 297774927 or idum[7] != 1451763062 { return 15 }
+    if rng_real() != 0.8123884074286897 { return 16 }
+    if gex[gene_expression_index(1, 1)] != 1.0 { return 17 }
+    if gex[gene_expression_index(15, 1)] != 0.0 { return 18 }
+    if gene_effects[gene_effect_index(1, 1)] != 0.0 or t[gene_matrix_index(1, 1)] != 0.0 { return 19 }
+    if read_snapshot_parameters("fixtures/invalid_snapshot.txt") == 0 { return 20 }
+    if snapshot_error != 2 { return 21 }
+    if read_snapshot_parameters("../reference/examples/apoptosis/apoptosis.txt") != 0 { return 22 + snapshot_error }
+    if nd != 518 { return 23 }
+    return 0
+}

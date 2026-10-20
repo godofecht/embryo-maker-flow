@@ -1,0 +1,32 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, node, nparti, ffu }
+import embryo.aleas { inialea3d }
+import embryo.neighboring { neighbor_build, restore_neighbors }
+import embryo.noise { itera_energy, noise_error }
+import std.process { proc_argc, proc_argv }
+import std.string { str_parse_i64_at }
+
+extern { function printf(format: string, ...) -> i32 }
+
+function main() -> i32 {
+    if proc_argc() < 3 { return 1 }
+    if read_snapshot_parameters(proc_argv(1)) != 0 { return 2 }
+    let count = str_parse_i64_at(proc_argv(2), 0)
+    if count.ok == false or count.value < 0 or count.value > 10000 { return 2 }
+    inialea3d(nparti)
+    ffu[15] = 0
+    ffu[16] = 1
+    if neighbor_build() == false { return 3 }
+    if restore_neighbors() == false { return 4 }
+    let mut attempt: i32 = 0
+    while attempt < count.value as i32 {
+        if itera_energy() == false { return 5 + noise_error }
+        attempt = attempt + 1
+    }
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        printf("%d %.17g %.17g %.17g %.17g\n", node_id, node[node_id].x, node[node_id].y, node[node_id].z, node[node_id].e)
+        node_id = node_id + 1
+    }
+    return 0
+}

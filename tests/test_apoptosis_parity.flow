@@ -1,0 +1,131 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, ncels, node, cels }
+import embryo.death { apoptosis, should_i_die }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function close_f64(actual: f64, expected: f64) -> bool {
+    let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+    return fabs(actual - expected) <= 1.0e-9 * scale
+}
+
+function check_apoptosis(input_path: string, fixture_path: string, run_death_step: bool) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    if run_death_step {
+        if should_i_die() == false { return 2 }
+    } else {
+        let target: i32 = cels[1].node[1]
+        if apoptosis(target) == false { return 2 }
+    }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 3 }
+    let cursor: i32 = 0
+    let header_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let header: string = copy_line(reference.data, cursor, header_end)
+    let expected_nodes: ParseI64 = str_parse_i64_at(header, 0)
+    let expected_cells: ParseI64 = str_parse_i64_at(header, expected_nodes.end)
+    if expected_nodes.ok == false or expected_cells.ok == false or expected_nodes.value != nd as i64 or expected_cells.value != ncels as i64 { return 4 }
+    cursor = line_next(reference.data, reference.len as i32, header_end)
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let kind: ParseI64 = str_parse_i64_at(line, id.end)
+        let owner: ParseI64 = str_parse_i64_at(line, kind.end)
+        let paired: ParseI64 = str_parse_i64_at(line, owner.end)
+        let x: ParseF64 = str_parse_f64_at(line, paired.end)
+        let y: ParseF64 = str_parse_f64_at(line, x.end)
+        let z: ParseF64 = str_parse_f64_at(line, y.end)
+        let radius: ParseF64 = str_parse_f64_at(line, z.end)
+        if id.ok == false or kind.ok == false or owner.ok == false or paired.ok == false or x.ok == false or y.ok == false or z.ok == false or radius.ok == false { return 5 }
+        if id.value != node_id as i64 or kind.value != node[node_id].tipus as i64 or owner.value != node[node_id].icel as i64 or paired.value != node[node_id].altre as i64 { return 6 }
+        if close_f64(node[node_id].x, x.value) == false or close_f64(node[node_id].y, y.value) == false or close_f64(node[node_id].z, z.value) == false or close_f64(node[node_id].grd, radius.value) == false { return 7 }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        node_id = node_id + 1
+    }
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let count: ParseI64 = str_parse_i64_at(line, id.end)
+        if id.ok == false or count.ok == false or id.value != cell_id as i64 or count.value != cels[cell_id].nunodes as i64 { return 8 }
+        let mut position: i32 = count.end
+        let mut slot: i32 = 1
+        while slot <= cels[cell_id].nunodes {
+            let member: ParseI64 = str_parse_i64_at(line, position)
+            if member.ok == false or member.value != cels[cell_id].node[slot] as i64 { return 9 }
+            position = member.end
+            slot = slot + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        cell_id = cell_id + 1
+    }
+    if cursor < reference.len as i32 { return 10 }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_apoptosis("../reference/examples/migration/migration.txt", "fixtures/migration_apoptosis.ref", false)
+    if migration != 0 { return migration }
+    let migration_step: i32 = check_apoptosis("../reference/examples/migration/migration.txt", "fixtures/migration_death_step.ref", true)
+    if migration_step != 0 { return migration_step }
+    let apoptosis_example: i32 = check_apoptosis("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_apoptosis.ref", false)
+    if apoptosis_example != 0 { return apoptosis_example }
+    let apoptosis_step: i32 = check_apoptosis("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_death_step.ref", true)
+    if apoptosis_step != 0 { return apoptosis_step }
+    let adhesion: i32 = check_apoptosis("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_apoptosis.ref", false)
+    if adhesion != 0 { return adhesion }
+    let adhesion_step: i32 = check_apoptosis("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_death_step.ref", true)
+    if adhesion_step != 0 { return adhesion_step }
+    let polar_growth: i32 = check_apoptosis("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_apoptosis.ref", false)
+    if polar_growth != 0 { return polar_growth }
+    let polar_growth_step: i32 = check_apoptosis("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_death_step.ref", true)
+    if polar_growth_step != 0 { return polar_growth_step }
+    let apical: i32 = check_apoptosis("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_apoptosis.ref", false)
+    if apical != 0 { return apical }
+    let apical_step: i32 = check_apoptosis("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_death_step.ref", true)
+    if apical_step != 0 { return apical_step }
+    let ecm: i32 = check_apoptosis("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_apoptosis.ref", false)
+    if ecm != 0 { return ecm }
+    let ecm_step: i32 = check_apoptosis("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_death_step.ref", true)
+    if ecm_step != 0 { return ecm_step }
+    let figure_six: i32 = check_apoptosis("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_apoptosis.ref", false)
+    if figure_six != 0 { return figure_six }
+    let figure_six_step: i32 = check_apoptosis("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_death_step.ref", true)
+    if figure_six_step != 0 { return figure_six_step }
+    let sea_urchin: i32 = check_apoptosis("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_apoptosis.ref", false)
+    if sea_urchin != 0 { return sea_urchin }
+    return check_apoptosis("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_death_step.ref", true)
+}

@@ -1,0 +1,89 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { ncels, cels, rdiffmax }
+import embryo.model { prepare_model_iteration, model_error }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = start
+    while pos < length and bytes[pos] != 10 and bytes[pos] != 13 { pos = pos + 1 }
+    return pos
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = end
+    if pos < length and bytes[pos] == 13 { pos = pos + 1 }
+    if pos < length and bytes[pos] == 10 { pos = pos + 1 }
+    return pos
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut i: i32 = start
+    let mut j: i32 = 0
+    while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+    line[j] = 0
+    return line as string
+}
+
+function close_f64(actual: f64, expected: f64) -> bool {
+    let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+    return fabs(actual - expected) <= 1.0e-9 * scale
+}
+
+function check_model_prepare(input_path: string, fixture_path: string) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    if prepare_model_iteration() == false { return 10 + model_error }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 20 }
+    let mut cursor: i32 = 0
+    let header_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let header: string = copy_line(reference.data, cursor, header_end)
+    let count: ParseI64 = str_parse_i64_at(header, 0)
+    let displacement: ParseF64 = str_parse_f64_at(header, count.end)
+    if count.ok == false or displacement.ok == false or count.value != ncels as i64 { return 21 }
+    if close_f64(rdiffmax, displacement.value) == false { return 22 }
+    cursor = line_next(reference.data, reference.len as i32, header_end)
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let x: ParseF64 = str_parse_f64_at(line, id.end)
+        let y: ParseF64 = str_parse_f64_at(line, x.end)
+        let z: ParseF64 = str_parse_f64_at(line, y.end)
+        if id.ok == false or x.ok == false or y.ok == false or z.ok == false { return 23 }
+        if id.value != cell_id as i64 { return 24 }
+        if close_f64(cels[cell_id].cex, x.value) == false or close_f64(cels[cell_id].cey, y.value) == false or close_f64(cels[cell_id].cez, z.value) == false { return 25 }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        cell_id = cell_id + 1
+    }
+    if cursor < reference.len as i32 { return 26 }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_model_prepare("../reference/examples/migration/migration.txt", "fixtures/migration_model_prepare.ref")
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_model_prepare("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_model_prepare.ref")
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_model_prepare("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_model_prepare.ref")
+    if adhesion != 0 { return adhesion }
+    let polar_growth: i32 = check_model_prepare("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_model_prepare.ref")
+    if polar_growth != 0 { return polar_growth }
+    let apical: i32 = check_model_prepare("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_model_prepare.ref")
+    if apical != 0 { return apical }
+    let ecm: i32 = check_model_prepare("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_model_prepare.ref")
+    if ecm != 0 { return ecm }
+    let figure_six: i32 = check_model_prepare("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_model_prepare.ref")
+    if figure_six != 0 { return figure_six }
+    return check_model_prepare("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_model_prepare.ref")
+}

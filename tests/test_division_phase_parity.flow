@@ -1,0 +1,89 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { ncels, cels }
+import embryo.nexus { nexus_error, should_i_divide }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function close_f64(actual: f64, expected: f64) -> bool {
+    let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+    return fabs(actual - expected) <= 1.0e-9 * scale
+}
+
+function check_division_phase(input_path: string, fixture_path: string) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        cels[cell_id].minsize_for_div = 1.0e9
+        cels[cell_id].maxsize_for_div = 1.0e9
+        cell_id = cell_id + 1
+    }
+    if should_i_divide() == false { return 2 + nexus_error }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 4 }
+    let count_end: i32 = line_end(reference.data, reference.len as i32, 0)
+    let count_line: string = copy_line(reference.data, 0, count_end)
+    let expected_count: ParseI64 = str_parse_i64_at(count_line, 0)
+    if expected_count.ok == false or expected_count.value != ncels as i64 { return 5 }
+    let mut cursor: i32 = line_next(reference.data, reference.len as i32, count_end)
+    cell_id = 1
+    while cell_id <= ncels {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let phase: ParseF64 = str_parse_f64_at(line, id.end)
+        if id.ok == false or phase.ok == false or id.value != cell_id as i64 { return 6 }
+        if close_f64(cels[cell_id].fase, phase.value) == false { return 7 }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        cell_id = cell_id + 1
+    }
+    if cursor < reference.len as i32 { return 8 }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_division_phase("../reference/examples/migration/migration.txt", "fixtures/migration_division_phase.ref")
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_division_phase("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_division_phase.ref")
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_division_phase("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_division_phase.ref")
+    if adhesion != 0 { return adhesion }
+    let polar_growth: i32 = check_division_phase("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_division_phase.ref")
+    if polar_growth != 0 { return polar_growth }
+    let apical: i32 = check_division_phase("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_division_phase.ref")
+    if apical != 0 { return apical }
+    let ecm: i32 = check_division_phase("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_division_phase.ref")
+    if ecm != 0 { return ecm }
+    let figure_six: i32 = check_division_phase("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_division_phase.ref")
+    if figure_six != 0 { return figure_six }
+    return check_division_phase("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_division_phase.ref")
+}

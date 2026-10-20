@@ -1,0 +1,74 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, node, ffu, nneigh, neigh, dneigh, neigh_ld, omnn }
+import embryo.neighboring { neighbor_build, neighbor_error, neighbor_index }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = start
+    while pos < length and bytes[pos] != 10 and bytes[pos] != 13 { pos = pos + 1 }
+    return pos
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = end
+    if pos < length and bytes[pos] == 13 { pos = pos + 1 }
+    if pos < length and bytes[pos] == 10 { pos = pos + 1 }
+    return pos
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut i: i32 = start
+    let mut j: i32 = 0
+    while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+    line[j] = 0
+    return line as string
+}
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/migration/migration.txt") != 0 { return 1 }
+    if nd != 364 or ffu[9] != 0 or ffu[17] != 0 { return 2 }
+    if neighbor_build() == false { return 10 + neighbor_error }
+    let reference: FileRead = io_read_file("fixtures/migration_neighbors.ref")
+    if reference.ok == false { return 20 }
+    let mut cursor: i32 = 0
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let count_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let count_line: string = copy_line(reference.data, cursor, count_end)
+        let expected_count: ParseI64 = str_parse_i64_at(count_line, 0)
+        if expected_count.ok == false or expected_count.value != nneigh[node_id] as i64 { return 30 }
+        cursor = line_next(reference.data, reference.len as i32, count_end)
+        let ids_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let ids_line: string = copy_line(reference.data, cursor, ids_end)
+        let dist_start: i32 = line_next(reference.data, reference.len as i32, ids_end)
+        let dist_end: i32 = line_end(reference.data, reference.len as i32, dist_start)
+        let dist_line: string = copy_line(reference.data, dist_start, dist_end)
+        let mut pos: i32 = 0
+        let mut distance_pos: i32 = 0
+        let mut neighbor_id: i32 = 1
+        while neighbor_id <= nneigh[node_id] {
+            let expected_id: ParseI64 = str_parse_i64_at(ids_line, pos)
+            let expected_distance: ParseF64 = str_parse_f64_at(dist_line, distance_pos)
+            if expected_id.ok == false or expected_distance.ok == false { return 31 }
+            let slot: i32 = neighbor_index(node_id, neighbor_id)
+            if expected_id.value != neigh[slot] as i64 { return 32 }
+            if fabs(expected_distance.value - dneigh[slot]) > 1.0e-12 { return 33 }
+            pos = expected_id.end
+            distance_pos = expected_distance.end
+            neighbor_id = neighbor_id + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, dist_end)
+        node_id = node_id + 1
+    }
+    return 0
+}

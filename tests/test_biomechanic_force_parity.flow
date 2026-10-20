@@ -1,0 +1,178 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, aut, ffu, px, py, pz, nneigh, neigh, dneigh, neigh_ld, vsprx, vspry, vsprz, vcilx, vcily, vcilz, vtorx, vtory, vtorz, vstorx, vstory, vstorz }
+import embryo.biomechanic { forces }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function load_neighbors(path: string) -> bool {
+    let reference: FileRead = io_read_file(path)
+    if reference.ok == false { return false }
+    let mut cursor: i32 = 0
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let count_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let count_line: string = copy_line(reference.data, cursor, count_end)
+        let count_value: ParseI64 = str_parse_i64_at(count_line, 0)
+        if count_value.ok == false or count_value.value < 0 or count_value.value >= neigh_ld as i64 { return false }
+        let count: i32 = count_value.value as i32
+        cursor = line_next(reference.data, reference.len as i32, count_end)
+        let ids_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let ids_line: string = copy_line(reference.data, cursor, ids_end)
+        cursor = line_next(reference.data, reference.len as i32, ids_end)
+        let distances_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let distances_line: string = copy_line(reference.data, cursor, distances_end)
+        let mut ids_position: i32 = 0
+        let mut distances_position: i32 = 0
+        let mut slot: i32 = 1
+        nneigh[node_id] = count
+        while slot <= count {
+            let neighbor_id: ParseI64 = str_parse_i64_at(ids_line, ids_position)
+            let distance: ParseF64 = str_parse_f64_at(distances_line, distances_position)
+            if neighbor_id.ok == false or distance.ok == false { return false }
+            let index: i32 = node_id * neigh_ld + slot
+            neigh[index] = neighbor_id.value as i32
+            dneigh[index] = distance.value
+            ids_position = neighbor_id.end
+            distances_position = distance.end
+            slot = slot + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, distances_end)
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function check_force_parity(input_path: string, neighbor_path: string, fixture_path: string) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    if load_neighbors(neighbor_path) == false or forces() == false { return 2 }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 3 }
+    let mut cursor: i32 = 0
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let mut position: i32 = 0
+        let node_number: ParseF64 = str_parse_f64_at(line, position)
+        if node_number.ok == false or node_number.value != node_id as f64 { return 5 }
+        position = node_number.end
+        let mut component: i32 = 0
+        while component < 15 {
+            let expected: ParseF64 = str_parse_f64_at(line, position)
+            if expected.ok == false { return 6 }
+            let mut actual: f64 = 0.0
+            if component == 0 { actual = px[node_id] }
+            elif component == 1 { actual = py[node_id] }
+            elif component == 2 { actual = pz[node_id] }
+            elif component == 3 { actual = vsprx[node_id] }
+            elif component == 4 { actual = vspry[node_id] }
+            elif component == 5 { actual = vsprz[node_id] }
+            elif component == 6 { actual = vcilx[node_id] }
+            elif component == 7 { actual = vcily[node_id] }
+            elif component == 8 { actual = vcilz[node_id] }
+            elif component == 9 { actual = vtorx[node_id] }
+            elif component == 10 { actual = vtory[node_id] }
+            elif component == 11 { actual = vtorz[node_id] }
+            elif component == 12 { actual = vstorx[node_id] }
+            elif component == 13 { actual = vstory[node_id] }
+            else { actual = vstorz[node_id] }
+            let scale: f64 = if fabs(expected.value) > 1.0 { fabs(expected.value) } else { 1.0 }
+            if fabs(actual - expected.value) > 1.0e-9 * scale { println(node_id, component, actual, expected.value); return 10 + component }
+            position = expected.end
+            component = component + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        node_id = node_id + 1
+    }
+    return 0
+}
+
+function check_skipped_scratch() -> i32 {
+    if read_snapshot_parameters("../reference/examples/migration/migration.txt") != 0 { return 1 }
+    if load_neighbors("fixtures/migration_neighbors.ref") == false { return 2 }
+    aut = 0
+    ffu[3] = 0
+    ffu[20] = 0
+    if forces() == false { return 3 }
+
+    let mut scratch_was_populated: bool = false
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if vtorx[node_id] != 0.0 or vtory[node_id] != 0.0 or vtorz[node_id] != 0.0 or vstorx[node_id] != 0.0 or vstory[node_id] != 0.0 or vstorz[node_id] != 0.0 or vcilx[node_id] != 0.0 or vcily[node_id] != 0.0 or vcilz[node_id] != 0.0 {
+            scratch_was_populated = true
+        }
+        node_id = node_id + 1
+    }
+    if scratch_was_populated == false { return 4 }
+
+    let saved: ptr<f64> = malloc((nd as i64 + 1) * 3 * sizeof<f64>()) as ptr<f64>
+    if saved == null { return 5 }
+    ffu[3] = 1
+    ffu[20] = 1
+    if forces() == false { return 6 }
+    node_id = 1
+    while node_id <= nd {
+        saved[node_id] = px[node_id]
+        saved[(nd + 1) + node_id] = py[node_id]
+        saved[(nd + 1) * 2 + node_id] = pz[node_id]
+        if vtorx[node_id] != 0.0 or vtory[node_id] != 0.0 or vtorz[node_id] != 0.0 or vstorx[node_id] != 0.0 or vstory[node_id] != 0.0 or vstorz[node_id] != 0.0 { return 7 }
+        node_id = node_id + 1
+    }
+    if forces() == false { return 8 }
+    node_id = 1
+    while node_id <= nd {
+        if px[node_id] != saved[node_id] or py[node_id] != saved[(nd + 1) + node_id] or pz[node_id] != saved[(nd + 1) * 2 + node_id] { return 9 }
+        node_id = node_id + 1
+    }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_force_parity("../reference/examples/migration/migration.txt", "fixtures/migration_neighbors.ref", "fixtures/migration_forces.ref")
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_force_parity("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_neighbors.ref", "fixtures/apoptosis_forces.ref")
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_force_parity("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_neighbors.ref", "fixtures/differential_adhesion_forces.ref")
+    if adhesion != 0 { return adhesion }
+    let polar_growth: i32 = check_force_parity("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_neighbors.ref", "fixtures/polar_growth_forces.ref")
+    if polar_growth != 0 { return polar_growth }
+    let apical: i32 = check_force_parity("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_neighbors.ref", "fixtures/apical_contraction_forces.ref")
+    if apical != 0 { return apical }
+    let ecm: i32 = check_force_parity("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_neighbors.ref", "fixtures/ecm_secretion_forces.ref")
+    if ecm != 0 { return ecm }
+    let figure_six: i32 = check_force_parity("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_neighbors.ref", "fixtures/figure_6_forces.ref")
+    if figure_six != 0 { return figure_six }
+    let sea_urchin: i32 = check_force_parity("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_neighbors.ref", "fixtures/sea_urchin_forces.ref")
+    if sea_urchin != 0 { return sea_urchin }
+    return check_skipped_scratch()
+}

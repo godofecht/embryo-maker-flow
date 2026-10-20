@@ -1,0 +1,401 @@
+import embryo.general {
+    nd, ncels, ncals, cell_capacity, ndepi, ndmes, ndx, ncelsepi, ncelsmes,
+    Nod, Cel, nod_zero, node, nodeo, cels, resize_cell_buffers, PI
+}
+import embryo.death { apoptosis, compact_cell }
+import embryo.neighboring { neighbor_build, fill_co_griders }
+import embryo.ecm { ecm_secretion }
+import embryo.growth { append_growth_nodes }
+import embryo.genetic { ng, gex, agex, dgex, checkn, gene_expression_index }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(value: ptr<void>)
+    function cos(value: f64) -> f64
+    function sin(value: f64) -> f64
+    function sqrt(value: f64) -> f64
+}
+
+let mut editor_error: i32 = 0
+
+function recount_editor_model() -> void {
+    ndepi = 0; ndmes = 0; ndx = 0
+    ncelsepi = 0; ncelsmes = 0
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if node[node_id].tipus < 3 { ndepi = ndepi + 1 }
+        elif node[node_id].tipus == 3 { ndmes = ndmes + 1 }
+        elif node[node_id].tipus == 4 { ndx = ndx + 1 }
+        node_id = node_id + 1
+    }
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        if cels[cell_id].ctipus < 3 { ncelsepi = ncelsepi + 1 }
+        elif cels[cell_id].ctipus == 3 { ncelsmes = ncelsmes + 1 }
+        cell_id = cell_id + 1
+    }
+}
+
+function editor_delete_node(node_id: i32) -> bool {
+    editor_error = 0
+    if node_id < 1 or node_id > nd { editor_error = 1; return false }
+    let owner: i32 = node[node_id].icel
+    if apoptosis(node_id) == false { editor_error = 2; return false }
+    if owner > 0 and owner <= ncels and cels[owner].nunodes == 0 {
+        if compact_cell(owner) == false { editor_error = 3; return false }
+    }
+    recount_editor_model()
+    if nd > 1 and neighbor_build() == false and fill_co_griders() == false {
+        editor_error = 5
+        return false
+    }
+    return true
+}
+
+function editor_delete_cell(cell_id: i32) -> bool {
+    editor_error = 0
+    if cell_id < 1 or cell_id > ncels { editor_error = 1; return false }
+    while cels[cell_id].nunodes > 0 {
+        let node_id: i32 = cels[cell_id].node[1]
+        if node_id < 1 or node_id > nd { editor_error = 4; return false }
+        if apoptosis(node_id) == false { editor_error = 2; return false }
+    }
+    if compact_cell(cell_id) == false { editor_error = 3; return false }
+    recount_editor_model()
+    if nd > 1 and neighbor_build() == false and fill_co_griders() == false {
+        editor_error = 5
+        return false
+    }
+    return true
+}
+
+function editor_add_ecm(x: f64, y: f64, z: f64) -> bool {
+    editor_error = 0
+    if nd < 1 { editor_error = 1; return false }
+    if ecm_secretion(1) == false { editor_error = 6; return false }
+    node[nd].tipus = 4
+    node[nd].x = x; node[nd].y = y; node[nd].z = z
+    nodeo[nd].tipus = 4
+    nodeo[nd].x = x; nodeo[nd].y = y; nodeo[nd].z = z
+    if neighbor_build() == false and fill_co_griders() == false {
+        editor_error = 5
+        return false
+    }
+    recount_editor_model()
+    return true
+}
+
+function editor_add_node(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
+    editor_error = 0
+    if cell_id < 1 or cell_id > ncels or cels[cell_id].nunodes < 1 { editor_error = 1; return false }
+    let old_nd: i32 = nd
+    let epithelial: bool = cels[cell_id].ctipus < 3
+    let anchor: i32 = cels[cell_id].node[1]
+    if epithelial and (anchor < 1 or anchor > old_nd) { editor_error = 8; return false }
+    let paired: i32 = if epithelial { node[anchor].altre } else { 0 }
+    if epithelial and (paired < 1 or paired > old_nd) { editor_error = 8; return false }
+    let offset_x: f64 = if epithelial { node[paired].x - node[anchor].x } else { 0.0 }
+    let offset_y: f64 = if epithelial { node[paired].y - node[anchor].y } else { 0.0 }
+    let offset_z: f64 = if epithelial { node[paired].z - node[anchor].z } else { 0.0 }
+    let count: i32 = if epithelial { 2 } else { 1 }
+    if append_growth_nodes(cell_id, count) == false { editor_error = 7; return false }
+    if epithelial {
+        let first: i32 = old_nd + 1
+        let second: i32 = old_nd + 2
+        node[first].x = x; node[first].y = y; node[first].z = z
+        node[second].x = x + offset_x; node[second].y = y + offset_y; node[second].z = z + offset_z
+        node[first].tipus = 1; node[second].tipus = 2
+        node[first].altre = second; node[second].altre = first
+        nodeo[first] = node[first]; nodeo[second] = node[second]
+    } else {
+        let new_node: i32 = old_nd + 1
+        node[new_node].x = x; node[new_node].y = y; node[new_node].z = z
+        node[new_node].tipus = 3; node[new_node].altre = 0
+        nodeo[new_node] = node[new_node]
+    }
+    recount_editor_model()
+    if neighbor_build() == false and fill_co_griders() == false { editor_error = 5; return false }
+    return true
+}
+
+function editor_paste_node(node_id: i32, x: f64, y: f64, z: f64) -> bool {
+    editor_error = 0
+    if node_id < 1 or node_id > nd { editor_error = 1; return false }
+    let cell_id: i32 = node[node_id].icel
+    if cell_id < 1 or cell_id > ncels or cels[cell_id].nunodes < 1 { editor_error = 1; return false }
+    let old_nd: i32 = nd
+    let epithelial: bool = node[node_id].tipus < 3
+    let source: Nod = node[node_id]
+    let source_original: Nod = nodeo[node_id]
+    let source_pair: i32 = if epithelial { source.altre } else { 0 }
+    if epithelial and (source_pair < 1 or source_pair > old_nd) { editor_error = 8; return false }
+    let pair_record: Nod = if epithelial { node[source_pair] } else { nod_zero() }
+    let pair_original: Nod = if epithelial { nodeo[source_pair] } else { nod_zero() }
+    let anchor: i32 = cels[cell_id].node[1]
+    let anchor_pair: i32 = if epithelial { node[anchor].altre } else { 0 }
+    if epithelial and (anchor_pair < 1 or anchor_pair > old_nd) { editor_error = 8; return false }
+    let offset_x: f64 = if epithelial { node[anchor_pair].x - node[anchor].x } else { 0.0 }
+    let offset_y: f64 = if epithelial { node[anchor_pair].y - node[anchor].y } else { 0.0 }
+    let offset_z: f64 = if epithelial { node[anchor_pair].z - node[anchor].z } else { 0.0 }
+    let count: i32 = if epithelial { 2 } else { 1 }
+    if append_growth_nodes(cell_id, count) == false { editor_error = 7; return false }
+    let mut slot: i32 = 0
+    while slot < count {
+        let destination: i32 = old_nd + slot + 1
+        let source_id: i32 = if slot == 0 { node_id } else { source_pair }
+        let record: Nod = if slot == 0 { source } else { pair_record }
+        let original: Nod = if slot == 0 { source_original } else { pair_original }
+        node[destination] = record
+        node[destination].icel = cell_id
+        node[destination].x = if slot == 0 { x } else { x + offset_x }
+        node[destination].y = if slot == 0 { y } else { y + offset_y }
+        node[destination].z = if slot == 0 { z } else { z + offset_z }
+        node[destination].altre = if epithelial { old_nd + (if slot == 0 { 2 } else { 1 }) } else { 0 }
+        nodeo[destination] = original
+        let mut gene_id: i32 = 0
+        while gene_id <= ng {
+            gex[gene_expression_index(destination, gene_id)] = gex[gene_expression_index(source_id, gene_id)]
+            agex[gene_expression_index(destination, gene_id)] = agex[gene_expression_index(source_id, gene_id)]
+            dgex[gene_expression_index(destination, gene_id)] = 0.0
+            gene_id = gene_id + 1
+        }
+        checkn[destination] = 0
+        slot = slot + 1
+    }
+    recount_editor_model()
+    if neighbor_build() == false and fill_co_griders() == false { editor_error = 5; return false }
+    return true
+}
+
+function editor_add_basic_cell(x: f64, y: f64, z: f64, mesenchymal: bool) -> bool {
+    editor_error = 0
+    if ncels < 1 or cels[1].nunodes < 1 { editor_error = 1; return false }
+    if ncels + 1 >= cell_capacity {
+        let new_capacity: i32 = cell_capacity + 20
+        if resize_cell_buffers(new_capacity) == false { editor_error = 9; return false }
+        ncals = new_capacity
+    }
+
+    let base_cell: i32 = 1
+    let original_count: i32 = cels[base_cell].nunodes
+    let first_new_node: i32 = nd + 1
+    let mut pair: i32 = 0
+    while pair < 7 {
+        if append_growth_nodes(base_cell, 2) == false { editor_error = 7; return false }
+        pair = pair + 1
+    }
+
+    ncels = ncels + 1
+    let new_cell: i32 = ncels
+    let source_record: Cel = cels[base_cell]
+    cels[new_cell] = source_record
+    let members: ptr<i32> = calloc(15, sizeof<i32>()) as ptr<i32>
+    if members == null { ncels = ncels - 1; editor_error = 9; return false }
+    cels[new_cell].node = members
+    cels[new_cell].nunodes = 14
+    cels[new_cell].nodela = 14
+    cels[new_cell].ctipus = if mesenchymal { 3 } else { 1 }
+    cels[new_cell].temt = if mesenchymal { 2.0 } else { 0.0 }
+    cels[new_cell].fase = 0.0
+    cels[new_cell].cex = x + 0.5
+    cels[new_cell].cey = y
+    cels[new_cell].cez = z + 0.25
+    cels[base_cell].nunodes = original_count
+
+    let mut layer: i32 = 0
+    while layer < 2 {
+        let mut ring: i32 = 0
+        while ring < 7 {
+            let node_id: i32 = first_new_node + layer * 7 + ring
+            let angle: f64 = if ring == 0 { 0.0 } else { (ring - 1) as f64 * PI / 3.0 }
+            let nx: f64 = if ring == 0 { x } else { x + 0.5 + 0.5 * cos(angle) }
+            let ny: f64 = if ring == 0 { y } else { y + 0.5 * sin(angle) }
+            let nz: f64 = z + layer as f64 * 0.5
+            members[layer * 7 + ring + 1] = node_id
+            node[node_id].x = nx; node[node_id].y = ny; node[node_id].z = nz
+            node[node_id].icel = new_cell
+            node[node_id].tipus = if layer == 0 { 2 } else { 1 }
+            node[node_id].altre = if layer == 0 { node_id + 7 } else { node_id - 7 }
+            nodeo[node_id].x = nx; nodeo[node_id].y = ny; nodeo[node_id].z = nz
+            nodeo[node_id].icel = new_cell
+            nodeo[node_id].tipus = node[node_id].tipus
+            nodeo[node_id].altre = node[node_id].altre
+            ring = ring + 1
+        }
+        layer = layer + 1
+    }
+
+    cels[new_cell].cex = 0.0; cels[new_cell].cey = 0.0; cels[new_cell].cez = 0.0
+    let mut ring: i32 = 1
+    while ring <= 7 {
+        let node_id: i32 = members[ring + 7]
+        cels[new_cell].cex = cels[new_cell].cex + node[node_id].x / 7.0
+        cels[new_cell].cey = cels[new_cell].cey + node[node_id].y / 7.0
+        cels[new_cell].cez = cels[new_cell].cez + node[node_id].z / 7.0
+        ring = ring + 1
+    }
+    if mesenchymal {
+        let mut ring: i32 = 1
+        while ring <= 7 {
+            let lower: i32 = members[ring]
+            let upper: i32 = members[ring + 7]
+            let dx: f64 = node[lower].x - node[upper].x
+            let dy: f64 = node[lower].y - node[upper].y
+            let dz: f64 = node[lower].z - node[upper].z
+            let distance: f64 = sqrt(dx * dx + dy * dy + dz * dz)
+            if distance > 0.0 {
+                let offset: f64 = (node[lower].add + node[upper].add) * 0.1
+                let middle_x: f64 = (node[lower].x + node[upper].x) * 0.5
+                let middle_y: f64 = (node[lower].y + node[upper].y) * 0.5
+                let middle_z: f64 = (node[lower].z + node[upper].z) * 0.5
+                node[upper].x = middle_x - dx / distance * offset
+                node[upper].y = middle_y - dy / distance * offset
+                node[upper].z = middle_z - dz / distance * offset
+                node[lower].x = middle_x + dx / distance * offset
+                node[lower].y = middle_y + dy / distance * offset
+                node[lower].z = middle_z + dz / distance * offset
+                nodeo[upper].x = node[upper].x; nodeo[upper].y = node[upper].y; nodeo[upper].z = node[upper].z
+                nodeo[lower].x = node[lower].x; nodeo[lower].y = node[lower].y; nodeo[lower].z = node[lower].z
+            }
+            node[lower].tipus = 3; node[lower].altre = 0
+            node[upper].tipus = 3; node[upper].altre = 0
+            nodeo[lower].tipus = 3; nodeo[lower].altre = 0
+            nodeo[upper].tipus = 3; nodeo[upper].altre = 0
+            ring = ring + 1
+        }
+    }
+    recount_editor_model()
+    if neighbor_build() == false and fill_co_griders() == false { editor_error = 5; return false }
+    return true
+}
+
+function editor_paste_cell(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
+    editor_error = 0
+    if cell_id < 1 or cell_id > ncels or cels[cell_id].nunodes < 1 { editor_error = 1; return false }
+    if ncels + 1 >= cell_capacity {
+        let new_capacity: i32 = cell_capacity + 20
+        if resize_cell_buffers(new_capacity) == false { editor_error = 9; return false }
+        ncals = new_capacity
+    }
+    let count: i32 = cels[cell_id].nunodes
+    let epithelial: bool = cels[cell_id].ctipus < 3
+    let source_ids: ptr<i32> = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    let destination_ids: ptr<i32> = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    let members: ptr<i32> = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if source_ids == null or destination_ids == null or members == null {
+        if source_ids != null { free(source_ids as ptr<void>) }
+        if destination_ids != null { free(destination_ids as ptr<void>) }
+        if members != null { free(members as ptr<void>) }
+        editor_error = 9
+        return false
+    }
+    let mut slot: i32 = 1
+    while slot <= count {
+        source_ids[slot] = cels[cell_id].node[slot]
+        slot = slot + 1
+    }
+    let first_source: i32 = source_ids[1]
+    let dx: f64 = x - node[first_source].x
+    let dy: f64 = y - node[first_source].y
+    let dz: f64 = z - node[first_source].z
+
+    slot = 1
+    while slot <= count {
+        if destination_ids[slot] == 0 {
+            let source_id: i32 = source_ids[slot]
+            let old_nd: i32 = nd
+            if epithelial {
+                let partner_id: i32 = node[source_id].altre
+                let mut partner_slot: i32 = 1
+                while partner_slot <= count and source_ids[partner_slot] != partner_id { partner_slot = partner_slot + 1 }
+                if partner_id < 1 or partner_slot > count or node[partner_id].altre != source_id {
+                    free(source_ids as ptr<void>); free(destination_ids as ptr<void>); free(members as ptr<void>)
+                    editor_error = 8
+                    return false
+                }
+                if append_growth_nodes(cell_id, 2) == false {
+                    free(source_ids as ptr<void>); free(destination_ids as ptr<void>); free(members as ptr<void>)
+                    editor_error = 7
+                    return false
+                }
+                if node[source_id].tipus == 1 {
+                    destination_ids[slot] = old_nd + 2
+                    destination_ids[partner_slot] = old_nd + 1
+                } else {
+                    destination_ids[slot] = old_nd + 1
+                    destination_ids[partner_slot] = old_nd + 2
+                }
+            } else {
+                if append_growth_nodes(cell_id, 1) == false {
+                    free(source_ids as ptr<void>); free(destination_ids as ptr<void>); free(members as ptr<void>)
+                    editor_error = 7
+                    return false
+                }
+                destination_ids[slot] = old_nd + 1
+            }
+        }
+        slot = slot + 1
+    }
+
+    ncels = ncels + 1
+    let new_cell: i32 = ncels
+    let source_record: Cel = cels[cell_id]
+    cels[new_cell] = source_record
+    cels[new_cell].node = members
+    cels[new_cell].nunodes = count
+    cels[new_cell].nodela = count
+    cels[cell_id].nunodes = count
+    slot = 1
+    while slot <= count {
+        let source_id: i32 = source_ids[slot]
+        let destination: i32 = destination_ids[slot]
+        members[slot] = destination
+        let source_record: Nod = node[source_id]
+        let original_record: Nod = nodeo[source_id]
+        node[destination] = source_record
+        node[destination].x = node[source_id].x + dx
+        node[destination].y = node[source_id].y + dy
+        node[destination].z = node[source_id].z + dz
+        node[destination].icel = new_cell
+        nodeo[destination] = original_record
+        if epithelial {
+            let mut partner_slot: i32 = 1
+            while partner_slot <= count and source_ids[partner_slot] != source_record.altre { partner_slot = partner_slot + 1 }
+            node[destination].altre = if partner_slot <= count { destination_ids[partner_slot] } else { 0 }
+        } else { node[destination].altre = 0 }
+        let mut gene_id: i32 = 0
+        while gene_id <= ng {
+            gex[gene_expression_index(destination, gene_id)] = gex[gene_expression_index(source_id, gene_id)]
+            agex[gene_expression_index(destination, gene_id)] = agex[gene_expression_index(source_id, gene_id)]
+            dgex[gene_expression_index(destination, gene_id)] = 0.0
+            gene_id = gene_id + 1
+        }
+        checkn[destination] = 0
+        slot = slot + 1
+    }
+    cels[cell_id].nunodes = count
+    cels[new_cell].cex = 0.0; cels[new_cell].cey = 0.0; cels[new_cell].cez = 0.0
+    let mut centroid_count: i32 = 0
+    slot = 1
+    while slot <= count {
+        let node_id: i32 = members[slot]
+        if (epithelial and node[node_id].tipus == 1) or (epithelial == false and node[node_id].tipus == 3) {
+            cels[new_cell].cex = cels[new_cell].cex + node[node_id].x
+            cels[new_cell].cey = cels[new_cell].cey + node[node_id].y
+            cels[new_cell].cez = cels[new_cell].cez + node[node_id].z
+            centroid_count = centroid_count + 1
+        }
+        slot = slot + 1
+    }
+    if centroid_count > 0 {
+        cels[new_cell].cex = cels[new_cell].cex / centroid_count as f64
+        cels[new_cell].cey = cels[new_cell].cey / centroid_count as f64
+        cels[new_cell].cez = cels[new_cell].cez / centroid_count as f64
+    }
+    recount_editor_model()
+    free(source_ids as ptr<void>); free(destination_ids as ptr<void>)
+    if neighbor_build() == false and fill_co_griders() == false { editor_error = 5; return false }
+    return true
+}
+
+export editor_error, editor_delete_node, editor_delete_cell, editor_add_ecm, editor_add_node, editor_paste_node, editor_add_basic_cell, editor_paste_cell

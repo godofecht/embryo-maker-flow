@@ -1,0 +1,52 @@
+import embryo.delaunay { d_order3 }
+import embryo.delaunay { delaunay_initialize, delaunay_initialize_first_tetrahedron, delaunay_insert_one, delaunay_build, delaunay_release, delaunay_error, delaunay_last_insert, delaunay_last_stage, delaunay_last_ivrt, delaunay_last_swap_type, delaunay_bad_hash_index, delaunay_bad_boundary_face, delaunay_bad_boundary_side, delaunay_bad_boundary_neighbor, delaunay_face_vertex, delaunay_face_bf, delaunay_validate_faces, delaunay_validate_boundary, d_htsrc, delaunay_map_at, delaunay_coordinate, delaunay_set_coordinate, d_baryth, delaunay_face_count, delaunay_tetra_count, delaunay_face_capacity, delaunay_boundary_capacity }
+import embryo.io { read_snapshot_parameters }
+
+function main() -> i32 {
+    let a: array<i32, 3> = d_order3(8, 2, 5)
+    if a[0] != 2 or a[1] != 5 or a[2] != 8 { return 1 }
+    let b: array<i32, 3> = d_order3(4, 4, 1)
+    if b[0] != 1 or b[1] != 4 or b[2] != 4 { return 2 }
+    if read_snapshot_parameters("../reference/examples/apical_contraction/apical_contraction.txt") != 0 { return 3 }
+    if delaunay_initialize() == false or delaunay_error() != 0 { return 4 }
+    let p1: i32 = delaunay_map_at(1); let p2: i32 = delaunay_map_at(2)
+    let p3: i32 = delaunay_map_at(3); let p4: i32 = delaunay_map_at(4)
+    let x: f64 = (delaunay_coordinate(p1, 1) + delaunay_coordinate(p2, 1) + delaunay_coordinate(p3, 1) + delaunay_coordinate(p4, 1)) * 0.25
+    let y: f64 = (delaunay_coordinate(p1, 2) + delaunay_coordinate(p2, 2) + delaunay_coordinate(p3, 2) + delaunay_coordinate(p4, 2)) * 0.25
+    let z: f64 = (delaunay_coordinate(p1, 3) + delaunay_coordinate(p2, 3) + delaunay_coordinate(p3, 3) + delaunay_coordinate(p4, 3)) * 0.25
+    let bary = d_baryth(p1, p2, p3, p4, x, y, z)
+    if bary.degenerate or bary.a1 <= 0.0 or bary.a2 <= 0.0 or bary.a3 <= 0.0 or bary.a4 <= 0.0 { return 5 }
+    if delaunay_initialize_first_tetrahedron() == false { return 6 }
+    let p5: i32 = delaunay_map_at(5)
+    if delaunay_set_coordinate(p5, 1, x) == false or delaunay_set_coordinate(p5, 2, y) == false or delaunay_set_coordinate(p5, 3, z) == false { return 7 }
+    if delaunay_insert_one() == false { return 8 + delaunay_error() }
+    if delaunay_tetra_count() != 4 or delaunay_face_count() < 10 { return 9 }
+    if delaunay_validate_faces() == false or delaunay_validate_boundary() == false { return 26 }
+    delaunay_release()
+    if delaunay_initialize() == false or delaunay_initialize_first_tetrahedron() == false { return 12 }
+    if delaunay_insert_one() == false { return delaunay_error() }
+    if delaunay_walk_result() != 0 or delaunay_tetra_count() <= 1 { return 15 }
+    if delaunay_validate_faces() == false or delaunay_validate_boundary() == false { return 27 }
+    delaunay_release()
+    if delaunay_initialize() == false or delaunay_initialize_first_tetrahedron() == false { return 16 }
+    let edge_a: i32 = delaunay_map_at(1); let edge_b: i32 = delaunay_map_at(2); let edge_p: i32 = delaunay_map_at(5)
+    let edge_x: f64 = (delaunay_coordinate(edge_a, 1) + delaunay_coordinate(edge_b, 1)) * 0.5
+    let edge_y: f64 = (delaunay_coordinate(edge_a, 2) + delaunay_coordinate(edge_b, 2)) * 0.5
+    let edge_z: f64 = (delaunay_coordinate(edge_a, 3) + delaunay_coordinate(edge_b, 3)) * 0.5
+    if delaunay_set_coordinate(edge_p, 1, edge_x) == false or delaunay_set_coordinate(edge_p, 2, edge_y) == false or delaunay_set_coordinate(edge_p, 3, edge_z) == false { return 17 }
+    if delaunay_insert_one() == false { return 18 + delaunay_error() }
+    if delaunay_walk_result() < 1 or delaunay_walk_result() > 3 { return 20 }
+    if delaunay_tetra_count() != 2 { return 21 + delaunay_tetra_count() }
+    if delaunay_validate_faces() == false or delaunay_validate_boundary() == false { return 28 }
+    delaunay_release()
+    if read_snapshot_parameters("../reference/examples/figure_6/gastrula.txt") != 0 { return 10 }
+    if delaunay_initialize() == false or delaunay_error() != 0 { return 11 }
+    delaunay_release()
+    if read_snapshot_parameters("../reference/examples/apical_contraction/apical_contraction.txt") != 0 { return 22 }
+    if delaunay_initialize() == false or delaunay_build() == false { let bad: i32 = delaunay_bad_hash_index(); let a: i32 = delaunay_face_vertex(bad, 1); let b: i32 = delaunay_face_vertex(bad, 2); let c: i32 = delaunay_face_vertex(bad, 3); let found: i32 = d_htsrc(a, b, c); let bf: i32 = delaunay_bad_boundary_face(); let nb: i32 = delaunay_bad_boundary_neighbor(); println("triangulation failed", delaunay_error(), delaunay_last_insert(), delaunay_last_stage(), delaunay_last_ivrt(), delaunay_last_swap_type(), bad, a, b, c, delaunay_face_vertex(bad, 4), delaunay_face_vertex(bad, 5), found, delaunay_face_vertex(found, 4), delaunay_face_vertex(found, 5), bf, delaunay_bad_boundary_side(), nb, delaunay_face_vertex(bf, 1), delaunay_face_vertex(bf, 2), delaunay_face_vertex(bf, 3), delaunay_face_bf(bf, 1), delaunay_face_bf(bf, 2), delaunay_face_bf(bf, 3), delaunay_face_vertex(nb, 1), delaunay_face_vertex(nb, 2), delaunay_face_vertex(nb, 3), delaunay_face_bf(nb, 1), delaunay_face_bf(nb, 2), delaunay_face_bf(nb, 3)); return 23 }
+    if delaunay_tetra_count() <= 1 or delaunay_face_count() <= 4 { return 24 }
+    if delaunay_face_capacity() <= 64 or delaunay_boundary_capacity() <= 64 { return 29 }
+    if delaunay_validate_faces() == false or delaunay_validate_boundary() == false { return 25 }
+    delaunay_release()
+    return 0
+}

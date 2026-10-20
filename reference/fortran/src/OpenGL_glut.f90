@@ -276,7 +276,7 @@ SUBROUTINE glutInit(pargc, argv) BIND(C,NAME="glutInit")
 IMPORT
 INTEGER(GLint) :: pargc
 ! INTEGER(GLint), DIMENSION(*) :: pargc
-TYPE(C_PTR), INTENT(IN) :: argv
+TYPE(C_PTR), VALUE :: argv
 END SUBROUTINE glutInit
 END INTERFACE
 

@@ -1,0 +1,1375 @@
+import embryo.general {
+    nd, nda, node, neigh, nneigh, dneigh, neigh_ld, ffu, mnn_dyn, mnn_dynam,
+    extre, rv, urv, dmax, rdiffmax, omnn, ndch, screen_radius
+}
+import embryo.delaunay {
+    delaunay_initialize, delaunay_build, delaunay_release,
+    delaunay_face_count, delaunay_face_vertex, delaunay_map_at, delaunay_error
+}
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function realloc(p: ptr<void>, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+    function memset(p: ptr<void>, value: i32, size: i64) -> ptr<void>
+    function sqrt(x: f64) -> f64
+    function round(x: f64) -> f64
+}
+
+const ROOT_TWO: f64 = 1.414213562
+let mut boxes: ptr<i32> = null
+let mut list: ptr<i32> = null
+let mut node_box_slots: ptr<i32> = null
+let mut box_counts: ptr<i32> = null
+let mut box_epochs: ptr<i32> = null
+let mut boxes_capacity: i64 = 0
+let mut list_capacity: i32 = 0
+let mut node_box_slots_capacity: i32 = 0
+let mut box_grid_node_count: i32 = 0
+let mut box_counts_capacity: i64 = 0
+let mut box_epochs_capacity: i64 = 0
+let mut box_generation: i32 = 0
+let mut nboxes: i32 = 0
+let mut box_side: i32 = 0
+let mut neighbor_error: i32 = 0
+let mut triangulation_warning: i32 = 0
+
+function neighbor_clear_warning() -> void { triangulation_warning = 0 }
+let mut iextre: i32 = 1
+let mut maxadd: f64 = 0.0
+let mut node_bounds_cache_valid: bool = false
+let mut node_bounds_largest_radius: f64 = 0.0
+let mut node_bounds_largest_displacement: f64 = 0.0
+let mut node_bounds_largest_equilibrium: f64 = 0.0
+
+function neighbor_invalidate_node_bounds() -> void { node_bounds_cache_valid = false }
+let mut triang_last_ivv: i32 = 0
+let mut oneigh: ptr<i32> = null
+let mut onneigh: ptr<i32> = null
+let mut oneigh_ld: i32 = 0
+let mut oneigh_capacity_nodes: i32 = 0
+# Set only after a successful local rebuild where only the moved node row
+# changes. restore_neighbors consumes the hint while updating the saved graph.
+let mut neighbor_incremental_node: i32 = 0
+let mut restore_first_marks: ptr<i32> = null
+let mut restore_pair_marks: ptr<i32> = null
+let mut restore_dirty_marks: ptr<i32> = null
+let mut restore_mark_capacity: i32 = 0
+let mut restore_mark_generation: i32 = 0
+let mut restore_dirty_generation: i32 = 0
+let mut screen_removed_marks: ptr<i32> = null
+let mut screen_removed_capacity: i32 = 0
+let mut screen_removed_generation: i32 = 0
+
+function ensure_screen_removed_marks(required: i32) -> bool {
+    if required <= screen_removed_capacity { return true }
+    let grown: ptr<i32> = realloc(screen_removed_marks as ptr<void>, required as i64 * sizeof<i32>()) as ptr<i32>
+    if grown == null { neighbor_error = 8; return false }
+    let added: i32 = required - screen_removed_capacity
+    memset(&grown[screen_removed_capacity] as ptr<void>, 0, added as i64 * sizeof<i32>())
+    screen_removed_marks = grown
+    screen_removed_capacity = required
+    return true
+}
+
+function ensure_restore_marks(required: i32) -> bool {
+    if required <= restore_mark_capacity { return true }
+    let first: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
+    let pair: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
+    let dirty: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
+    if first == null or pair == null or dirty == null {
+        if first != null { free(first as ptr<void>) }
+        if pair != null { free(pair as ptr<void>) }
+        if dirty != null { free(dirty as ptr<void>) }
+        neighbor_error = 8
+        return false
+    }
+    if restore_first_marks != null { free(restore_first_marks as ptr<void>) }
+    if restore_pair_marks != null { free(restore_pair_marks as ptr<void>) }
+    if restore_dirty_marks != null { free(restore_dirty_marks as ptr<void>) }
+    restore_first_marks = first
+    restore_pair_marks = pair
+    restore_dirty_marks = dirty
+    restore_mark_capacity = required
+    restore_mark_generation = 0
+    restore_dirty_generation = 0
+    return true
+}
+
+function next_restore_mark() -> i32 {
+    restore_mark_generation = restore_mark_generation + 1
+    return restore_mark_generation
+}
+
+function box_index(x: i32, y: i32, z: i32) -> i32 {
+    return ((x + nboxes) * box_side + (y + nboxes)) * box_side + (z + nboxes)
+}
+
+function neighbor_box_head(node_id: i32) -> i32 {
+    if boxes == null or node_id < 1 or node_id > nd or box_side < 1 { return 0 }
+    let x: i32 = round(node[node_id].x * urv) as i32
+    let y: i32 = round(node[node_id].y * urv) as i32
+    let z: i32 = round(node[node_id].z * urv) as i32
+    if x < -nboxes or x > nboxes or y < -nboxes or y > nboxes or z < -nboxes or z > nboxes { return 0 }
+    return box_head_at(box_index(x, y, z))
+}
+
+function neighbor_index(node_id: i32, column: i32) -> i32 {
+    return node_id * neigh_ld + column
+}
+
+function old_neighbor_index(node_id: i32, column: i32) -> i32 {
+    return node_id * oneigh_ld + column
+}
+
+function neighbor_reset() -> void {
+    neighbor_invalidate_node_bounds()
+    if oneigh != null { free(oneigh as ptr<void>); oneigh = null }
+    if onneigh != null { free(onneigh as ptr<void>); onneigh = null }
+    if boxes != null { free(boxes as ptr<void>); boxes = null }
+    if box_counts != null { free(box_counts as ptr<void>); box_counts = null }
+    if box_epochs != null { free(box_epochs as ptr<void>); box_epochs = null }
+    if list != null { free(list as ptr<void>); list = null }
+    if node_box_slots != null { free(node_box_slots as ptr<void>); node_box_slots = null }
+    if screen_removed_marks != null { free(screen_removed_marks as ptr<void>); screen_removed_marks = null }
+    boxes_capacity = 0
+    box_counts_capacity = 0
+    box_epochs_capacity = 0
+    list_capacity = 0
+    node_box_slots_capacity = 0
+    screen_removed_capacity = 0
+    screen_removed_generation = 0
+    box_grid_node_count = 0
+    box_generation = 0
+    oneigh_ld = 0
+    oneigh_capacity_nodes = 0
+    neighbor_incremental_node = 0
+    nboxes = 0
+    box_side = 0
+    ndch = 0
+    triang_last_ivv = 0
+}
+
+function prepare_box_buffers(total_boxes: i64) -> bool {
+    if total_boxes <= 0 or total_boxes > 2147483647 { neighbor_error = 4; return false }
+    if boxes_capacity < total_boxes {
+        let old_capacity: i64 = boxes_capacity
+        let grown: ptr<i32> = realloc(boxes as ptr<void>, total_boxes * sizeof<i32>()) as ptr<i32>
+        if grown == null { neighbor_error = 4; return false }
+        memset(&grown[old_capacity as i32] as ptr<void>, 0, (total_boxes - old_capacity) * sizeof<i32>())
+        boxes = grown
+        boxes_capacity = total_boxes
+    }
+    if box_counts_capacity < total_boxes {
+        let old_capacity: i64 = box_counts_capacity
+        let grown_counts: ptr<i32> = realloc(box_counts as ptr<void>, total_boxes * sizeof<i32>()) as ptr<i32>
+        if grown_counts == null { neighbor_error = 4; return false }
+        memset(&grown_counts[old_capacity as i32] as ptr<void>, 0, (total_boxes - old_capacity) * sizeof<i32>())
+        box_counts = grown_counts
+        box_counts_capacity = total_boxes
+    }
+    if box_epochs_capacity < total_boxes {
+        let old_capacity: i64 = box_epochs_capacity
+        let grown_epochs: ptr<i32> = realloc(box_epochs as ptr<void>, total_boxes * sizeof<i32>()) as ptr<i32>
+        if grown_epochs == null { neighbor_error = 4; return false }
+        memset(&grown_epochs[old_capacity as i32] as ptr<void>, 0, (total_boxes - old_capacity) * sizeof<i32>())
+        box_epochs = grown_epochs
+        box_epochs_capacity = total_boxes
+    }
+    let required_list: i32 = nda + 1
+    if list_capacity < required_list {
+        let grown_list: ptr<i32> = realloc(list as ptr<void>, required_list as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_list == null { neighbor_error = 4; return false }
+        list = grown_list
+        list_capacity = required_list
+    }
+    if node_box_slots_capacity < required_list {
+        let grown_slots: ptr<i32> = realloc(node_box_slots as ptr<void>, required_list as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_slots == null { neighbor_error = 4; return false }
+        node_box_slots = grown_slots
+        node_box_slots_capacity = required_list
+    }
+    if box_generation >= 2147483646 {
+        memset(box_epochs as ptr<void>, 0, box_epochs_capacity * sizeof<i32>())
+        box_generation = 1
+    } else {
+        box_generation = box_generation + 1
+    }
+    box_grid_node_count = 0
+    return true
+}
+
+function box_head_at(slot: i32) -> i32 {
+    if slot < 0 or (slot as i64) >= box_epochs_capacity { return 0 }
+    if box_epochs[slot] != box_generation { return 0 }
+    return boxes[slot]
+}
+
+function box_insert(node_id: i32, slot: i32) -> i32 {
+    if box_epochs[slot] != box_generation {
+        box_epochs[slot] = box_generation
+        boxes[slot] = 0
+        box_counts[slot] = 0
+    }
+    list[node_id] = boxes[slot]
+    boxes[slot] = node_id
+    box_counts[slot] = box_counts[slot] + 1
+    return box_counts[slot]
+}
+
+# Keep each bucket in descending node order, matching a full rebuild that
+# inserts nodes from 1 through nd at the head of each linked list.
+function move_node_box(node_id: i32, new_slot: i32) -> bool {
+    let old_slot: i32 = node_box_slots[node_id]
+    if old_slot == new_slot { return true }
+    if old_slot < 0 or (old_slot as i64) >= box_epochs_capacity or box_epochs[old_slot] != box_generation {
+        neighbor_error = 5
+        return false
+    }
+    let mut previous: i32 = 0
+    let mut current: i32 = boxes[old_slot]
+    while current != 0 and current != node_id {
+        previous = current
+        current = list[current]
+    }
+    if current != node_id { neighbor_error = 5; return false }
+    if previous == 0 { boxes[old_slot] = list[node_id] }
+    else { list[previous] = list[node_id] }
+    box_counts[old_slot] = box_counts[old_slot] - 1
+
+    if box_epochs[new_slot] != box_generation {
+        box_epochs[new_slot] = box_generation
+        boxes[new_slot] = 0
+        box_counts[new_slot] = 0
+    }
+    current = boxes[new_slot]
+    previous = 0
+    while current != 0 and current > node_id {
+        previous = current
+        current = list[current]
+    }
+    list[node_id] = current
+    if previous == 0 { boxes[new_slot] = node_id }
+    else { list[previous] = node_id }
+    box_counts[new_slot] = box_counts[new_slot] + 1
+    if box_counts[new_slot] > mnn_dyn { mnn_dyn = box_counts[new_slot] }
+    node_box_slots[node_id] = new_slot
+    return true
+}
+
+function prepare_neighbor_table(max_neighbors: i32) -> bool {
+    if max_neighbors < 1 { neighbor_error = 6; return false }
+    if neigh == null or dneigh == null or neigh_ld <= max_neighbors {
+        if grow_neighbor_buffers(max_neighbors) == false { return false }
+    }
+    let row_count: i64 = nda as i64 + 1
+    memset(neigh as ptr<void>, 0, row_count * neigh_ld as i64 * sizeof<i32>())
+    memset(dneigh as ptr<void>, 0, row_count * neigh_ld as i64 * sizeof<f64>())
+    return true
+}
+
+function neighbor_remove_node(deleted_id: i32) -> void {
+    if deleted_id < 1 or deleted_id > nd { return }
+    if deleted_id <= ndch and oneigh != null and onneigh != null and oneigh_ld > 0 {
+        let mut source: i32 = 1
+        while source <= ndch {
+            if source != deleted_id {
+                let old_count: i32 = onneigh[source]
+                let mut read_column: i32 = 1
+                let mut write_column: i32 = 1
+                while read_column <= old_count {
+                    let source_index: i32 = source * oneigh_ld + read_column
+                    let neighbor_id: i32 = oneigh[source_index]
+                    if neighbor_id != deleted_id {
+                        oneigh[source * oneigh_ld + write_column] = if neighbor_id > deleted_id { neighbor_id - 1 } else { neighbor_id }
+                        write_column = write_column + 1
+                    }
+                    read_column = read_column + 1
+                }
+                while write_column <= old_count {
+                    oneigh[source * oneigh_ld + write_column] = 0
+                    write_column = write_column + 1
+                }
+                onneigh[source] = write_column - 1
+            }
+            source = source + 1
+        }
+        let mut row: i32 = deleted_id
+        while row < ndch {
+            let mut column: i32 = 0
+            while column < oneigh_ld {
+                oneigh[row * oneigh_ld + column] = oneigh[(row + 1) * oneigh_ld + column]
+                column = column + 1
+            }
+            onneigh[row] = onneigh[row + 1]
+            row = row + 1
+        }
+        let mut column: i32 = 0
+        while column < oneigh_ld {
+            oneigh[ndch * oneigh_ld + column] = 0
+            column = column + 1
+        }
+        onneigh[ndch] = 0
+        ndch = ndch - 1
+    }
+}
+
+function fill_co_griders() -> bool {
+    neighbor_incremental_node = 0
+    let mut max_neighbors: i32 = 1
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if nneigh[node_id] > max_neighbors { max_neighbors = nneigh[node_id] }
+        node_id = node_id + 1
+    }
+    let new_oneigh: ptr<i32> = calloc((nd + 1) as i64 * (max_neighbors + 1) as i64, sizeof<i32>()) as ptr<i32>
+    let new_onneigh: ptr<i32> = calloc((nd + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if new_oneigh == null or new_onneigh == null {
+        if new_oneigh != null { free(new_oneigh as ptr<void>) }
+        if new_onneigh != null { free(new_onneigh as ptr<void>) }
+        neighbor_error = 8
+        return false
+    }
+    if oneigh != null { free(oneigh as ptr<void>) }
+    if onneigh != null { free(onneigh as ptr<void>) }
+    oneigh = new_oneigh
+    onneigh = new_onneigh
+    oneigh_ld = max_neighbors + 1
+    oneigh_capacity_nodes = nd + 1
+    node_id = 1
+    while node_id <= nd {
+        if node[node_id].tipus < 3 {
+            let mut slot: i32 = 1
+            while slot <= nneigh[node_id] {
+                let other: i32 = neigh[neighbor_index(node_id, slot)]
+                if other >= 1 and other <= nd and other >= node_id and node[other].tipus < 3 {
+                    onneigh[node_id] = onneigh[node_id] + 1
+                    oneigh[old_neighbor_index(node_id, onneigh[node_id])] = other
+                    onneigh[other] = onneigh[other] + 1
+                    oneigh[old_neighbor_index(other, onneigh[other])] = node_id
+                }
+                slot = slot + 1
+            }
+        }
+        node_id = node_id + 1
+    }
+    ndch = nd
+    return true
+}
+
+function ensure_old_neighbor_capacity(required_ld: i32) -> bool {
+    let required_nodes: i32 = nd + 1
+    if required_ld <= oneigh_ld and required_nodes <= oneigh_capacity_nodes { return true }
+    let mut next_ld: i32 = oneigh_ld
+    if required_ld > oneigh_ld {
+        let doubled_ld: i32 = if oneigh_ld > 1073741823 { required_ld } else { oneigh_ld * 2 }
+        next_ld = if required_ld > doubled_ld { required_ld } else { doubled_ld }
+    }
+    let mut next_nodes: i32 = oneigh_capacity_nodes
+    if required_nodes > oneigh_capacity_nodes {
+        let doubled_nodes: i32 = if oneigh_capacity_nodes > 1073741823 { required_nodes } else { oneigh_capacity_nodes * 2 }
+        next_nodes = if required_nodes > doubled_nodes { required_nodes } else { doubled_nodes }
+    }
+    let new_oneigh: ptr<i32> = calloc(next_nodes as i64 * next_ld as i64, sizeof<i32>()) as ptr<i32>
+    let new_onneigh: ptr<i32> = calloc(next_nodes as i64, sizeof<i32>()) as ptr<i32>
+    if new_oneigh == null or new_onneigh == null {
+        if new_oneigh != null { free(new_oneigh as ptr<void>) }
+        if new_onneigh != null { free(new_onneigh as ptr<void>) }
+        neighbor_error = 8
+        return false
+    }
+    let mut row: i32 = 1
+    while row <= ndch {
+        new_onneigh[row] = onneigh[row]
+        let mut slot: i32 = 1
+        while slot <= onneigh[row] {
+            new_oneigh[row * next_ld + slot] = oneigh[row * oneigh_ld + slot]
+            slot = slot + 1
+        }
+        row = row + 1
+    }
+    if oneigh != null { free(oneigh as ptr<void>) }
+    if onneigh != null { free(onneigh as ptr<void>) }
+    oneigh = new_oneigh
+    onneigh = new_onneigh
+    oneigh_ld = next_ld
+    oneigh_capacity_nodes = next_nodes
+    return true
+}
+
+function old_neighbor_remove(row: i32, neighbor_id: i32) -> void {
+    let mut slot: i32 = 1
+    while slot <= onneigh[row] {
+        if oneigh[old_neighbor_index(row, slot)] == neighbor_id {
+            let mut shift: i32 = slot
+            while shift < onneigh[row] {
+                oneigh[old_neighbor_index(row, shift)] = oneigh[old_neighbor_index(row, shift + 1)]
+                shift = shift + 1
+            }
+            oneigh[old_neighbor_index(row, onneigh[row])] = 0
+            onneigh[row] = onneigh[row] - 1
+            return
+        }
+        slot = slot + 1
+    }
+}
+
+function old_neighbor_insert_incoming(row: i32, source: i32) -> bool {
+    let mut incoming: i32 = 0
+    while incoming < onneigh[row] and oneigh[old_neighbor_index(row, incoming + 1)] < row { incoming = incoming + 1 }
+    let mut search: i32 = 1
+    while search <= incoming {
+        if oneigh[old_neighbor_index(row, search)] == source { return true }
+        search = search + 1
+    }
+    if ensure_old_neighbor_capacity(onneigh[row] + 2) == false { return false }
+    let position: i32 = incoming + 1
+    let mut shift: i32 = onneigh[row]
+    while shift >= position {
+        oneigh[old_neighbor_index(row, shift + 1)] = oneigh[old_neighbor_index(row, shift)]
+        shift = shift - 1
+    }
+    oneigh[old_neighbor_index(row, position)] = source
+    onneigh[row] = onneigh[row] + 1
+    return true
+}
+
+function sync_old_neighbor_row(source: i32, current_stamp: i32) -> bool {
+    # Saved rows list lower-id incoming edges first, followed by this row's
+    # outgoing edges in neighbor order. Update only the outgoing portion.
+    if node[source].tipus > 2 { return true }
+    let mut incoming: i32 = 0
+    while incoming < onneigh[source] and oneigh[old_neighbor_index(source, incoming + 1)] < source { incoming = incoming + 1 }
+    if ensure_old_neighbor_capacity(incoming + nneigh[source] + 1) == false { return false }
+    let old_stamp: i32 = next_restore_mark()
+    let mut slot: i32 = incoming + 1
+    while slot <= onneigh[source] {
+        let other: i32 = oneigh[old_neighbor_index(source, slot)]
+        restore_pair_marks[other] = old_stamp
+        if restore_first_marks[other] != current_stamp { old_neighbor_remove(other, source) }
+        slot = slot + 1
+    }
+    onneigh[source] = incoming
+    slot = 1
+    while slot <= nneigh[source] {
+        let other: i32 = neigh[neighbor_index(source, slot)]
+        if other > source and other <= nd and node[other].tipus <= 2 {
+            if restore_pair_marks[other] != old_stamp and old_neighbor_insert_incoming(other, source) == false { return false }
+            if onneigh[source] + 1 >= oneigh_ld { neighbor_error = 8; return false }
+            onneigh[source] = onneigh[source] + 1
+            oneigh[old_neighbor_index(source, onneigh[source])] = other
+        }
+        slot = slot + 1
+    }
+    return true
+}
+
+function grow_neighbor_buffers(required: i32) -> bool {
+    if required < neigh_ld { return true }
+    let old_ld: i32 = neigh_ld
+    let required_ld: i32 = required + 1
+    let doubled_ld: i32 = if old_ld > 1073741823 { required_ld } else { old_ld * 2 }
+    let new_ld: i32 = if required_ld > doubled_ld { required_ld } else { doubled_ld }
+    let new_neigh: ptr<i32> = calloc(((nda + 1) * new_ld) as i64, sizeof<i32>()) as ptr<i32>
+    let new_dneigh: ptr<f64> = calloc(((nda + 1) * new_ld) as i64, sizeof<f64>()) as ptr<f64>
+    if new_neigh == null or new_dneigh == null { neighbor_error = 8; return false }
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let mut slot: i32 = 0
+        while slot < old_ld {
+            new_neigh[node_id * new_ld + slot] = neigh[node_id * old_ld + slot]
+            new_dneigh[node_id * new_ld + slot] = dneigh[node_id * old_ld + slot]
+            slot = slot + 1
+        }
+        node_id = node_id + 1
+    }
+    if neigh != null { free(neigh as ptr<void>) }
+    if dneigh != null { free(dneigh as ptr<void>) }
+    neigh = new_neigh
+    dneigh = new_dneigh
+    neigh_ld = new_ld
+    return true
+}
+
+function restore_neighbors() -> bool {
+    neighbor_error = 0
+    if oneigh == null or onneigh == null { return fill_co_griders() }
+    let incremental_node: i32 = neighbor_incremental_node
+    neighbor_incremental_node = 0
+    # Local rebuilds in these modes touch one source row. Restored pairs mark
+    # their endpoints below. Other neighbor modes keep the full rebuild path.
+    let incremental: bool = incremental_node >= 1 and incremental_node <= nd and nd == ndch and ffu[8] == 0 and ffu[9] == 0
+    if nd != ndch { return fill_co_griders() }
+    if ensure_restore_marks(nd + 1) == false { return false }
+    let mut dirty_stamp: i32 = 0
+    if incremental {
+        if restore_dirty_generation >= 1000000000 {
+            memset(restore_dirty_marks as ptr<void>, 0, restore_mark_capacity as i64 * sizeof<i32>())
+            restore_dirty_generation = 0
+        }
+        restore_dirty_generation = restore_dirty_generation + 1
+        dirty_stamp = restore_dirty_generation
+        restore_dirty_marks[incremental_node] = dirty_stamp
+    }
+    if restore_mark_generation >= 1000000000 {
+        memset(restore_first_marks as ptr<void>, 0, restore_mark_capacity as i64 * sizeof<i32>())
+        memset(restore_pair_marks as ptr<void>, 0, restore_mark_capacity as i64 * sizeof<i32>())
+        restore_mark_generation = 0
+    }
+    let mut first: i32 = if incremental { incremental_node } else { 1 }
+    let last_first: i32 = if incremental { incremental_node } else { ndch }
+    while first <= last_first {
+        if node[first].tipus <= 2 {
+            let first_stamp: i32 = next_restore_mark()
+            let mut slot: i32 = 1
+            while slot <= nneigh[first] {
+                restore_first_marks[neigh[neighbor_index(first, slot)]] = first_stamp
+                slot = slot + 1
+            }
+            let mut old_slot: i32 = 1
+            while old_slot <= onneigh[first] {
+                let second: i32 = oneigh[old_neighbor_index(first, old_slot)]
+                if second > first and second <= ndch and node[second].tipus <= 2 {
+                    if restore_first_marks[second] != first_stamp {
+                        let mut recover: bool = true
+                        let pair_stamp: i32 = next_restore_mark()
+                        slot = 1
+                        while slot <= nneigh[second] {
+                            restore_pair_marks[neigh[neighbor_index(second, slot)]] = pair_stamp
+                            slot = slot + 1
+                        }
+                        slot = 1
+                        while slot <= nneigh[first] {
+                            let shared: i32 = neigh[neighbor_index(first, slot)]
+                            if restore_pair_marks[shared] == pair_stamp { restore_pair_marks[shared] = 0 - pair_stamp }
+                            slot = slot + 1
+                        }
+                        slot = 1
+                        while slot <= nneigh[first] and recover {
+                            let shared: i32 = neigh[neighbor_index(first, slot)]
+                            if restore_pair_marks[shared] == 0 - pair_stamp {
+                                let mut link_slot: i32 = 1
+                                while link_slot <= nneigh[shared] and recover {
+                                    let second_shared: i32 = neigh[neighbor_index(shared, link_slot)]
+                                    if restore_pair_marks[second_shared] == 0 - pair_stamp { recover = false }
+                                    link_slot = link_slot + 1
+                                }
+                            }
+                            slot = slot + 1
+                        }
+                        if recover {
+                            let required: i32 = if nneigh[first] > nneigh[second] { nneigh[first] + 1 } else { nneigh[second] + 1 }
+                            if grow_neighbor_buffers(required) == false { return false }
+                            nneigh[first] = nneigh[first] + 1
+                            nneigh[second] = nneigh[second] + 1
+                            let first_index: i32 = neighbor_index(first, nneigh[first])
+                            let second_index: i32 = neighbor_index(second, nneigh[second])
+                            neigh[first_index] = second
+                            neigh[second_index] = first
+                            restore_first_marks[second] = first_stamp
+                            if incremental {
+                                restore_dirty_marks[first] = dirty_stamp
+                                restore_dirty_marks[second] = dirty_stamp
+                            }
+                            let dx: f32 = (node[first].x as f32) - (node[second].x as f32)
+                            let dy: f32 = (node[first].y as f32) - (node[second].y as f32)
+                            let dz: f32 = (node[first].z as f32) - (node[second].z as f32)
+                            let squared: f32 = (dx * dx) + (dy * dy) + (dz * dz)
+                            let distance: f64 = sqrt(squared as f64) as f32 as f64
+                            dneigh[first_index] = distance
+                            dneigh[second_index] = distance
+                        }
+                    }
+                }
+                old_slot = old_slot + 1
+            }
+            if incremental and restore_dirty_marks[first] == dirty_stamp {
+                if sync_old_neighbor_row(first, first_stamp) == false { return false }
+            }
+        }
+        first = first + 1
+    }
+    if incremental { return true }
+    return fill_co_griders()
+}
+
+function node_distance_squared(first: i32, second: i32) -> f64 {
+    let dx: f64 = node[first].x - node[second].x
+    let dy: f64 = node[first].y - node[second].y
+    let dz: f64 = node[first].z - node[second].z
+    let dx_squared: f64 = dx * dx
+    let dy_squared: f64 = dy * dy
+    let dz_squared: f64 = dz * dz
+    let xy_squared: f64 = dx_squared + dy_squared
+    return xy_squared + dz_squared
+}
+
+function neighbor_add_extended(first: i32, candidate: i32) -> bool {
+    if candidate == first { return true }
+    let first_type: i32 = node[first].tipus
+    let candidate_type: i32 = node[candidate].tipus
+    if first_type < 3 and ((first_type == 1 and candidate_type == 2) or (first_type == 2 and candidate_type == 1)) { return true }
+    let squared: f64 = node_distance_squared(candidate, first)
+    let mut limit: f64 = node[first].add + node[candidate].add
+    if first_type < 3 {
+        if candidate_type < 3 and first_type == candidate_type {
+            limit = (ROOT_TWO * node[first].add) + (ROOT_TWO * node[candidate].add)
+        } else {
+            limit = (ROOT_TWO * node[first].add) + node[candidate].add
+        }
+    } elif first_type >= 3 and candidate_type < 3 {
+        limit = node[first].add + (ROOT_TWO * node[candidate].add)
+    }
+    if squared <= limit * limit {
+        nneigh[first] = nneigh[first] + 1
+        if nneigh[first] > mnn_dynam { neighbor_error = 7; return false }
+        let index: i32 = neighbor_index(first, nneigh[first])
+        neigh[index] = candidate
+        dneigh[index] = sqrt(squared)
+    }
+    return true
+}
+
+function neighbor_add_legacy_extended(first: i32, candidate: i32, paired: i32, max_length: f64) -> bool {
+    if candidate == first or candidate == paired { return true }
+    let first_type: i32 = node[first].tipus
+    let candidate_type: i32 = node[candidate].tipus
+    if ffu[17] == 0 and ((first_type == 1 and candidate_type == 2) or (first_type == 2 and candidate_type == 1)) { return true }
+    let distance_squared: f64 = node_distance_squared(first, candidate)
+    let distance: f64 = sqrt(distance_squared)
+    let mut limit: f64 = node[first].add + node[candidate].add
+    if first_type >= 3 {
+        if candidate_type < 3 { limit = ROOT_TWO * limit }
+    } else {
+        limit = ROOT_TWO * limit
+        if first_type == candidate_type and limit < max_length { limit = max_length }
+    }
+    if distance <= limit {
+        nneigh[first] = nneigh[first] + 1
+        if nneigh[first] > mnn_dynam { neighbor_error = 7; return false }
+        let index: i32 = neighbor_index(first, nneigh[first])
+        neigh[index] = candidate
+        dneigh[index] = distance
+    }
+    return true
+}
+
+function neighbor_scan_extended_box(first: i32, x: i32, y: i32, z: i32) -> bool {
+    let mut candidate: i32 = box_head_at(box_index(x, y, z))
+    while candidate != 0 {
+        if neighbor_add_extended(first, candidate) == false { return false }
+        candidate = list[candidate]
+    }
+    return true
+}
+
+function neighbor_add_triang_edge(first: i32, second: i32, max_neighbors: i32) -> bool {
+    let mut slot: i32 = 1
+    while slot <= nneigh[first] {
+        if neigh[neighbor_index(first, slot)] == second { return true }
+        slot = slot + 1
+    }
+    if nneigh[first] >= max_neighbors or nneigh[second] >= max_neighbors { neighbor_error = 7; return false }
+    if grow_neighbor_buffers(nneigh[first] + 1) == false { return false }
+    if grow_neighbor_buffers(nneigh[second] + 1) == false { return false }
+    let distance: f64 = sqrt(node_distance_squared(first, second))
+    nneigh[first] = nneigh[first] + 1
+    let first_index: i32 = neighbor_index(first, nneigh[first])
+    neigh[first_index] = second; dneigh[first_index] = distance
+    nneigh[second] = nneigh[second] + 1
+    let second_index: i32 = neighbor_index(second, nneigh[second])
+    neigh[second_index] = first; dneigh[second_index] = distance
+    return true
+}
+
+function neighbor_build_triang_nogabriel() -> bool {
+    triangulation_warning = 0
+    if prepare_neighbor_box_grid() == false { return false }
+    let range: i32 = round(rdiffmax * urv) as i32
+    let width: i32 = (2 * range) + 1
+    mnn_dynam = mnn_dyn * width * width * width
+    if mnn_dynam < 1 { mnn_dynam = 1 }
+    if prepare_neighbor_table(mnn_dynam) == false { return false }
+    let mut node_id: i32 = 1
+    while node_id <= nd { nneigh[node_id] = 0; node_id = node_id + 1 }
+    omnn = 0
+    triang_last_ivv = 0
+    if delaunay_initialize() == false { neighbor_error = 20 + delaunay_error(); delaunay_release(); return false }
+    if delaunay_build() == false {
+        triangulation_warning = delaunay_error()
+        delaunay_release()
+        # Rebuild every neighbor row after a geometric failure. The failed
+        # triangulation can leave an incomplete face table behind.
+        return neighbor_build_old_box()
+    }
+    let mut face: i32 = 1
+    let total_faces: i32 = delaunay_face_count()
+    let mut last_ivv: i32 = 0
+    while face <= total_faces {
+        let a_local: i32 = delaunay_face_vertex(face, 1)
+        let b_local: i32 = delaunay_face_vertex(face, 2)
+        let c_local: i32 = delaunay_face_vertex(face, 3)
+        if a_local > 0 and b_local > 0 and c_local > 0 {
+            let a: i32 = delaunay_map_at(a_local)
+            let b: i32 = delaunay_map_at(b_local)
+            let c: i32 = delaunay_map_at(c_local)
+            let mut local_count: i32 = nneigh[a]
+            let mut found_ab: bool = false
+            let mut scan: i32 = 1
+            while scan <= nneigh[a] { if neigh[neighbor_index(a, scan)] == b { found_ab = true }; scan = scan + 1 }
+            if found_ab == false { if local_count == 0 { local_count = 1 } else { local_count = local_count + 1 } }
+            let mut found_ac: bool = false
+            scan = 1
+            while scan <= nneigh[a] { if neigh[neighbor_index(a, scan)] == c { found_ac = true }; scan = scan + 1 }
+            if found_ac == false { local_count = local_count + 1 }
+            last_ivv = local_count
+            if neighbor_add_triang_edge(a, b, mnn_dynam) == false { delaunay_release(); return false }
+            if neighbor_add_triang_edge(a, c, mnn_dynam) == false { delaunay_release(); return false }
+            if neighbor_add_triang_edge(b, c, mnn_dynam) == false { delaunay_release(); return false }
+        }
+        face = face + 1
+    }
+    triang_last_ivv = last_ivv
+    node_id = 1
+    while node_id <= nd {
+        if nneigh[node_id] > omnn { omnn = nneigh[node_id] }
+        node_id = node_id + 1
+    }
+    delaunay_release()
+    return true
+}
+
+function neighbor_screen_gabriel(legacy: bool) -> bool {
+    let mut i: i32 = 1
+    while i <= nd {
+        let mut j: i32 = 1
+        while j < nneigh[i] {
+            let mut best_distance: f64 = dneigh[neighbor_index(i, j)]
+            let mut best_slot: i32 = 0
+            let mut k: i32 = j + 1
+            while k <= nneigh[i] {
+                let candidate_distance: f64 = dneigh[neighbor_index(i, k)]
+                if best_distance > candidate_distance { best_slot = k; best_distance = candidate_distance }
+                k = k + 1
+            }
+            if best_slot != 0 {
+                let best_id: i32 = neigh[neighbor_index(i, best_slot)]
+                let current_id: i32 = neigh[neighbor_index(i, j)]
+                let current_distance: f64 = dneigh[neighbor_index(i, j)]
+                neigh[neighbor_index(i, best_slot)] = current_id
+                dneigh[neighbor_index(i, best_slot)] = current_distance
+                neigh[neighbor_index(i, j)] = best_id
+                dneigh[neighbor_index(i, j)] = best_distance
+            }
+            j = j + 1
+        }
+        let mut removed: i32 = 0
+        j = nneigh[i]
+        while j >= 1 {
+            let neighbor: i32 = neigh[neighbor_index(i, j)]
+            let protected_neighbor: i32 = if legacy and ffu[8] == 0 { node[i].altre } else { triang_last_ivv }
+            if neighbor != protected_neighbor {
+                let radius: f64 = dneigh[neighbor_index(i, j)] * 0.5 * screen_radius
+                let center_x: f64 = (node[i].x + node[neighbor].x) * 0.5
+                let center_y: f64 = (node[i].y + node[neighbor].y) * 0.5
+                let center_z: f64 = (node[i].z + node[neighbor].z) * 0.5
+                let mut candidate_slot: i32 = j - 1
+                let mut erase: bool = false
+                while candidate_slot >= 1 and erase == false {
+                    let candidate: i32 = neigh[neighbor_index(i, candidate_slot)]
+                    let dx: f64 = center_x - node[candidate].x
+                    let dy: f64 = center_y - node[candidate].y
+                    let dz: f64 = center_z - node[candidate].z
+                    let dx_squared: f64 = dx * dx
+                    let dy_squared: f64 = dy * dy
+                    let dz_squared: f64 = dz * dz
+                    let xy_squared: f64 = dx_squared + dy_squared
+                    let distance: f64 = sqrt(xy_squared + dz_squared)
+                    if legacy { erase = distance - radius < 2.2204460492503131e-15 }
+                    else { erase = distance < radius }
+                    candidate_slot = candidate_slot - 1
+                }
+                if erase {
+                    let end: i32 = nneigh[i] - removed
+                    let mut shift: i32 = j
+                    while shift < end {
+                        neigh[neighbor_index(i, shift)] = neigh[neighbor_index(i, shift + 1)]
+                        dneigh[neighbor_index(i, shift)] = dneigh[neighbor_index(i, shift + 1)]
+                        shift = shift + 1
+                    }
+                    neigh[neighbor_index(i, end)] = 0
+                    dneigh[neighbor_index(i, end)] = 0.0
+                    removed = removed + 1
+                }
+            }
+            j = j - 1
+        }
+        nneigh[i] = nneigh[i] - removed
+        i = i + 1
+    }
+    omnn = 0; i = 1
+    while i <= nd { if nneigh[i] > omnn { omnn = nneigh[i] }; i = i + 1 }
+    return true
+}
+
+function prepare_neighbor_box_grid() -> bool {
+    let mut largest_radius: f64 = 0.0
+    let mut largest_displacement: f64 = 0.0
+    let mut farthest: f64 = 0.0
+    let mut i: i32 = 1
+    iextre = 1
+    while i <= nd {
+        if node[i].add > largest_radius { largest_radius = node[i].add }
+        if node[i].dmo > largest_displacement { largest_displacement = node[i].dmo }
+        let distance: f64 = sqrt((node[i].x * node[i].x) + (node[i].y * node[i].y) + (node[i].z * node[i].z))
+        if distance > farthest { farthest = distance; iextre = i }
+        i = i + 1
+    }
+    extre = farthest
+    maxadd = largest_radius
+    if maxadd <= 0.0 { neighbor_error = 3; return false }
+    let extended: bool = ffu[23] != 0
+    if extended and ffu[9] == 0 and ffu[24] == 0 { neighbor_error = 9; return false }
+    if extended and ffu[9] == 0 {
+        rv = 2.0 * maxadd
+        urv = 1.0 / ((ROOT_TWO * rv) + 1.0e-3)
+    } else {
+        rv = (2.0 * maxadd) + 1.0e-3
+        urv = 1.0 / (2.0 * maxadd)
+    }
+    nboxes = (round(farthest * urv) as i32) + ((largest_displacement + dmax) as i32) + (if extended and ffu[9] == 0 { 2 } else { 1 })
+    if nboxes < 1 { nboxes = 1 }
+    box_side = (2 * nboxes) + 1
+    let total_boxes: i64 = box_side as i64 * box_side as i64 * box_side as i64
+    if prepare_box_buffers(total_boxes) == false { return false }
+    mnn_dyn = 0
+    i = 1
+    while i <= nd {
+        let bx: i32 = round(node[i].x * urv) as i32
+        let by: i32 = round(node[i].y * urv) as i32
+        let bz: i32 = round(node[i].z * urv) as i32
+        if bx < -nboxes or bx > nboxes or by < -nboxes or by > nboxes or bz < -nboxes or bz > nboxes { neighbor_error = 5; return false }
+        let slot: i32 = box_index(bx, by, bz)
+        let occupancy: i32 = box_insert(i, slot)
+        node_box_slots[i] = slot
+        if occupancy > mnn_dyn { mnn_dyn = occupancy }
+        i = i + 1
+    }
+    box_grid_node_count = nd
+    rdiffmax = (2.0 * maxadd) * dmax
+    let max_range: f64 = if rdiffmax > (2.0 * maxadd) { rdiffmax } else { 2.0 * maxadd }
+    let max_box_offset: i32 = round(max_range * urv) as i32
+    let box_width: i32 = (2 * max_box_offset) + 1
+    mnn_dynam = if extended and ffu[9] == 0 { mnn_dyn * 27 } else { mnn_dyn * box_width * box_width * box_width }
+    if mnn_dynam < 1 { mnn_dynam = 1 }
+    return true
+}
+
+function neighbor_build_old_box() -> bool {
+    if prepare_neighbor_box_grid() == false { return false }
+    let extended: bool = ffu[23] != 0
+    let mut i: i32 = 1
+    if prepare_neighbor_table(mnn_dynam) == false { return false }
+    omnn = 0
+    i = 1
+    while i <= nd {
+        nneigh[i] = 0
+        if extended {
+            let xbin: i32 = round(node[i].x * urv) as i32
+            let ybin: i32 = round(node[i].y * urv) as i32
+            let zbin: i32 = round(node[i].z * urv) as i32
+            if ffu[9] != 0 {
+                let own_range: f64 = if rdiffmax > 2.0 * node[i].add { rdiffmax } else { 2.0 * node[i].add }
+                let offset: i32 = round(own_range * urv) as i32
+                let paired: i32 = node[i].altre
+                if node[i].tipus < 3 and paired >= 1 and paired <= nd {
+                    nneigh[i] = 1
+                    let pair_index: i32 = neighbor_index(i, 1)
+                    neigh[pair_index] = paired
+                    dneigh[pair_index] = sqrt(node_distance_squared(i, paired))
+                }
+                let max_length: f64 = 2.0 * maxadd * maxadd
+                let mut z_offset: i32 = -offset
+                while z_offset <= offset {
+                    let mut y_offset: i32 = -offset
+                    while y_offset <= offset {
+                        let mut x_offset: i32 = -offset
+                        while x_offset <= offset {
+                            let mut candidate: i32 = box_head_at(box_index(xbin + x_offset, ybin + y_offset, zbin + z_offset))
+                            while candidate != 0 {
+                                if neighbor_add_legacy_extended(i, candidate, paired, max_length) == false { return false }
+                                candidate = list[candidate]
+                            }
+                            x_offset = x_offset + 1
+                        }
+                        y_offset = y_offset + 1
+                    }
+                    z_offset = z_offset + 1
+                }
+                if nneigh[i] > omnn { omnn = nneigh[i] }
+                i = i + 1
+                continue
+            }
+            let mut zi: i32 = -1
+            while zi <= 1 {
+                if zi != 0 {
+                    let mut yi: i32 = -1
+                    while yi <= 1 {
+                        let mut xi: i32 = -1
+                        while xi <= 1 {
+                            if neighbor_scan_extended_box(i, xbin + xi, ybin + yi, zbin + zi) == false { return false }
+                            xi = xi + 1
+                        }
+                        yi = yi + 1
+                    }
+                }
+                zi = zi + 2
+            }
+            let mut yi: i32 = -1
+            while yi <= 1 {
+                if yi != 0 {
+                    let mut xi: i32 = -1
+                    while xi <= 1 {
+                        if neighbor_scan_extended_box(i, xbin + xi, ybin + yi, zbin) == false { return false }
+                        xi = xi + 1
+                    }
+                }
+                yi = yi + 2
+            }
+            if neighbor_scan_extended_box(i, xbin - 1, ybin, zbin) == false { return false }
+            if neighbor_scan_extended_box(i, xbin + 1, ybin, zbin) == false { return false }
+            if neighbor_scan_extended_box(i, xbin, ybin, zbin) == false { return false }
+            if nneigh[i] > omnn { omnn = nneigh[i] }
+            i = i + 1
+            continue
+        }
+        let own_range: f64 = if rdiffmax > (2.0 * node[i].add) { rdiffmax } else { 2.0 * node[i].add }
+        let offset: i32 = round(own_range * urv) as i32
+        let ivv: i32 = node[i].altre
+        if node[i].tipus < 3 and ivv >= 1 and ivv <= nd {
+            nneigh[i] = 1
+            neigh[neighbor_index(i, 1)] = ivv
+            dneigh[neighbor_index(i, 1)] = sqrt(node_distance_squared(ivv, i))
+        }
+        let zbin: i32 = round(node[i].z * urv) as i32
+        let ybin: i32 = round(node[i].y * urv) as i32
+        let xbin: i32 = round(node[i].x * urv) as i32
+        let mut z_offset: i32 = -offset
+        while z_offset <= offset {
+            let mut y_offset: i32 = -offset
+            while y_offset <= offset {
+                let mut x_offset: i32 = -offset
+                while x_offset <= offset {
+                    let mut candidate: i32 = box_head_at(box_index(xbin + x_offset, ybin + y_offset, zbin + z_offset))
+                    while candidate != 0 {
+                        let crosses_epithelium: bool = (node[candidate].tipus == 1 and node[i].tipus == 2) or (node[candidate].tipus == 2 and node[i].tipus == 1)
+                        if candidate != i and candidate != ivv and (ffu[17] != 0 or crosses_epithelium == false) {
+                            let distance_squared: f64 = node_distance_squared(candidate, i)
+                            let distance: f64 = sqrt(distance_squared)
+                            if distance <= node[i].add + node[candidate].add {
+                                nneigh[i] = nneigh[i] + 1
+                                if nneigh[i] > mnn_dynam { neighbor_error = 7; return false }
+                                let nidx: i32 = neighbor_index(i, nneigh[i])
+                                neigh[nidx] = candidate
+                                dneigh[nidx] = distance
+                            }
+                        }
+                        candidate = list[candidate]
+                    }
+                    x_offset = x_offset + 1
+                }
+                y_offset = y_offset + 1
+            }
+            z_offset = z_offset + 1
+        }
+        if nneigh[i] > omnn { omnn = nneigh[i] }
+        i = i + 1
+    }
+    return true
+}
+
+# Refresh the moved node's row from the current box grid. This mirrors the
+# single-node rebuild used by the energy based random movement routine.
+function neighbor_build_node(node_id: i32) -> bool {
+    neighbor_error = 0
+    neighbor_incremental_node = 0
+    if node_id < 1 or node_id > nd or nd <= 0 { neighbor_error = 1; return false }
+    let previous_rv: f64 = rv
+    let previous_nboxes: i32 = nboxes
+    let previous_box_side: i32 = box_side
+    let extended: bool = ffu[23] != 0
+    if extended and ffu[9] == 0 and ffu[24] == 0 { neighbor_error = 9; return false }
+    let mut largest_radius: f64 = node_bounds_largest_radius
+    let mut largest_displacement: f64 = node_bounds_largest_displacement
+    let mut largest_equilibrium: f64 = node_bounds_largest_equilibrium
+    let mut farthest: f64 = extre
+    let mut i: i32 = 1
+    if node_bounds_cache_valid == false {
+        largest_radius = 0.0
+        largest_displacement = 0.0
+        largest_equilibrium = 0.0
+        farthest = 0.0
+        iextre = 1
+        i = 1
+        while i <= nd {
+            if node[i].add > largest_radius { largest_radius = node[i].add }
+            if node[i].dmo > largest_displacement { largest_displacement = node[i].dmo }
+            if node[i].eqs > largest_equilibrium { largest_equilibrium = node[i].eqs }
+            let distance: f64 = sqrt((node[i].x * node[i].x) + (node[i].y * node[i].y) + (node[i].z * node[i].z))
+            if distance > farthest { farthest = distance; iextre = i }
+            i = i + 1
+        }
+        node_bounds_largest_radius = largest_radius
+        node_bounds_largest_displacement = largest_displacement
+        node_bounds_largest_equilibrium = largest_equilibrium
+        node_bounds_cache_valid = true
+    } else {
+        if node_id == iextre {
+            farthest = 0.0
+            iextre = 1
+            i = 1
+            while i <= nd {
+                let distance: f64 = sqrt((node[i].x * node[i].x) + (node[i].y * node[i].y) + (node[i].z * node[i].z))
+                if distance > farthest { farthest = distance; iextre = i }
+                i = i + 1
+            }
+        } else {
+            let moved_distance: f64 = sqrt((node[node_id].x * node[node_id].x) + (node[node_id].y * node[node_id].y) + (node[node_id].z * node[node_id].z))
+            if moved_distance > farthest { farthest = moved_distance; iextre = node_id }
+        }
+    }
+    if largest_radius <= 0.0 { neighbor_error = 3; return false }
+    maxadd = largest_radius
+    extre = farthest
+    let interaction_length: f64 = sqrt((2.0 * largest_equilibrium) * (2.0 * largest_equilibrium) + 2.0 * largest_radius * largest_radius)
+    if extended and ffu[9] == 0 { rv = (ROOT_TWO * 2.0 * largest_radius) + 1.0e-3 }
+    else { rv = if (2.0 * largest_radius) > interaction_length { 2.0 * largest_radius } else { interaction_length } }
+    urv = 1.0 / rv
+    let required_boxes: i32 = (round(farthest * urv) as i32) + ((largest_displacement + dmax) as i32) + 2
+    let new_nboxes: i32 = if required_boxes > 1 { required_boxes } else { 1 }
+    let new_box_side: i32 = 2 * new_nboxes + 1
+    let total_boxes: i64 = new_box_side as i64 * new_box_side as i64 * new_box_side as i64
+    let reuse_box_grid: bool = box_generation > 0 and box_grid_node_count == nd and
+        node_box_slots != null and node_box_slots_capacity > nd and
+        previous_rv == rv and previous_nboxes == new_nboxes and previous_box_side == new_box_side
+    nboxes = new_nboxes
+    box_side = new_box_side
+    if reuse_box_grid {
+        let bx: i32 = round(node[node_id].x * urv) as i32
+        let by: i32 = round(node[node_id].y * urv) as i32
+        let bz: i32 = round(node[node_id].z * urv) as i32
+        if bx < -nboxes or bx > nboxes or by < -nboxes or by > nboxes or bz < -nboxes or bz > nboxes { neighbor_error = 5; return false }
+        let slot: i32 = box_index(bx, by, bz)
+        if move_node_box(node_id, slot) == false { return false }
+    } else {
+        if prepare_box_buffers(total_boxes) == false { return false }
+        mnn_dyn = 0
+        i = 1
+        while i <= nd {
+            let bx: i32 = round(node[i].x * urv) as i32
+            let by: i32 = round(node[i].y * urv) as i32
+            let bz: i32 = round(node[i].z * urv) as i32
+            if bx < -nboxes or bx > nboxes or by < -nboxes or by > nboxes or bz < -nboxes or bz > nboxes { neighbor_error = 5; return false }
+            let slot: i32 = box_index(bx, by, bz)
+            let occupancy: i32 = box_insert(i, slot)
+            node_box_slots[i] = slot
+            if occupancy > mnn_dyn { mnn_dyn = occupancy }
+            i = i + 1
+        }
+        box_grid_node_count = nd
+    }
+    let moved_range: f64 = if rdiffmax < 2.0 * node[node_id].add { 2.0 * node[node_id].add } else { rdiffmax }
+    let neighbor_range: i32 = if extended and ffu[9] == 0 { 1 } else { round(moved_range * urv) as i32 }
+    let box_width: i32 = 2 * neighbor_range + 1
+    mnn_dynam = mnn_dyn * box_width * box_width * box_width
+    if mnn_dynam < 1 { mnn_dynam = 1 }
+
+    let moved_type: i32 = node[node_id].tipus
+    let other_epithelial_layer: i32 = node[node_id].altre
+    if ffu[9] != 0 or ffu[8] != 0 {
+        let mut old_slot: i32 = 1
+        while old_slot <= nneigh[node_id] {
+            let other: i32 = neigh[neighbor_index(node_id, old_slot)]
+            if other >= 1 and other <= nd {
+                let mut reciprocal: i32 = 1
+                while reciprocal <= nneigh[other] {
+                    if neigh[neighbor_index(other, reciprocal)] == node_id {
+                        let mut shift: i32 = reciprocal
+                        while shift < nneigh[other] {
+                            neigh[neighbor_index(other, shift)] = neigh[neighbor_index(other, shift + 1)]
+                            dneigh[neighbor_index(other, shift)] = dneigh[neighbor_index(other, shift + 1)]
+                            shift = shift + 1
+                        }
+                        nneigh[other] = nneigh[other] - 1
+                        neigh[neighbor_index(other, nneigh[other] + 1)] = 0
+                        dneigh[neighbor_index(other, nneigh[other] + 1)] = 0.0
+                        break
+                    }
+                    reciprocal = reciprocal + 1
+                }
+            }
+            old_slot = old_slot + 1
+        }
+    }
+    nneigh[node_id] = 0
+    if moved_type < 3 and other_epithelial_layer >= 1 and other_epithelial_layer <= nd {
+        nneigh[node_id] = 1
+        if grow_neighbor_buffers(1) == false { return false }
+        let index: i32 = neighbor_index(node_id, 1)
+        neigh[index] = other_epithelial_layer
+        let dx: f64 = node[other_epithelial_layer].x - node[node_id].x
+        let dy: f64 = node[other_epithelial_layer].y - node[node_id].y
+        let dz: f64 = node[other_epithelial_layer].z - node[node_id].z
+        dneigh[index] = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+    }
+    let xbin: i32 = round(node[node_id].x * urv) as i32
+    let ybin: i32 = round(node[node_id].y * urv) as i32
+    let zbin: i32 = round(node[node_id].z * urv) as i32
+    let mut z_offset: i32 = -neighbor_range
+    while z_offset <= neighbor_range {
+        let mut y_offset: i32 = -neighbor_range
+        while y_offset <= neighbor_range {
+            let mut x_offset: i32 = -neighbor_range
+            while x_offset <= neighbor_range {
+                let mut candidate: i32 = box_head_at(box_index(xbin + x_offset, ybin + y_offset, zbin + z_offset))
+                while candidate != 0 {
+                    let crosses_epithelium: bool = (node[candidate].tipus == 1 and moved_type == 2) or (node[candidate].tipus == 2 and moved_type == 1)
+                    if candidate != node_id and candidate != other_epithelial_layer and (ffu[17] != 0 or crosses_epithelium == false) {
+                        let dx: f64 = node[candidate].x - node[node_id].x
+                        let dy: f64 = node[candidate].y - node[node_id].y
+                        let dz: f64 = node[candidate].z - node[node_id].z
+                        let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+                        let combined_radius: f64 = node[node_id].add + node[candidate].add
+                        let mut within_range: bool = false
+                        if extended {
+                            let mut extended_limit: f64 = combined_radius
+                            if moved_type < 3 or node[candidate].tipus < 3 { extended_limit = ROOT_TWO * combined_radius }
+                            if moved_type < 3 and node[candidate].tipus < 3 and moved_type == node[candidate].tipus {
+                                let max_length: f64 = if ffu[9] != 0 { interaction_length } else { 2.0 * largest_radius * largest_radius }
+                                if extended_limit < max_length { extended_limit = max_length }
+                            }
+                            within_range = distance <= extended_limit
+                        } elif moved_type >= 3 {
+                            if node[candidate].tipus >= 3 { within_range = distance <= combined_radius }
+                            else { within_range = distance <= sqrt(2.0 * (combined_radius * combined_radius)) }
+                        } else {
+                            let epithelial_range: f64 = sqrt(2.0 * (combined_radius * combined_radius))
+                            if node[candidate].tipus == moved_type {
+                                let limit: f64 = if epithelial_range < interaction_length { interaction_length } else { epithelial_range }
+                                within_range = distance <= limit
+                            } elif ffu[17] != 0 { within_range = distance <= epithelial_range }
+                        }
+                        if within_range {
+                            let next_count: i32 = nneigh[node_id] + 1
+                            if grow_neighbor_buffers(next_count) == false { return false }
+                            nneigh[node_id] = next_count
+                            let index: i32 = neighbor_index(node_id, next_count)
+                            neigh[index] = candidate
+                            dneigh[index] = distance
+                        }
+                    }
+                    candidate = list[candidate]
+                }
+                x_offset = x_offset + 1
+            }
+            y_offset = y_offset + 1
+        }
+        z_offset = z_offset + 1
+    }
+    if ffu[2] != 0 or ffu[8] != 0 {
+        let mut sort_slot: i32 = 1
+        while sort_slot < nneigh[node_id] {
+            let mut shortest_distance: f64 = dneigh[neighbor_index(node_id, sort_slot)]
+            let mut shortest_slot: i32 = 0
+            let mut candidate_slot: i32 = sort_slot + 1
+            while candidate_slot <= nneigh[node_id] {
+                let candidate_distance: f64 = dneigh[neighbor_index(node_id, candidate_slot)]
+                if shortest_distance > candidate_distance { shortest_distance = candidate_distance; shortest_slot = candidate_slot }
+                candidate_slot = candidate_slot + 1
+            }
+            if shortest_slot != 0 {
+                let first_index: i32 = neighbor_index(node_id, sort_slot)
+                let second_index: i32 = neighbor_index(node_id, shortest_slot)
+                let old_id: i32 = neigh[first_index]
+                let old_distance: f64 = dneigh[first_index]
+                neigh[first_index] = neigh[second_index]; dneigh[first_index] = dneigh[second_index]
+                neigh[second_index] = old_id; dneigh[second_index] = old_distance
+            }
+            sort_slot = sort_slot + 1
+        }
+        let screen_scale: f64 = if ffu[8] != 0 { 0.75 } else { screen_radius }
+        if ensure_screen_removed_marks(nd + 1) == false { return false }
+        if screen_removed_generation >= 2147483646 {
+            memset(screen_removed_marks as ptr<void>, 0, screen_removed_capacity as i64 * sizeof<i32>())
+            screen_removed_generation = 1
+        } else {
+            screen_removed_generation = screen_removed_generation + 1
+        }
+        let removed_epoch: i32 = screen_removed_generation
+        let mut remove_count: i32 = 0
+        let mut screen_slot: i32 = nneigh[node_id]
+        while screen_slot >= 1 {
+            let neighbor: i32 = neigh[neighbor_index(node_id, screen_slot)]
+            if neighbor != other_epithelial_layer {
+                let radius: f64 = dneigh[neighbor_index(node_id, screen_slot)] * 0.5 * screen_scale
+                let center_x: f64 = (node[node_id].x + node[neighbor].x) * 0.5
+                let center_y: f64 = (node[node_id].y + node[neighbor].y) * 0.5
+                let center_z: f64 = (node[node_id].z + node[neighbor].z) * 0.5
+                let mut candidate_slot: i32 = screen_slot - 1
+                let mut erase: bool = false
+                while candidate_slot >= 1 and erase == false {
+                    let candidate: i32 = neigh[neighbor_index(node_id, candidate_slot)]
+                    let dx: f64 = center_x - node[candidate].x
+                    let dy: f64 = center_y - node[candidate].y
+                    let dz: f64 = center_z - node[candidate].z
+                    let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+                    erase = distance - radius < 2.2204460492503131e-15
+                    candidate_slot = candidate_slot - 1
+                }
+                if erase { screen_removed_marks[neighbor] = removed_epoch; remove_count = remove_count + 1 }
+            }
+            screen_slot = screen_slot - 1
+        }
+        if remove_count > 0 {
+            let mut compact_slot: i32 = 1
+            let mut write_slot: i32 = 1
+            while compact_slot <= nneigh[node_id] {
+                let neighbor: i32 = neigh[neighbor_index(node_id, compact_slot)]
+                let drop_neighbor: bool = screen_removed_marks[neighbor] == removed_epoch
+                if drop_neighbor == false {
+                    neigh[neighbor_index(node_id, write_slot)] = neighbor
+                    dneigh[neighbor_index(node_id, write_slot)] = dneigh[neighbor_index(node_id, compact_slot)]
+                    write_slot = write_slot + 1
+                }
+                compact_slot = compact_slot + 1
+            }
+            while write_slot <= nneigh[node_id] { neigh[neighbor_index(node_id, write_slot)] = 0; dneigh[neighbor_index(node_id, write_slot)] = 0.0; write_slot = write_slot + 1 }
+            nneigh[node_id] = write_slot - remove_count - 1
+        }
+    }
+    if ffu[9] != 0 {
+        let mut reciprocal_slot: i32 = 1
+        while reciprocal_slot <= nneigh[node_id] {
+            let other: i32 = neigh[neighbor_index(node_id, reciprocal_slot)]
+            if grow_neighbor_buffers(nneigh[other] + 1) == false { return false }
+            nneigh[other] = nneigh[other] + 1
+            let reciprocal_index: i32 = neighbor_index(other, nneigh[other])
+            neigh[reciprocal_index] = node_id
+            dneigh[reciprocal_index] = dneigh[neighbor_index(node_id, reciprocal_slot)]
+            if nneigh[other] > omnn { omnn = nneigh[other] }
+            reciprocal_slot = reciprocal_slot + 1
+        }
+    }
+    if nneigh[node_id] > omnn { omnn = nneigh[node_id] }
+    if ffu[8] == 0 and ffu[9] == 0 { neighbor_incremental_node = node_id }
+    return true
+}
+
+function neighbor_build() -> bool {
+    neighbor_error = 0
+    neighbor_incremental_node = 0
+    neighbor_invalidate_node_bounds()
+    if nd <= 0 { neighbor_error = 1; return false }
+    if ffu[9] != 0 {
+        if ffu[8] != 0 {
+            if neighbor_build_triang_nogabriel() == false { return false }
+            if ffu[2] != 0 { return neighbor_screen_gabriel(true) }
+            return true
+        }
+        if neighbor_build_old_box() == false { return false }
+        if ffu[2] != 0 { return neighbor_screen_gabriel(true) }
+        return true
+    }
+    if ffu[8] != 0 {
+        if neighbor_build_triang_nogabriel() == false { return false }
+        if ffu[2] != 0 { return neighbor_screen_gabriel(false) }
+        return true
+    }
+    if ffu[2] != 0 { neighbor_error = 10; return false }
+    if ffu[23] != 0 { return neighbor_build_old_box() }
+    let mut largest_radius: f64 = 0.0
+    let mut largest_displacement: f64 = 0.0
+    let mut farthest: f64 = 0.0
+    iextre = 1
+    let mut i: i32 = 1
+    while i <= nd {
+        if node[i].add > largest_radius { largest_radius = node[i].add }
+        if node[i].dmo > largest_displacement { largest_displacement = node[i].dmo }
+        let distance: f64 = sqrt((node[i].x * node[i].x) + (node[i].y * node[i].y) + (node[i].z * node[i].z))
+        if distance > farthest { farthest = distance; iextre = i }
+        i = i + 1
+    }
+    extre = farthest
+    maxadd = largest_radius
+    rv = 2.0 * largest_radius
+    if rv <= 0.0 { neighbor_error = 3; return false }
+    urv = 1.0 / (rv + 1.0e-3)
+    let scaled_extent: f64 = farthest * urv
+    nboxes = (round(scaled_extent) as i32) + ((largest_displacement + dmax) as i32) + 2
+    if nboxes < 1 { nboxes = 1 }
+    box_side = 2 * nboxes + 1
+    let total_boxes: i64 = box_side as i64 * box_side as i64 * box_side as i64
+    if prepare_box_buffers(total_boxes) == false { return false }
+    mnn_dyn = 0
+    i = 1
+    while i <= nd {
+        let bx: i32 = (round(node[i].x * urv) as i32)
+        let by: i32 = (round(node[i].y * urv) as i32)
+        let bz: i32 = (round(node[i].z * urv) as i32)
+        if bx < -nboxes or bx > nboxes or by < -nboxes or by > nboxes or bz < -nboxes or bz > nboxes {
+            neighbor_error = 5
+            return false
+        }
+        let slot: i32 = box_index(bx, by, bz)
+        let occupancy: i32 = box_insert(i, slot)
+        node_box_slots[i] = slot
+        if occupancy > mnn_dyn { mnn_dyn = occupancy }
+        i = i + 1
+    }
+    box_grid_node_count = nd
+    mnn_dynam = mnn_dyn * 27
+    if mnn_dynam < 1 { mnn_dynam = 1 }
+    if prepare_neighbor_table(mnn_dynam) == false { return false }
+    omnn = 0
+    i = 1
+    while i <= nd {
+        nneigh[i] = 0
+        let zbin: i32 = round(node[i].z * urv) as i32
+        let ybin: i32 = round(node[i].y * urv) as i32
+        let xbin: i32 = round(node[i].x * urv) as i32
+        let mut z_offset: i32 = -1
+        while z_offset <= 1 {
+            let mut y_offset: i32 = -1
+            while y_offset <= 1 {
+                let mut x_offset: i32 = -1
+                while x_offset <= 1 {
+                    let chain: i32 = box_head_at(box_index(xbin + x_offset, ybin + y_offset, zbin + z_offset))
+                    let mut candidate: i32 = chain
+                    while candidate != 0 {
+                        let same_layer: bool = (node[candidate].tipus == 1 and node[i].tipus == 2) or (node[candidate].tipus == 2 and node[i].tipus == 1)
+                        if candidate != i and (ffu[17] != 0 or same_layer == false) {
+                            let distance_squared: f64 = node_distance_squared(candidate, i)
+                            let contact: f64 = node[candidate].add + node[i].add
+                            if distance_squared <= contact * contact {
+                                nneigh[i] = nneigh[i] + 1
+                                if nneigh[i] > mnn_dynam { neighbor_error = 7; return false }
+                                let nidx: i32 = neighbor_index(i, nneigh[i])
+                                neigh[nidx] = candidate
+                                dneigh[nidx] = sqrt(distance_squared)
+                            }
+                        }
+                        candidate = list[candidate]
+                    }
+                    x_offset = x_offset + 1
+                }
+                y_offset = y_offset + 1
+            }
+            z_offset = z_offset + 1
+        }
+        if nneigh[i] > omnn { omnn = nneigh[i] }
+        i = i + 1
+    }
+    return true
+}
+
+export boxes, list, box_counts, nboxes, box_side, neighbor_error, triangulation_warning, neighbor_clear_warning, triang_last_ivv, box_index, neighbor_box_head, neighbor_index, fill_co_griders, restore_neighbors, neighbor_build, neighbor_build_node, neighbor_build_old_box, neighbor_reset, neighbor_remove_node

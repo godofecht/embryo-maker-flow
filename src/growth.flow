@@ -1,0 +1,433 @@
+import embryo.general {
+    nd, ncels, cels, node, nodeo, fmeanl, mmae, min_comp, delta,
+    reqmin, ffu, node_capacity, resize_node_buffers, nda, ndepi, ndmes,
+    extre
+}
+import embryo.genetic {
+    ng, npag, whonpag, gex, agex, dgex, checkn, gene_effects,
+    gene_expression_index, gene_effect_index, gene_resize_nodes
+}
+import embryo.aleas { nvaloq, particions_esfera, partition_index }
+import embryo.neighboring { neigh, nneigh, neigh_ld, neighbor_index }
+import embryo.rng { rng_real }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+    function sqrt(x: f64) -> f64
+    function fabs(x: f64) -> f64
+}
+
+const PARAMETER_CELL_GROWTH: i32 = 36
+const GROWTH_EPSILOD: f64 = 0.0000011920928955078125
+
+let mut growth_error: i32 = 0
+
+function grow_capacity(required: i32) -> bool {
+    if required <= node_capacity { return true }
+    let old_capacity: i32 = node_capacity
+    let mut new_capacity: i32 = old_capacity
+    while new_capacity < required { new_capacity = new_capacity + 10 }
+    if gene_resize_nodes(old_capacity, new_capacity) == false { return false }
+    return resize_node_buffers(new_capacity)
+}
+
+function copy_gene_row(destination: i32, source: i32) -> void {
+    let mut gene_id: i32 = 0
+    while gene_id <= ng {
+        gex[gene_expression_index(destination, gene_id)] = gex[gene_expression_index(source, gene_id)]
+        agex[gene_expression_index(destination, gene_id)] = agex[gene_expression_index(source, gene_id)]
+        dgex[gene_expression_index(destination, gene_id)] = 0.0
+        gene_id = gene_id + 1
+    }
+    checkn[destination] = 0
+}
+
+function append_growth_nodes(cell_id: i32, count: i32) -> bool {
+    let old_nd: i32 = nd
+    let old_cell_count: i32 = cels[cell_id].nunodes
+    let parent: i32 = cels[cell_id].node[1]
+    let is_epithelial: bool = cels[cell_id].ctipus < 3
+    let needed: i32 = old_nd + count
+    if grow_capacity(needed) == false { growth_error = 4; return false }
+    nd = needed
+    if is_epithelial {
+        ndepi = ndepi + 2
+        let lower: i32 = old_nd + 1
+        let upper: i32 = old_nd + 2
+        let paired_parent: i32 = node[parent].altre
+        node[lower] = node[paired_parent]
+        nodeo[lower] = nodeo[paired_parent]
+        node[upper] = node[parent]
+        nodeo[upper] = nodeo[parent]
+        node[lower].x = 0.0; node[lower].y = 0.0; node[lower].z = 0.0
+        nodeo[lower].x = 0.0; nodeo[lower].y = 0.0; nodeo[lower].z = 0.0
+        node[upper].x = 0.0; node[upper].y = 0.0; node[upper].z = 0.0
+        nodeo[upper].x = 0.0; nodeo[upper].y = 0.0; nodeo[upper].z = 0.0
+        node[lower].icel = cell_id; node[upper].icel = cell_id
+        node[lower].marge = 1; node[upper].marge = 1
+        node[lower].altre = upper; node[upper].altre = lower
+        copy_gene_row(lower, paired_parent)
+        copy_gene_row(upper, parent)
+    } else {
+        ndmes = ndmes + 1
+        let new_node: i32 = old_nd + 1
+        node[new_node] = node[parent]
+        nodeo[new_node] = nodeo[parent]
+        node[new_node].x = 0.0; node[new_node].y = 0.0; node[new_node].z = 0.0
+        nodeo[new_node].x = 0.0; nodeo[new_node].y = 0.0; nodeo[new_node].z = 0.0
+        node[new_node].icel = cell_id; node[new_node].altre = 0
+        node[new_node].marge = 1; nodeo[new_node].marge = 1
+        copy_gene_row(new_node, parent)
+    }
+    let mut slot: i32 = 1
+    while slot <= count {
+        let new_node: i32 = old_nd + slot
+        nneigh[new_node] = 0
+        let mut neighbor_slot: i32 = 0
+        while neighbor_slot < neigh_ld {
+            neigh[neighbor_index(new_node, neighbor_slot)] = 0
+            neighbor_slot = neighbor_slot + 1
+        }
+        fmeanl[new_node] = 0.0
+        slot = slot + 1
+    }
+    let old_members: ptr<i32> = cels[cell_id].node
+    let mut capacity: i32 = cels[cell_id].nodela
+    if is_epithelial {
+        if old_cell_count + 4 >= capacity { capacity = old_cell_count + 20 }
+    } else {
+        if old_cell_count + 2 >= capacity { capacity = old_cell_count + 10 }
+    }
+    let new_members: ptr<i32> = calloc((capacity + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if new_members == null { growth_error = 5; return false }
+    slot = 1
+    while slot <= old_cell_count {
+        new_members[slot] = old_members[slot]
+        slot = slot + 1
+    }
+    slot = 1
+    while slot <= count {
+        new_members[old_cell_count + slot] = old_nd + slot
+        slot = slot + 1
+    }
+    if old_members != null { free(old_members as ptr<void>) }
+    cels[cell_id].node = new_members
+    cels[cell_id].nodela = capacity
+    cels[cell_id].nunodes = old_cell_count + count
+    return true
+}
+
+function place_growth_nodes(cell_id: i32, old_cell_count: i32, polar: bool) -> bool {
+    let epithelial: bool = cels[cell_id].ctipus < 3
+    if epithelial and (old_cell_count == 2 or old_cell_count == 4) {
+        let mut chosen_ellipse: i32 = 1
+        if old_cell_count == 4 {
+            chosen_ellipse = (rng_real() * 4.0) as i32 + 1
+        }
+        let mut upper: i32 = cels[cell_id].node[1]
+        let mut lower: i32 = cels[cell_id].node[2]
+        if old_cell_count == 4 {
+            upper = cels[cell_id].node[chosen_ellipse]
+            lower = node[upper].altre
+            if node[upper].tipus != 1 {
+                let swap: i32 = upper
+                upper = lower
+                lower = swap
+            }
+        } elif node[upper].tipus != 1 {
+            upper = cels[cell_id].node[2]
+            lower = cels[cell_id].node[1]
+        } else {
+            lower = cels[cell_id].node[2]
+        }
+        let mut offset_x: f64 = cels[cell_id].polx * 0.0001
+        let mut offset_y: f64 = cels[cell_id].poly * 0.0001
+        let mut offset_z: f64 = cels[cell_id].polz * 0.0001
+        if polar == false {
+            if nvaloq <= 0 or particions_esfera == null { growth_error = 6; return false }
+            let partition: i32 = (rng_real() * nvaloq as f64) as i32 + 1
+            offset_x = particions_esfera[partition_index(partition, 1)] * 0.0001
+            offset_y = particions_esfera[partition_index(partition, 2)] * 0.0001
+            offset_z = particions_esfera[partition_index(partition, 3)] * 0.0001
+        }
+        node[nd - 1].x = node[upper].x + offset_x
+        node[nd - 1].y = node[upper].y + offset_y
+        node[nd - 1].z = node[upper].z + offset_z
+        node[nd].x = node[lower].x + offset_x
+        node[nd].y = node[lower].y + offset_y
+        node[nd].z = node[lower].z + offset_z
+        nodeo[nd - 1].x = node[nd - 1].x; nodeo[nd - 1].y = node[nd - 1].y; nodeo[nd - 1].z = node[nd - 1].z
+        nodeo[nd].x = node[nd].x; nodeo[nd].y = node[nd].y; nodeo[nd].z = node[nd].z
+        return true
+    }
+
+    if not epithelial and old_cell_count == 2 {
+        if nvaloq <= 0 or particions_esfera == null { growth_error = 6; return false }
+        let partition: i32 = (rng_real() * nvaloq as f64) as i32 + 1
+        node[nd].x = node[cels[cell_id].node[1]].x + particions_esfera[partition_index(partition, 1)] * 0.0001
+        node[nd].y = node[cels[cell_id].node[1]].y + particions_esfera[partition_index(partition, 2)] * 0.0001
+        node[nd].z = node[cels[cell_id].node[1]].z + particions_esfera[partition_index(partition, 3)] * 0.0001
+        nodeo[nd].x = node[nd].x; nodeo[nd].y = node[nd].y; nodeo[nd].z = node[nd].z
+        return true
+    }
+
+
+    let mut direction_x: f64 = 0.0
+    let mut direction_y: f64 = 0.0
+    let mut direction_z: f64 = 0.0
+    if polar {
+        let magnitude: f64 = sqrt((cels[cell_id].polx * cels[cell_id].polx) + (cels[cell_id].poly * cels[cell_id].poly) + (cels[cell_id].polz * cels[cell_id].polz))
+        if magnitude > 0.0 {
+            direction_x = cels[cell_id].polx / magnitude
+            direction_y = cels[cell_id].poly / magnitude
+            direction_z = cels[cell_id].polz / magnitude
+        }
+    } else {
+        if nvaloq <= 0 or particions_esfera == null { growth_error = 6; return false }
+        if nvaloq <= 0 or particions_esfera == null { growth_error = 6; return false }
+        let partition: i32 = (rng_real() * nvaloq as f64) as i32 + 1
+        direction_x = particions_esfera[partition_index(partition, 1)]
+        direction_y = particions_esfera[partition_index(partition, 2)]
+        direction_z = particions_esfera[partition_index(partition, 3)]
+    }
+    let center_x: f64 = cels[cell_id].cex
+    let center_y: f64 = cels[cell_id].cey
+    let center_z: f64 = cels[cell_id].cez
+    let mut best_projection: f64 = -1.0e10
+    let mut best_node: i32 = 0
+    let mut fallback_projection: f64 = -1.0e10
+    let mut fallback_node: i32 = 0
+    let mut search_limit: i32 = old_cell_count
+    if polar and epithelial { search_limit = old_cell_count - 1 }
+    let mut slot: i32 = 1
+    while slot <= search_limit {
+        let candidate: i32 = cels[cell_id].node[slot]
+        if node[candidate].tipus == 3 or (epithelial and node[candidate].tipus == 1) {
+            let mut dx: f64 = node[candidate].x - center_x
+            let mut dy: f64 = node[candidate].y - center_y
+            let mut dz: f64 = node[candidate].z - center_z
+            let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+            if distance > 0.0 {
+                if epithelial or polar {
+                    dx = dx / distance; dy = dy / distance; dz = dz / distance
+                } else {
+                    dx = dx * distance; dy = dy * distance; dz = dz * distance
+                }
+                let projection: f64 = (dx * direction_x) + (dy * direction_y) + (dz * direction_z)
+                if projection > fallback_projection { fallback_projection = projection; fallback_node = candidate }
+                if distance >= 0.01 and projection > best_projection { best_projection = projection; best_node = candidate }
+            }
+        }
+        slot = slot + 1
+    }
+    if best_node == 0 { best_node = fallback_node; best_projection = fallback_projection }
+    let mut target_x: f64 = center_x
+    let mut target_y: f64 = center_y
+    let mut target_z: f64 = center_z
+    if best_projection != 0.0 {
+        let distance_scale: f64 = if polar { 0.8 } else { best_projection * rng_real() }
+        if best_node != 0 {
+            target_x = center_x + distance_scale * (node[best_node].x - center_x)
+            target_y = center_y + distance_scale * (node[best_node].y - center_y)
+            target_z = center_z + distance_scale * (node[best_node].z - center_z)
+        }
+    }
+    if not epithelial {
+        node[nd].x = target_x; node[nd].y = target_y; node[nd].z = target_z
+        nodeo[nd].x = target_x; nodeo[nd].y = target_y; nodeo[nd].z = target_z
+        return true
+    }
+
+    node[nd - 1].x = target_x; node[nd - 1].y = target_y; node[nd - 1].z = target_z
+    let mut closest_a: i32 = 1
+    let mut closest_b: i32 = 1
+    let mut closest_c: i32 = 0
+    let mut distance_a: f64 = extre
+    let mut distance_b: f64 = extre
+    let mut distance_c: f64 = extre
+    slot = 1
+    while slot <= old_cell_count {
+        let candidate: i32 = cels[cell_id].node[slot]
+        if node[candidate].tipus == 1 {
+            let dx: f64 = target_x - node[candidate].x
+            let dy: f64 = target_y - node[candidate].y
+            let dz: f64 = target_z - node[candidate].z
+            let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+            if distance < distance_a {
+                if distance_a < distance_b {
+                    if distance_b < distance_c { distance_c = distance_b; closest_c = closest_b }
+                    distance_b = distance_a; closest_b = closest_a
+                }
+                distance_a = distance; closest_a = candidate
+            } elif distance < distance_b {
+                if distance_b < distance_c { distance_c = distance_b; closest_c = closest_b }
+                distance_b = distance; closest_b = candidate
+            } elif distance < distance_c {
+                distance_c = distance; closest_c = candidate
+            }
+        }
+        slot = slot + 1
+    }
+    closest_a = node[closest_a].altre
+    closest_b = node[closest_b].altre
+    closest_c = node[closest_c].altre
+    let apical_x: f64 = (node[closest_a].x - node[node[closest_a].altre].x) + (node[closest_b].x - node[node[closest_b].altre].x) + (node[closest_c].x - node[node[closest_c].altre].x)
+    let apical_y: f64 = (node[closest_a].y - node[node[closest_a].altre].y) + (node[closest_b].y - node[node[closest_b].altre].y) + (node[closest_c].y - node[node[closest_c].altre].y)
+    let apical_z: f64 = (node[closest_a].z - node[node[closest_a].altre].z) + (node[closest_b].z - node[node[closest_b].altre].z) + (node[closest_c].z - node[node[closest_c].altre].z)
+    node[nd].x = node[nd - 1].x + (apical_x * (1.0 / 3.0))
+    node[nd].y = node[nd - 1].y + (apical_y * (1.0 / 3.0))
+    node[nd].z = node[nd - 1].z + (apical_z * (1.0 / 3.0))
+    nodeo[nd - 1].x = node[nd - 1].x; nodeo[nd - 1].y = node[nd - 1].y; nodeo[nd - 1].z = node[nd - 1].z
+    nodeo[nd].x = node[nd].x; nodeo[nd].y = node[nd].y; nodeo[nd].z = node[nd].z
+    return true
+}
+
+function create_growth_nodes(cell_id: i32, amount: f64) -> bool {
+    if ffu[1] != 1 { return true }
+    let old_cell_count: i32 = cels[cell_id].nunodes
+    let epithelial: bool = cels[cell_id].ctipus < 3
+    let count: i32 = if epithelial { 2 } else { 1 }
+    if epithelial == false {
+        let legacy_node_draw: f64 = rng_real()
+        let selected_slot: i32 = (legacy_node_draw * old_cell_count as f64) as i32 + 1
+    }
+    let mut polar_total: f64 = 0.0
+    let mut polar_count: i32 = 0
+    let mut slot: i32 = 1
+    while slot <= old_cell_count {
+        let node_id: i32 = cels[cell_id].node[slot]
+        let mut gene_slot: i32 = 1
+        while gene_slot <= npag[44] {
+            let gene_id: i32 = whonpag[44 * (ng + 1) + gene_slot]
+            let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+            if expression > 0.0 {
+                if epithelial {
+                    polar_total = polar_total + gene_effects[gene_effect_index(gene_id, 44)] * expression
+                } else {
+                    polar_total = polar_total + gene_effects[gene_effect_index(gene_id, 44)]
+                }
+                polar_count = polar_count + 1
+            }
+            gene_slot = gene_slot + 1
+        }
+        slot = slot + 1
+    }
+    let polar_probability: f64 = if polar_count > 0 { polar_total / (polar_count as f32 as f64) } else { 0.0 }
+    let polar_draw: f64 = rng_real()
+    let use_polar: bool = polar_draw < polar_probability
+    if append_growth_nodes(cell_id, count) == false { return false }
+    if place_growth_nodes(cell_id, old_cell_count, use_polar) == false { return false }
+    let mut new_radius: f64 = amount
+    if epithelial {
+        if amount < 2.0 * reqmin { new_radius = reqmin }
+        elif amount > 4.0 * mmae { new_radius = 2.0 * mmae }
+        else { new_radius = amount * 0.5 }
+    } else {
+        if amount < reqmin { new_radius = reqmin }
+        elif amount > mmae { new_radius = mmae }
+    }
+    if epithelial {
+        node[nd - 1].grd = new_radius; nodeo[nd - 1].grd = new_radius
+        node[nd].grd = new_radius; nodeo[nd].grd = new_radius
+    } else {
+        node[nd].grd = new_radius; nodeo[nd].grd = new_radius
+    }
+    return true
+}
+
+function should_i_grow() -> bool {
+    growth_error = 0
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let node_count: i32 = cels[cell_id].nunodes
+        if node_count <= 0 { growth_error = 1; return false }
+        let mut compression: f64 = 0.0
+        let mut slot: i32 = 1
+        while slot <= node_count {
+            compression = compression + fmeanl[cels[cell_id].node[slot]]
+            slot = slot + 1
+        }
+        compression = compression / node_count as f64
+        if compression < 0.0 - GROWTH_EPSILOD and fabs(compression) > fabs(min_comp) {
+            cell_id = cell_id + 1
+            continue
+        }
+        if node[cels[cell_id].node[1]].fix > 0 {
+            cell_id = cell_id + 1
+            continue
+        }
+
+        let epithelial: bool = cels[cell_id].ctipus < 3
+        let max_radius: f64 = if epithelial { 2.0 * mmae } else { mmae }
+        let mut growth_signal: f64 = 0.0
+        let mut selected_node: i32 = 0
+        slot = 1
+        while slot <= node_count {
+            let node_id: i32 = cels[cell_id].node[slot]
+            if epithelial and node[node_id].tipus == 2 {
+                slot = slot + 1
+                continue
+            }
+            let factor: f64 = 1.0 - node[node_id].dif
+            let paired_id: i32 = if epithelial { node[node_id].altre } else { 0 }
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[PARAMETER_CELL_GROWTH] {
+                let gene_id: i32 = whonpag[PARAMETER_CELL_GROWTH * (ng + 1) + gene_slot]
+                let expression: f64 = if epithelial {
+                    gex[gene_expression_index(node_id, gene_id)] + gex[gene_expression_index(paired_id, gene_id)]
+                } else {
+                    gex[gene_expression_index(node_id, gene_id)]
+                }
+                growth_signal = growth_signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_CELL_GROWTH)] * factor
+                gene_slot = gene_slot + 1
+            }
+            growth_signal = growth_signal * delta
+            let occupied: f64 = if epithelial {
+                node[node_id].grd + node[paired_id].grd
+            } else {
+                node[node_id].grd
+            }
+            if occupied < max_radius { selected_node = node_id }
+            slot = slot + 1
+        }
+        if growth_signal != 0.0 {
+            let mut amount: f64 = growth_signal
+            if selected_node != 0 {
+                let rate: f64 = if node[selected_node].tipus < 3 { 0.5 * growth_signal } else { growth_signal }
+                let next_radius: f64 = node[selected_node].grd + rate
+                let mut overflow: f64 = 0.0
+                if next_radius > max_radius {
+                    overflow = next_radius - max_radius
+                    node[selected_node].grd = max_radius
+                    nodeo[selected_node].grd = max_radius
+                } else {
+                    node[selected_node].grd = next_radius
+                    nodeo[selected_node].grd = nodeo[selected_node].grd + rate
+                }
+                if node[selected_node].tipus < 3 {
+                    let paired_id: i32 = node[selected_node].altre
+                    let paired_radius: f64 = node[paired_id].grd + rate
+                    if paired_radius > max_radius {
+                        overflow = overflow + paired_radius - max_radius
+                        node[paired_id].grd = max_radius
+                        nodeo[paired_id].grd = nodeo[paired_id].grd + rate
+                        nodeo[paired_id].eqd = max_radius
+                        nodeo[paired_id].add = max_radius
+                    } else {
+                        node[paired_id].grd = paired_radius
+                        nodeo[paired_id].grd = nodeo[paired_id].grd + rate
+                    }
+                }
+                amount = overflow
+            }
+            if amount != 0.0 or selected_node == 0 {
+                if create_growth_nodes(cell_id, amount) == false { return false }
+            }
+        }
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+export growth_error, append_growth_nodes, should_i_grow

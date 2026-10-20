@@ -1,0 +1,189 @@
+import embryo.general {
+    nd, ncels, ndx, node, nodeo, cels, delta, mmae, ffu, cel_zero,
+    remove_node_slot
+}
+import embryo.genetic {
+    ng, npag, whonpag, gex, gene_effects,
+    gene_expression_index, gene_effect_index, gene_remove_node_slot
+}
+import embryo.neighboring { neighbor_build, fill_co_griders, neighbor_remove_node }
+import embryo.rng { rng_real }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(value: ptr<void>)
+}
+
+const PARAMETER_CELL_DEATH: i32 = 38
+const MINIMUM_NODE_RADIUS: f64 = 0.0001
+
+let mut death_error: i32 = 0
+
+function death_effect(node_id: i32, property_id: i32) -> f64 {
+    let mut rate: f64 = 0.0
+    let mut gene_slot: i32 = 1
+    while gene_slot <= npag[property_id] {
+        let gene_id: i32 = whonpag[property_id * (ng + 1) + gene_slot]
+        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+        if expression > 0.0 {
+            rate = rate + expression * gene_effects[gene_effect_index(gene_id, property_id)] * (1.0 - node[node_id].dif)
+        }
+        gene_slot = gene_slot + 1
+    }
+    return rate * delta
+}
+
+function compact_cell(cell_id: i32) -> bool {
+    if cell_id < 1 or cell_id > ncels { return false }
+    let mut i: i32 = cell_id
+    while i < ncels {
+        cels[i] = cels[i + 1]
+        i = i + 1
+    }
+    cels[ncels] = cel_zero()
+    ncels = ncels - 1
+    let mut current_cell: i32 = cell_id
+    while current_cell <= ncels {
+        let mut slot: i32 = 1
+        while slot <= cels[current_cell].nunodes {
+            let node_id: i32 = cels[current_cell].node[slot]
+            if node[node_id].icel >= cell_id { node[node_id].icel = node[node_id].icel - 1 }
+            slot = slot + 1
+        }
+        current_cell = current_cell + 1
+    }
+    return true
+}
+
+function remove_one_node(deleted_id: i32) -> bool {
+    if deleted_id < 1 or deleted_id > nd { return false }
+    let old_count: i32 = nd
+    let owner: i32 = node[deleted_id].icel
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let mut source_slot: i32 = 1
+        let mut target_slot: i32 = 1
+        while source_slot <= cels[cell_id].nunodes {
+            let value: i32 = cels[cell_id].node[source_slot]
+            if value != deleted_id {
+                cels[cell_id].node[target_slot] = if value > deleted_id { value - 1 } else { value }
+                target_slot = target_slot + 1
+            }
+            source_slot = source_slot + 1
+        }
+        if cell_id == owner { cels[cell_id].nunodes = cels[cell_id].nunodes - 1 }
+        cell_id = cell_id + 1
+    }
+    let mut row: i32 = 1
+    while row <= nd {
+        if node[row].altre == deleted_id { node[row].altre = 0 }
+        if node[row].altre > deleted_id { node[row].altre = node[row].altre - 1 }
+        row = row + 1
+    }
+    if gene_remove_node_slot(deleted_id, old_count) == false { death_error = 1; return false }
+    neighbor_remove_node(deleted_id)
+    if remove_node_slot(deleted_id) == false { death_error = 1; return false }
+    return true
+}
+
+function apoptosis(node_id: i32) -> bool {
+    death_error = 0
+    if node_id < 1 or node_id > nd { death_error = 2; return false }
+    let first: i32 = node_id
+    let second: i32 = node[node_id].altre
+    let paired: bool = node[node_id].tipus < 3 and second >= 1 and second <= nd and second != first
+    if paired and second > first {
+        if remove_one_node(second) == false { return false }
+        return remove_one_node(first)
+    }
+    if paired {
+        if remove_one_node(first) == false { return false }
+        return remove_one_node(second)
+    }
+    return remove_one_node(first)
+}
+
+function should_i_die() -> bool {
+    death_error = 0
+    let original_cell_count: i32 = ncels
+    let removed_cells: ptr<i32> = calloc((original_cell_count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if removed_cells == null { death_error = 6; return false }
+    let mut cell_id: i32 = 1
+    while cell_id <= original_cell_count {
+        if cels[cell_id].nunodes <= 0 { free(removed_cells as ptr<void>); death_error = 3; return false }
+        let original_node_count: i32 = cels[cell_id].nunodes
+        let first_node: i32 = cels[cell_id].node[1]
+        if node[first_node].fix != 1 {
+            let mut slot: i32 = 1
+            let mut updated_count: i32 = 0
+            let mut fallback_rate: f64 = 0.0
+            while slot <= original_node_count {
+                let node_id: i32 = cels[cell_id].node[slot]
+                if node_id < 1 or node_id > nd { slot = slot + 1; continue }
+                let rate: f64 = death_effect(node_id, PARAMETER_CELL_DEATH)
+                fallback_rate = rate
+                if rate != 0.0 and node[node_id].grd < mmae {
+                    let next_radius: f64 = node[node_id].grd - rate
+                    if next_radius < MINIMUM_NODE_RADIUS {
+                        if apoptosis(node_id) == false { free(removed_cells as ptr<void>); return false }
+                        if ffu[24] == 0 and (neighbor_build() == false or fill_co_griders() == false) { free(removed_cells as ptr<void>); death_error = 5; return false }
+                        if cels[cell_id].nunodes == 0 {
+                            removed_cells[cell_id] = 1
+                        }
+                        slot = slot + 1
+                        continue
+                    }
+                    node[node_id].grd = next_radius
+                    nodeo[node_id].grd = next_radius
+                    updated_count = updated_count + 1
+                    if node[node_id].tipus < 3 {
+                        let paired_id: i32 = node[node_id].altre
+                        if paired_id >= 1 and paired_id <= nd {
+                            node[paired_id].grd = node[paired_id].grd - rate
+                            nodeo[paired_id].grd = node[paired_id].grd
+                        }
+                    }
+                }
+                slot = slot + 1
+            }
+            if updated_count == 0 and cels[cell_id].nunodes > 0 {
+                let selected_slot: i32 = (rng_real() * original_node_count as f64) as i32 + 1
+                let selected_node: i32 = cels[cell_id].node[selected_slot]
+                if selected_node >= 1 and selected_node <= nd {
+                    node[selected_node].grd = node[selected_node].grd - fallback_rate
+                    nodeo[selected_node].grd = node[selected_node].grd
+                }
+            }
+        }
+        cell_id = cell_id + 1
+    }
+    cell_id = original_cell_count
+    while cell_id >= 1 {
+        if removed_cells[cell_id] == 1 and compact_cell(cell_id) == false { free(removed_cells as ptr<void>); death_error = 4; return false }
+        cell_id = cell_id - 1
+    }
+    free(removed_cells as ptr<void>)
+    if ndx > 0 {
+        let mut node_id: i32 = 1
+        while node_id <= nd {
+            if node[node_id].tipus == 4 {
+                let rate: f64 = death_effect(node_id, 49)
+                if rate != 0.0 {
+                    node[node_id].grd = node[node_id].grd - rate
+                    if node[node_id].grd < MINIMUM_NODE_RADIUS {
+                        if apoptosis(node_id) == false { return false }
+                        if ffu[24] == 0 {
+                            if neighbor_build() == false or fill_co_griders() == false { death_error = 5; return false }
+                        }
+                        continue
+                    }
+                    nodeo[node_id].grd = node[node_id].grd
+                }
+            }
+            node_id = node_id + 1
+        }
+    }
+    return true
+}
+
+export death_error, apoptosis, should_i_die, compact_cell

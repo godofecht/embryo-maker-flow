@@ -1,0 +1,7 @@
+[package]
+name = "embryomaker_flow"
+version = "0.1.0"
+entry = "src/embryomaker.flow"
+
+[paths]
+embryo = "src"

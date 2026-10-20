@@ -1,0 +1,80 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, node, delta }
+import embryo.neighboring { neighbor_build }
+import embryo.biomechanic { iterdiferencial, adaptive_rungekutta, rungekutta4 }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function check_movement(fixture_path: string, adaptive: bool) -> i32 {
+    if read_snapshot_parameters("../reference/examples/migration/migration.txt") != 0 { return 1 }
+    if neighbor_build() == false or iterdiferencial() == false { return 2 }
+    if adaptive {
+        if adaptive_rungekutta() == false { return 3 }
+    } else {
+        if rungekutta4(delta) == false { return 3 }
+    }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 4 }
+    let mut cursor: i32 = 0
+    let mut i: i32 = 1
+    while i <= nd {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let node_id: ParseI64 = str_parse_i64_at(line, 0)
+        if node_id.ok == false or node_id.value != i as i64 { return 5 }
+        let x: ParseF64 = str_parse_f64_at(line, node_id.end)
+        let y: ParseF64 = str_parse_f64_at(line, x.end)
+        let z: ParseF64 = str_parse_f64_at(line, y.end)
+        if x.ok == false or y.ok == false or z.ok == false { return 6 }
+        let mut component: i32 = 0
+        while component < 3 {
+            let mut expected: f64 = x.value
+            let mut actual: f64 = node[i].x
+            if component == 1 { expected = y.value; actual = node[i].y }
+            if component == 2 { expected = z.value; actual = node[i].z }
+            let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+            if fabs(actual - expected) > 1.0e-9 * scale { println(i, component, actual, expected); return 10 }
+            component = component + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        i = i + 1
+    }
+    if delta <= 0.0 { return 7 }
+    return 0
+}
+
+function main() -> i32 {
+    let rk4: i32 = check_movement("fixtures/migration_rk4.ref", false)
+    if rk4 != 0 { return rk4 }
+    return check_movement("fixtures/migration_movement.ref", true)
+}

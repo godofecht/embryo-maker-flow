@@ -1,0 +1,13 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.aleas { inialea3d }
+import embryo.general { nparti, nd, ncels }
+import embryo.model { advance_model_iteration, model_error }
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/figure_6/gastrula.txt") != 0 { return 1 }
+    if nd != 576 or ncels != 288 { return 2 }
+    inialea3d(nparti)
+    if advance_model_iteration() == false { return 10 + model_error }
+    if nd != 576 or ncels != 576 { return 3 }
+    return 0
+}

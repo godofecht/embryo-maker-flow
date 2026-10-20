@@ -1,0 +1,36 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.aleas { inialea3d }
+import embryo.general { nparti, nd, getot, nneigh, neigh, neigh_ld }
+import embryo.neighboring { neighbor_build, restore_neighbors }
+import embryo.model { advance_model_iteration, model_error }
+
+function neighbors_are_in_range() -> bool {
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let mut column: i32 = 1
+        while column <= nneigh[node_id] {
+            let neighbor_id: i32 = neigh[node_id * neigh_ld + column]
+            if neighbor_id < 1 or neighbor_id > nd { return false }
+            column = column + 1
+        }
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/apoptosis/apoptosis.txt") != 0 { return 1 }
+    let initial_nodes: i32 = nd
+    inialea3d(nparti)
+    if neighbor_build() == false { return 2 }
+    if restore_neighbors() == false { return 3 }
+    let mut step: i32 = 0
+    while step < 120 {
+        if advance_model_iteration() == false { println("apoptosis failed at step", step + 1, "with model status", model_error); return 10 + model_error }
+        if neighbors_are_in_range() == false { println("neighbor id out of range after step", step + 1); return 4 }
+        step = step + 1
+    }
+    if getot != 120 { return 5 }
+    if nd >= initial_nodes { return 6 }
+    return 0
+}

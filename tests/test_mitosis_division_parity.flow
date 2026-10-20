@@ -1,0 +1,139 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, ncels, cels, node, delta }
+import embryo.genetic { ng, npag, whonpag, gex, gene_effects, gene_expression_index, gene_effect_index }
+import embryo.nexus { should_i_divide, nexus_error }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = start
+    while pos < length and bytes[pos] != 10 and bytes[pos] != 13 { pos = pos + 1 }
+    return pos
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut pos: i32 = end
+    if pos < length and bytes[pos] == 13 { pos = pos + 1 }
+    if pos < length and bytes[pos] == 10 { pos = pos + 1 }
+    return pos
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut i: i32 = start
+    let mut j: i32 = 0
+    while i < end { line[j] = bytes[i]; i = i + 1; j = j + 1 }
+    line[j] = 0
+    return line as string
+}
+
+function close_f64(actual: f64, expected: f64) -> bool {
+    let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+    return fabs(actual - expected) <= 1.0e-8 * scale
+}
+
+function check_division(input_path: string, fixture_path: string) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        if node[cels[cell_id].node[1]].fix == 0 and cels[cell_id].nunodes >= 4 { break }
+        cell_id = cell_id + 1
+    }
+    if cell_id > ncels { return 2 }
+    delta = 1.0
+    npag[37] = 1
+    whonpag[37 * (ng + 1) + 1] = 1
+    gene_effects[gene_effect_index(1, 37)] = 1.0e8
+    let mut setup_node_id: i32 = 1
+    while setup_node_id <= nd {
+        gex[gene_expression_index(setup_node_id, 1)] = 0.0
+        setup_node_id = setup_node_id + 1
+    }
+    gex[gene_expression_index(cels[cell_id].node[1], 1)] = 1.0
+    cels[cell_id].minsize_for_div = 1.0
+    cels[cell_id].fase = 0.0
+    if should_i_divide() == false { return 10 + nexus_error }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 20 }
+    let mut cursor: i32 = 0
+    let header_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let header: string = copy_line(reference.data, cursor, header_end)
+    let expected_nodes: ParseI64 = str_parse_i64_at(header, 0)
+    let expected_cells: ParseI64 = str_parse_i64_at(header, expected_nodes.end)
+    if expected_nodes.ok == false or expected_cells.ok == false or expected_nodes.value != nd as i64 or expected_cells.value != ncels as i64 { return 21 }
+    cursor = line_next(reference.data, reference.len as i32, header_end)
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let kind: ParseI64 = str_parse_i64_at(line, id.end)
+        let owner: ParseI64 = str_parse_i64_at(line, kind.end)
+        let paired: ParseI64 = str_parse_i64_at(line, owner.end)
+        let margin: ParseI64 = str_parse_i64_at(line, paired.end)
+        let fixed: ParseI64 = str_parse_i64_at(line, margin.end)
+        if id.ok == false or kind.ok == false or owner.ok == false or paired.ok == false or margin.ok == false or fixed.ok == false { return 22 }
+        if id.value != node_id as i64 or kind.value != node[node_id].tipus as i64 or owner.value != node[node_id].icel as i64 or paired.value != node[node_id].altre as i64 or margin.value != node[node_id].marge as i64 or fixed.value != node[node_id].fix as i64 { return 23 }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        node_id = node_id + 1
+    }
+    let mut cell: i32 = 1
+    while cell <= ncels {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let count: ParseI64 = str_parse_i64_at(line, id.end)
+        let kind: ParseI64 = str_parse_i64_at(line, count.end)
+        let x: ParseF64 = str_parse_f64_at(line, kind.end)
+        let y: ParseF64 = str_parse_f64_at(line, x.end)
+        let z: ParseF64 = str_parse_f64_at(line, y.end)
+        let phase: ParseF64 = str_parse_f64_at(line, z.end)
+        let minimum: ParseF64 = str_parse_f64_at(line, phase.end)
+        let maximum: ParseF64 = str_parse_f64_at(line, minimum.end)
+        let polx: ParseF64 = str_parse_f64_at(line, maximum.end)
+        let poly: ParseF64 = str_parse_f64_at(line, polx.end)
+        let polz: ParseF64 = str_parse_f64_at(line, poly.end)
+        if id.ok == false or count.ok == false or kind.ok == false or x.ok == false or y.ok == false or z.ok == false or phase.ok == false or minimum.ok == false or maximum.ok == false or polx.ok == false or poly.ok == false or polz.ok == false { return 24 }
+        if id.value != cell as i64 or count.value != cels[cell].nunodes as i64 or kind.value != cels[cell].ctipus as i64 { return 25 }
+        if close_f64(cels[cell].cex, x.value) == false or close_f64(cels[cell].cey, y.value) == false or close_f64(cels[cell].cez, z.value) == false or close_f64(cels[cell].fase, phase.value) == false or close_f64(cels[cell].minsize_for_div, minimum.value) == false or close_f64(cels[cell].maxsize_for_div, maximum.value) == false or close_f64(cels[cell].polx, polx.value) == false or close_f64(cels[cell].poly, poly.value) == false or close_f64(cels[cell].polz, polz.value) == false { return 26 }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        let members_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let members_line: string = copy_line(reference.data, cursor, members_end)
+        let mut position: i32 = 0
+        let mut slot: i32 = 1
+        while slot <= cels[cell].nunodes {
+            let member: ParseI64 = str_parse_i64_at(members_line, position)
+            if member.ok == false or member.value != cels[cell].node[slot] as i64 { return 27 }
+            position = member.end
+            slot = slot + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, members_end)
+        cell = cell + 1
+    }
+    if cursor < reference.len as i32 { return 28 }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_division("../reference/examples/migration/migration.txt", "fixtures/migration_division.ref")
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_division("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_division.ref")
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_division("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_division.ref")
+    if adhesion != 0 { return adhesion }
+    let polar_growth: i32 = check_division("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_division.ref")
+    if polar_growth != 0 { return polar_growth }
+    let apical: i32 = check_division("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_division.ref")
+    if apical != 0 { return apical }
+    let ecm: i32 = check_division("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_division.ref")
+    if ecm != 0 { return ecm }
+    return 0
+}

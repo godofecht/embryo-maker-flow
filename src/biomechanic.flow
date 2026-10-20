@@ -1,0 +1,681 @@
+import embryo.general {
+    nd, node, nneigh, neigh, dneigh, neigh_ld, px, py, pz, dex,
+    fmeanl, fmeanv, ffu, angletor, kadh, kadh_ld, maxad,
+    delta, deltamin, deltamax, resmax, aut,
+    vcilx, vcily, vcilz, vtorx, vtory, vtorz,
+    vstorx, vstory, vstorz, vsprx, vspry, vsprz
+}
+import embryo.genetic {
+    gex, gex_ld, ng, npag, whonpag, gene_effects, gene_effect_index
+}
+import embryo.neighboring { neighbor_build }
+
+extern {
+    function free(p: ptr<void>)
+    function realloc(p: ptr<void>, size: i64) -> ptr<void>
+    function memset(p: ptr<void>, value: i32, size: i64) -> ptr<void>
+    function sqrt(x: f64) -> f64
+    function fabs(x: f64) -> f64
+}
+
+const EPSILOD: f64 = 2.2204460492503131e-15
+
+# Per-stage scratch is reused across force and Runge-Kutta evaluations. The
+# active model is single-session, so keeping one high-water allocation avoids
+# allocator churn in every simulation step without changing arithmetic order.
+let mut force_scratch: ptr<f64> = null
+let mut force_scratch_capacity: i32 = 0
+let mut force_epi_scratch: ptr<i32> = null
+let mut force_epi_capacity: i32 = 0
+let mut rk_scratch: ptr<f64> = null
+let mut rk_scratch_capacity: i32 = 0
+let mut force_active_gene_counts: ptr<i32> = null
+let mut force_active_gene_count_capacity: i32 = 0
+let mut force_active_gene_ids: ptr<i32> = null
+let mut force_active_gene_id_capacity: i64 = 0
+let mut force_active_gene_types: ptr<i32> = null
+let mut force_active_gene_type_capacity: i64 = 0
+let mut force_active_gene_values: ptr<f64> = null
+let mut force_active_gene_value_capacity: i64 = 0
+let mut force_active_gene_stride: i32 = 1
+# Adaptive Runge-Kutta trials keep gene expression fixed while node positions
+# change. Reuse the compact adhesion-gene rows for the duration of that solve.
+let mut force_active_gene_cache_valid: bool = false
+let mut force_active_gene_cache_pinned: bool = false
+
+function ensure_force_scratch() -> bool {
+    let required: i32 = nd + 1
+    if force_scratch_capacity < required {
+        let grown: ptr<f64> = realloc(force_scratch as ptr<void>, (required as i64) * 12 * sizeof<f64>()) as ptr<f64>
+        if grown == null { return false }
+        force_scratch = grown
+        force_scratch_capacity = required
+    }
+    if force_epi_capacity < required {
+        let grown_epi: ptr<i32> = realloc(force_epi_scratch as ptr<void>, required as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_epi == null { return false }
+        force_epi_scratch = grown_epi
+        force_epi_capacity = required
+    }
+    return true
+}
+
+function ensure_rk_scratch() -> bool {
+    let required: i32 = nd + 1
+    if rk_scratch_capacity >= required { return true }
+    let grown: ptr<f64> = realloc(rk_scratch as ptr<void>, required as i64 * 12 * sizeof<f64>()) as ptr<f64>
+    if grown == null { return false }
+    rk_scratch = grown
+    rk_scratch_capacity = required
+    return true
+}
+
+function force_neighbor_index(node_id: i32, column: i32) -> i32 {
+    return node_id * neigh_ld + column
+}
+
+function force_expression_index(node_id: i32, gene_id: i32) -> i32 {
+    return node_id * gex_ld + gene_id
+}
+
+function force_gene_effect_index(gene_id: i32, property_id: i32) -> i32 {
+    return gene_id * gene_effect_index(1, 0) + property_id
+}
+
+# Compact positive adhesion genes in their source order. Every force stage reads
+# one fixed gene state, so contact pairs can skip inactive genes without
+# changing the order of the accumulated adhesion terms.
+function prepare_force_active_genes() -> bool {
+    let active_gene_slots: i32 = npag[1]
+    force_active_gene_stride = active_gene_slots + 1
+    let required_rows: i32 = nd + 1
+    if force_active_gene_count_capacity < required_rows {
+        let grown_counts: ptr<i32> = realloc(force_active_gene_counts as ptr<void>, required_rows as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_counts == null { return false }
+        force_active_gene_counts = grown_counts
+        force_active_gene_count_capacity = required_rows
+    }
+    if active_gene_slots <= 0 {
+        memset(force_active_gene_counts as ptr<void>, 0, required_rows as i64 * sizeof<i32>())
+        return true
+    }
+    if gex == null or whonpag == null or gene_effects == null { return false }
+    let required_elements: i64 = required_rows as i64 * force_active_gene_stride as i64
+    if force_active_gene_id_capacity < required_elements {
+        let grown_ids: ptr<i32> = realloc(force_active_gene_ids as ptr<void>, required_elements * sizeof<i32>()) as ptr<i32>
+        if grown_ids == null { return false }
+        force_active_gene_ids = grown_ids
+        force_active_gene_id_capacity = required_elements
+    }
+    if force_active_gene_type_capacity < required_elements {
+        let grown_types: ptr<i32> = realloc(force_active_gene_types as ptr<void>, required_elements * sizeof<i32>()) as ptr<i32>
+        if grown_types == null { return false }
+        force_active_gene_types = grown_types
+        force_active_gene_type_capacity = required_elements
+    }
+    if force_active_gene_value_capacity < required_elements {
+        let grown_values: ptr<f64> = realloc(force_active_gene_values as ptr<void>, required_elements * sizeof<f64>()) as ptr<f64>
+        if grown_values == null { return false }
+        force_active_gene_values = grown_values
+        force_active_gene_value_capacity = required_elements
+    }
+
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let mut active_count: i32 = 0
+        let mut slot: i32 = 1
+        while slot <= active_gene_slots {
+            let gene_id: i32 = whonpag[(ng + 1) + slot]
+            let expression: f64 = gex[force_expression_index(node_id, gene_id)]
+            if expression > 0.0 {
+                active_count = active_count + 1
+                let active_index: i32 = node_id * force_active_gene_stride + active_count
+                force_active_gene_ids[active_index] = gene_id
+                force_active_gene_types[active_index] = gene_effects[force_gene_effect_index(gene_id, 1)] as i32
+                force_active_gene_values[active_index] = expression
+            }
+            slot = slot + 1
+        }
+        force_active_gene_counts[node_id] = active_count
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function forces_calculating_distances() -> bool {
+    return forces()
+}
+
+function force_rk_stage() -> bool {
+    if ffu[27] == 1 {
+        if nd > 1 and neighbor_build() == false { return false }
+        return forces()
+    }
+    return forces_calculating_distances()
+}
+
+function forces() -> bool {
+    if ensure_force_scratch() == false { return false }
+    if force_active_gene_cache_pinned {
+        if force_active_gene_cache_valid == false {
+            if prepare_force_active_genes() == false { return false }
+            force_active_gene_cache_valid = true
+        }
+    } elif prepare_force_active_genes() == false { return false }
+    let capacity: i32 = force_scratch_capacity
+    let rtorx: ptr<f64> = &force_scratch[0]
+    let rtory: ptr<f64> = &force_scratch[capacity]
+    let rtorz: ptr<f64> = &force_scratch[capacity * 2]
+    let rstorx: ptr<f64> = &force_scratch[capacity * 3]
+    let rstory: ptr<f64> = &force_scratch[capacity * 4]
+    let rstorz: ptr<f64> = &force_scratch[capacity * 5]
+    let adhx: ptr<f64> = &force_scratch[capacity * 6]
+    let adhy: ptr<f64> = &force_scratch[capacity * 7]
+    let adhz: ptr<f64> = &force_scratch[capacity * 8]
+    let repx: ptr<f64> = &force_scratch[capacity * 9]
+    let repy: ptr<f64> = &force_scratch[capacity * 10]
+    let repz: ptr<f64> = &force_scratch[capacity * 11]
+    let epinveins: ptr<i32> = force_epi_scratch
+    let model_bytes: i64 = nd as i64 * sizeof<f64>()
+    memset(&px[1] as ptr<void>, 0, model_bytes)
+    memset(&py[1] as ptr<void>, 0, model_bytes)
+    memset(&pz[1] as ptr<void>, 0, model_bytes)
+    memset(&fmeanl[1] as ptr<void>, 0, model_bytes)
+    memset(&fmeanv[1] as ptr<void>, 0, model_bytes)
+    # Torsion and adhesion scratch are only read in their enabled modes.
+    # Clear only the active regions, while keeping the common path to one memset.
+    if ffu[3] == 0 and ffu[20] == 0 {
+        memset(force_scratch as ptr<void>, 0, (capacity as i64) * 12 * sizeof<f64>())
+    } elif ffu[3] == 0 {
+        memset(force_scratch as ptr<void>, 0, (capacity as i64) * 6 * sizeof<f64>())
+    } elif ffu[20] == 0 {
+        memset(&force_scratch[capacity * 6] as ptr<void>, 0, (capacity as i64) * 6 * sizeof<f64>())
+    }
+    memset(epinveins as ptr<void>, 0, ((nd + 1) as i64) * sizeof<i32>())
+    if aut == 0 {
+        memset(&vcilx[1] as ptr<void>, 0, model_bytes); memset(&vcily[1] as ptr<void>, 0, model_bytes); memset(&vcilz[1] as ptr<void>, 0, model_bytes)
+        memset(&vtorx[1] as ptr<void>, 0, model_bytes); memset(&vtory[1] as ptr<void>, 0, model_bytes); memset(&vtorz[1] as ptr<void>, 0, model_bytes)
+        memset(&vstorx[1] as ptr<void>, 0, model_bytes); memset(&vstory[1] as ptr<void>, 0, model_bytes); memset(&vstorz[1] as ptr<void>, 0, model_bytes)
+        memset(&vsprx[1] as ptr<void>, 0, model_bytes); memset(&vspry[1] as ptr<void>, 0, model_bytes); memset(&vsprz[1] as ptr<void>, 0, model_bytes)
+    }
+    let mut nod: i32 = 1
+    while nod <= nd {
+        if node[nod].fix == 2 {
+            px[nod] = 0.0; py[nod] = 0.0; pz[nod] = 0.0; dex[nod] = 0.0
+            let mut fixed_column: i32 = 1
+            while fixed_column <= nneigh[nod] {
+                let fixed_other: i32 = neigh[force_neighbor_index(nod, fixed_column)]
+                if fixed_other < 1 or fixed_other > nd { return false }
+                let fixed_dx: f64 = node[fixed_other].x - node[nod].x
+                let fixed_dy: f64 = node[fixed_other].y - node[nod].y
+                let fixed_dz: f64 = node[fixed_other].z - node[nod].z
+                dneigh[force_neighbor_index(nod, fixed_column)] = sqrt((fixed_dx * fixed_dx) + (fixed_dy * fixed_dy) + (fixed_dz * fixed_dz))
+                fixed_column = fixed_column + 1
+            }
+            nod = nod + 1
+            continue
+        }
+        let ix: f64 = node[nod].x
+        let iy: f64 = node[nod].y
+        let iz: f64 = node[nod].z
+        let mut sx: f64 = 0.0
+        let mut sy: f64 = 0.0
+        let mut sz: f64 = 0.0
+        let mut cx: f64 = 0.0
+        let mut cy: f64 = 0.0
+        let mut cz: f64 = 0.0
+        let mut spring_length: f64 = 0.0
+        if node[nod].tipus < 3 {
+            let other: i32 = node[nod].altre
+            if other < 1 or other > nd { return false }
+            cx = node[other].x - ix
+            cy = node[other].y - iy
+            cz = node[other].z - iz
+            spring_length = sqrt((cx * cx) + (cy * cy) + (cz * cz))
+            if spring_length == 0.0 { return false }
+            let unit: f64 = 1.0 / spring_length
+            let stretch: f64 = spring_length - node[nod].eqs - node[other].eqs
+            let spring_force: f64 = 2.0 * node[nod].hoo * stretch
+            sx = spring_force * cx * unit
+            sy = spring_force * cy * unit
+            sz = spring_force * cz * unit
+            fmeanv[nod] = stretch
+        }
+        let mut tx: f64 = 0.0
+        let mut ty: f64 = 0.0
+        let mut tz: f64 = 0.0
+        let mut alone: i32 = 0
+        let mut column: i32 = 1
+        while column <= nneigh[nod] {
+            let other: i32 = neigh[force_neighbor_index(nod, column)]
+            if other < 1 or other > nd { return false }
+            let dx: f64 = node[other].x - ix
+            let dy: f64 = node[other].y - iy
+            let dz: f64 = node[other].z - iz
+            let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+            dneigh[force_neighbor_index(nod, column)] = distance
+            if other < nod and node[other].fix != 2 {
+                alone = 1
+                column = column + 1
+                continue
+            }
+            alone = 1
+            if distance == 0.0 { return false }
+            let mut fd: f64 = distance
+            let mut twoep: i32 = 0
+            let mut ux: f64 = dx / distance
+            let mut uy: f64 = dy / distance
+            let mut uz: f64 = dz / distance
+            if node[nod].tipus < 3 or node[other].tipus < 3 {
+                if node[nod].tipus < 3 and node[other].tipus < 3 {
+                    let other_apical: i32 = node[other].altre
+                    if other_apical < 1 or other_apical > nd { return false }
+                    let icx: f64 = node[other_apical].x - node[other].x
+                    let icy: f64 = node[other_apical].y - node[other].y
+                    let icz: f64 = node[other_apical].z - node[other].z
+                    let posca: f64 = (icx * cx) + (icy * cy) + (icz * cz)
+                    if node[nod].tipus == node[other].tipus and posca > EPSILOD {
+                        let mx: f64 = icx + cx
+                        let my: f64 = icy + cy
+                        let mz: f64 = icz + cz
+                        let ml: f64 = sqrt((mx * mx) + (my * my) + (mz * mz))
+                        if ml == 0.0 { return false }
+                        let md: f64 = 1.0 / ml
+                        let projection: f64 = (mx * dx) + (my * dy) + (mz * dz)
+                        let vertical: f64 = fabs(projection) * md
+                        let lateral2: f64 = (distance * distance) - (vertical * vertical)
+                        let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                        if ffu[23] == 1 and lateral - node[nod].add - node[other].add > EPSILOD { column = column + 1; continue }
+                        let along: f64 = projection * md * md
+                        ux = (dx - mx * along) / lateral
+                        uy = (dy - my * along) / lateral
+                        uz = (dz - mz * along) / lateral
+                        fd = lateral
+                        twoep = 1
+                        epinveins[nod] = epinveins[nod] + 1
+                        epinveins[other] = epinveins[other] + 1
+                    } elif node[nod].tipus == node[other].tipus {
+                        let mx: f64 = icx + cx
+                        let my: f64 = icy + cy
+                        let mz: f64 = icz + cz
+                        let ml2: f64 = (mx * mx) + (my * my) + (mz * mz)
+                        let projection: f64 = (cx * dx) + (cy * dy) + (cz * dz)
+                        let radii: f64 = node[nod].add + node[other].add
+                        if ml2 < EPSILOD {
+                            if projection >= EPSILOD { column = column + 1; continue }
+                            let vertical: f64 = -projection / spring_length
+                            if vertical - radii >= EPSILOD { column = column + 1; continue }
+                            let lateral2: f64 = distance * distance
+                            let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                            if fd - radii > EPSILOD { column = column + 1; continue }
+                            ux = -cx / spring_length; uy = -cy / spring_length; uz = -cz / spring_length
+                            fd = lateral
+                            twoep = 2
+                        } else {
+                            let inverse_m: f64 = 1.0 / sqrt(ml2)
+                            let vertical: f64 = fabs((mx * dx) + (my * dy) + (mz * dz)) * inverse_m
+                            if vertical - radii >= EPSILOD { column = column + 1; continue }
+                            let lateral2: f64 = (distance * distance) - (vertical * vertical)
+                            let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                            if lateral - radii > EPSILOD { column = column + 1; continue }
+                            let along: f64 = ((mx * dx) + (my * dy) + (mz * dz)) * inverse_m * inverse_m
+                            ux = (dx - mx * along) / lateral
+                            uy = (dy - my * along) / lateral
+                            uz = (dz - mz * along) / lateral
+                            fd = lateral
+                        }
+                    } elif posca < 0.0 {
+                        let projection: f64 = (cx * dx) + (cy * dy) + (cz * dz)
+                        if projection >= EPSILOD { column = column + 1; continue }
+                        let vertical: f64 = -projection / spring_length
+                        let radii: f64 = node[nod].add + node[other].add
+                        if vertical - radii >= EPSILOD { column = column + 1; continue }
+                        let lateral2: f64 = (distance * distance) - (vertical * vertical)
+                        let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                        if lateral - radii > EPSILOD { column = column + 1; continue }
+                        ux = cx / spring_length; uy = cy / spring_length; uz = cz / spring_length
+                        fd = vertical
+                        twoep = 2
+                    } else {
+                        column = column + 1
+                        continue
+                    }
+                } elif node[nod].tipus < 3 and node[other].tipus >= 3 {
+                    let sxv: f64 = node[node[nod].altre].x - ix
+                    let syv: f64 = node[node[nod].altre].y - iy
+                    let szv: f64 = node[node[nod].altre].z - iz
+                    let sl: f64 = sqrt((sxv * sxv) + (syv * syv) + (szv * szv))
+                    if sl == 0.0 { return false }
+                    let projection: f64 = (sxv * dx) + (syv * dy) + (szv * dz)
+                    if projection >= 0.0 { column = column + 1; continue }
+                    fd = fabs(projection / sl)
+                    let lateral2: f64 = (distance * distance) - (fd * fd)
+                    let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                    if fd - node[nod].add - node[other].add >= 0.0 or lateral - node[nod].add - node[other].add > EPSILOD { column = column + 1; continue }
+                    ux = -sxv / sl; uy = -syv / sl; uz = -szv / sl
+                } elif node[nod].tipus >= 3 and node[other].tipus < 3 {
+                    let ox: f64 = node[node[other].altre].x - node[other].x
+                    let oy: f64 = node[node[other].altre].y - node[other].y
+                    let oz: f64 = node[node[other].altre].z - node[other].z
+                    let ol: f64 = sqrt((ox * ox) + (oy * oy) + (oz * oz))
+                    if ol == 0.0 { return false }
+                    let projection: f64 = (ox * dx) + (oy * dy) + (oz * dz)
+                    if projection <= 0.0 { column = column + 1; continue }
+                    fd = projection / ol
+                    let lateral2: f64 = (distance * distance) - (fd * fd)
+                    let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                    if fd - node[nod].add - node[other].add >= 0.0 or lateral - node[nod].add - node[other].add > EPSILOD { column = column + 1; continue }
+                    ux = ox / ol; uy = oy / ol; uz = oz / ol
+                } else {
+                    column = column + 1
+                    continue
+                }
+            } elif fd - node[nod].add - node[other].add > EPSILOD {
+                column = column + 1
+                continue
+            }
+            let mut force: f64 = 0.0
+            let deqe: f64 = node[nod].eqd + node[other].eqd
+            if node[nod].icel == node[other].icel {
+                if fd - deqe < -EPSILOD {
+                    force = (node[nod].rep + node[other].rep) * (fd - deqe)
+                } else {
+                    force = (node[nod].you + node[other].you) * (fd - deqe)
+                }
+            } elif fd - deqe < -EPSILOD {
+                force = (node[nod].rec + node[other].rec) * (fd - deqe)
+            } else {
+                let mut adhesion: f64 = 0.5 * (node[nod].adh + node[other].adh)
+                let mut a: i32 = 1
+                while a <= force_active_gene_counts[nod] {
+                    let active_a_index: i32 = nod * force_active_gene_stride + a
+                    let expression_a: f64 = force_active_gene_values[active_a_index]
+                    let ta: i32 = force_active_gene_types[active_a_index]
+                    let mut b: i32 = 1
+                    while b <= force_active_gene_counts[other] {
+                        let active_b_index: i32 = other * force_active_gene_stride + b
+                        let expression_b: f64 = force_active_gene_values[active_b_index]
+                        let tb: i32 = force_active_gene_types[active_b_index]
+                        adhesion = adhesion + expression_a * expression_b * kadh[ta * kadh_ld + tb]
+                        b = b + 1
+                    }
+                    a = a + 1
+                }
+                force = 2.0 * adhesion * (fd - deqe)
+            }
+            if ffu[20] == 0 {
+                if force > 0.0 {
+                    adhx[nod] = adhx[nod] + force * ux; adhy[nod] = adhy[nod] + force * uy; adhz[nod] = adhz[nod] + force * uz
+                    adhx[other] = adhx[other] - force * ux; adhy[other] = adhy[other] - force * uy; adhz[other] = adhz[other] - force * uz
+                } else {
+                    repx[nod] = repx[nod] + force * ux; repy[nod] = repy[nod] + force * uy; repz[nod] = repz[nod] + force * uz
+                    repx[other] = repx[other] - force * ux; repy[other] = repy[other] - force * uy; repz[other] = repz[other] - force * uz
+                }
+            } else {
+                tx = tx + force * ux; ty = ty + force * uy; tz = tz + force * uz
+                px[other] = px[other] - force * ux; py[other] = py[other] - force * uy; pz[other] = pz[other] - force * uz
+            }
+            let mut mean_force: f64 = force
+            if ffu[9] == 1 { mean_force = fd - deqe }
+            fmeanl[nod] = fmeanl[nod] + mean_force
+            fmeanl[other] = fmeanl[other] + mean_force
+
+            if ffu[3] == 0 and twoep == 1 {
+                let mx: f64 = (node[node[other].altre].x - node[other].x) + cx
+                let my: f64 = (node[node[other].altre].y - node[other].y) + cy
+                let mz: f64 = (node[node[other].altre].z - node[other].z) + cz
+                let ml: f64 = sqrt((mx * mx) + (my * my) + (mz * mz))
+                if ml == 0.0 { return false }
+                let inverse_m: f64 = 1.0 / ml
+                let projection: f64 = (mx * dx) + (my * dy) + (mz * dz)
+                let angle_projection: f64 = projection * inverse_m
+                if fabs(angle_projection) - angletor * distance > EPSILOD {
+                    let vertical_force: f64 = (node[nod].est + node[other].est) * angle_projection
+                    rstorx[nod] = rstorx[nod] + vertical_force * mx * inverse_m
+                    rstory[nod] = rstory[nod] + vertical_force * my * inverse_m
+                    rstorz[nod] = rstorz[nod] + vertical_force * mz * inverse_m
+                    rstorx[other] = rstorx[other] - vertical_force * mx * inverse_m
+                    rstory[other] = rstory[other] - vertical_force * my * inverse_m
+                    rstorz[other] = rstorz[other] - vertical_force * mz * inverse_m
+
+                    let parallel_projection: f64 = ((cx * dx) + (cy * dy) + (cz * dz)) / spring_length
+                    let parallel_force: f64 = (node[nod].erp + node[other].erp) * parallel_projection
+                    let pair_x: f64 = dx / distance
+                    let pair_y: f64 = dy / distance
+                    let pair_z: f64 = dz / distance
+                    rtorx[nod] = rtorx[nod] + parallel_force * pair_x
+                    rtory[nod] = rtory[nod] + parallel_force * pair_y
+                    rtorz[nod] = rtorz[nod] + parallel_force * pair_z
+                    let other_spring_length: f64 = sqrt(((node[node[other].altre].x - node[other].x) * (node[node[other].altre].x - node[other].x)) + ((node[node[other].altre].y - node[other].y) * (node[node[other].altre].y - node[other].y)) + ((node[node[other].altre].z - node[other].z) * (node[node[other].altre].z - node[other].z)))
+                    if other_spring_length == 0.0 { return false }
+                    let opposite_projection: f64 = -(((node[node[other].altre].x - node[other].x) * dx) + ((node[node[other].altre].y - node[other].y) * dy) + ((node[node[other].altre].z - node[other].z) * dz)) / other_spring_length
+                    let opposite_force: f64 = (node[nod].erp + node[other].erp) * opposite_projection
+                    rtorx[other] = rtorx[other] - opposite_force * pair_x
+                    rtory[other] = rtory[other] - opposite_force * pair_y
+                    rtorz[other] = rtorz[other] - opposite_force * pair_z
+                }
+            }
+            column = column + 1
+        }
+        if ffu[4] == 1 {
+            if alone == 0 { node[nod].talone = node[nod].talone + 1 } else { node[nod].talone = 0 }
+        }
+        let mut torsion_x: f64 = 0.0
+        let mut torsion_y: f64 = 0.0
+        let mut torsion_z: f64 = 0.0
+        if ffu[3] == 0 {
+            torsion_x = rtorx[nod] + rstorx[nod]
+            torsion_y = rtory[nod] + rstory[nod]
+            torsion_z = rtorz[nod] + rstorz[nod]
+        }
+        if epinveins[nod] > 0 {
+            let divisor: f64 = epinveins[nod] as f64
+            if ffu[3] == 0 {
+                torsion_x = torsion_x / divisor
+                torsion_y = torsion_y / divisor
+                torsion_z = torsion_z / divisor
+            }
+            fmeanl[nod] = fmeanl[nod] / divisor
+        }
+        let mut contact_x: f64 = tx + px[nod]
+        let mut contact_y: f64 = ty + py[nod]
+        let mut contact_z: f64 = tz + pz[nod]
+        if ffu[20] == 0 {
+            let adhesion_magnitude: f64 = sqrt((adhx[nod] * adhx[nod]) + (adhy[nod] * adhy[nod]) + (adhz[nod] * adhz[nod]))
+            let mut cap_scale: f64 = 1.0
+            if adhesion_magnitude > maxad { cap_scale = maxad / adhesion_magnitude }
+            contact_x = (adhx[nod] * cap_scale) + repx[nod]
+            contact_y = (adhy[nod] * cap_scale) + repy[nod]
+            contact_z = (adhz[nod] * cap_scale) + repz[nod]
+        }
+        if aut == 0 {
+            vsprx[nod] = sx; vspry[nod] = sy; vsprz[nod] = sz
+            if ffu[20] == 0 {
+                vcilx[nod] = contact_x; vcily[nod] = contact_y; vcilz[nod] = contact_z
+            }
+            if ffu[3] == 0 {
+                vtorx[nod] = rtorx[nod]; vtory[nod] = rtory[nod]; vtorz[nod] = rtorz[nod]
+                vstorx[nod] = rstorx[nod]; vstory[nod] = rstory[nod]; vstorz[nod] = rstorz[nod]
+            } else {
+                vtorx[nod] = 0.0; vtory[nod] = 0.0; vtorz[nod] = 0.0
+                vstorx[nod] = 0.0; vstory[nod] = 0.0; vstorz[nod] = 0.0
+            }
+        }
+        let mut fx: f64 = sx + contact_x + torsion_x
+        let mut fy: f64 = sy + contact_y + torsion_y
+        let mut fz: f64 = sz + contact_z + torsion_z
+        if node[nod].fix == 1 {
+            let bx: f64 = node[nod].orix - ix
+            let by: f64 = node[nod].oriy - iy
+            let bz: f64 = node[nod].oriz - iz
+            let d2: f64 = (bx * bx) + (by * by) + (bz * bz)
+            if d2 > EPSILOD {
+                let scale: f64 = node[nod].kfi / sqrt(d2)
+                fx = fx + bx * scale; fy = fy + by * scale; fz = fz + bz * scale
+            }
+        }
+        px[nod] = fx; py[nod] = fy; pz[nod] = fz
+        dex[nod] = sqrt((fx * fx) + (fy * fy) + (fz * fz))
+        nod = nod + 1
+    }
+    return true
+}
+
+function iterdiferencial() -> bool {
+    if forces() == false { return false }
+    let mut largest_force: f64 = 0.0
+    let mut i: i32 = 1
+    while i <= nd {
+        if dex[i] > largest_force { largest_force = dex[i] }
+        i = i + 1
+    }
+    if largest_force < EPSILOD {
+        delta = deltamin
+        return true
+    }
+    if ffu[7] == 0 { delta = resmax / largest_force } else { delta = deltamin }
+    if delta > deltamax { delta = deltamax }
+    if delta < deltamin { delta = deltamin }
+    return true
+}
+
+function rungekutta4(step: f64) -> bool {
+    let half: f64 = step * 0.5
+    let sixth: f64 = step / 6.0
+    if ensure_rk_scratch() == false { return false }
+    let capacity: i32 = rk_scratch_capacity
+    let ox: ptr<f64> = &rk_scratch[0]
+    let oy: ptr<f64> = &rk_scratch[capacity]
+    let oz: ptr<f64> = &rk_scratch[capacity * 2]
+    let k1x: ptr<f64> = &rk_scratch[capacity * 3]
+    let k1y: ptr<f64> = &rk_scratch[capacity * 4]
+    let k1z: ptr<f64> = &rk_scratch[capacity * 5]
+    let k2x: ptr<f64> = &rk_scratch[capacity * 6]
+    let k2y: ptr<f64> = &rk_scratch[capacity * 7]
+    let k2z: ptr<f64> = &rk_scratch[capacity * 8]
+    let k3x: ptr<f64> = &rk_scratch[capacity * 9]
+    let k3y: ptr<f64> = &rk_scratch[capacity * 10]
+    let k3z: ptr<f64> = &rk_scratch[capacity * 11]
+    let mut i: i32 = 1
+    while i <= nd {
+        ox[i] = node[i].x; oy[i] = node[i].y; oz[i] = node[i].z
+        k1x[i] = px[i]; k1y[i] = py[i]; k1z[i] = pz[i]
+        i = i + 1
+    }
+    i = 1
+    while i <= nd {
+        node[i].x = ox[i] + half * k1x[i]
+        node[i].y = oy[i] + half * k1y[i]
+        node[i].z = oz[i] + half * k1z[i]
+        i = i + 1
+    }
+    if force_rk_stage() == false { return false }
+    i = 1
+    while i <= nd {
+        k2x[i] = px[i]; k2y[i] = py[i]; k2z[i] = pz[i]
+        node[i].x = node[i].x + half * k2x[i]
+        node[i].y = node[i].y + half * k2y[i]
+        node[i].z = node[i].z + half * k2z[i]
+        i = i + 1
+    }
+    if force_rk_stage() == false { return false }
+    i = 1
+    while i <= nd {
+        k3x[i] = px[i]; k3y[i] = py[i]; k3z[i] = pz[i]
+        node[i].x = node[i].x + step * px[i]
+        node[i].y = node[i].y + step * py[i]
+        node[i].z = node[i].z + step * pz[i]
+        i = i + 1
+    }
+    if force_rk_stage() == false { return false }
+    i = 1
+    while i <= nd {
+        node[i].x = ox[i] + sixth * (k1x[i] + 2.0 * k2x[i] + 2.0 * k3x[i] + px[i])
+        node[i].y = oy[i] + sixth * (k1y[i] + 2.0 * k2y[i] + 2.0 * k3y[i] + py[i])
+        node[i].z = oz[i] + sixth * (k1z[i] + 2.0 * k2z[i] + 2.0 * k3z[i] + pz[i])
+        i = i + 1
+    }
+    return true
+}
+
+struct ForcePosition { x: f64, y: f64, z: f64 }
+
+let mut adaptive_scratch: ptr<ForcePosition> = null
+let mut adaptive_scratch_capacity: i32 = 0
+
+function ensure_adaptive_scratch() -> bool {
+    let required: i32 = nd + 1
+    if adaptive_scratch_capacity >= required { return true }
+    let grown: ptr<ForcePosition> = realloc(adaptive_scratch as ptr<void>, (required as i64) * 2 * sizeof<ForcePosition>()) as ptr<ForcePosition>
+    if grown == null { return false }
+    adaptive_scratch = grown
+    adaptive_scratch_capacity = required
+    return true
+}
+
+function adaptive_rungekutta() -> bool {
+    if ensure_adaptive_scratch() == false { return false }
+    force_active_gene_cache_pinned = true
+    force_active_gene_cache_valid = false
+    let capacity: i32 = adaptive_scratch_capacity
+    let old: ptr<ForcePosition> = &adaptive_scratch[0]
+    let full: ptr<ForcePosition> = &adaptive_scratch[capacity]
+    let mut retry: bool = true
+    while retry {
+        let mut i: i32 = 1
+        while i <= nd {
+            old[i].x = node[i].x; old[i].y = node[i].y; old[i].z = node[i].z
+            i = i + 1
+        }
+        let half_step: f64 = 0.5 * delta
+        let inverse_step: f64 = 1.0 / delta
+        if rungekutta4(delta) == false {
+            force_active_gene_cache_pinned = false
+            force_active_gene_cache_valid = false
+            return false
+        }
+        i = 1
+        while i <= nd {
+            full[i].x = node[i].x; full[i].y = node[i].y; full[i].z = node[i].z
+            node[i].x = old[i].x; node[i].y = old[i].y; node[i].z = old[i].z
+            i = i + 1
+        }
+        if rungekutta4(half_step) == false {
+            force_active_gene_cache_pinned = false
+            force_active_gene_cache_valid = false
+            return false
+        }
+        if rungekutta4(half_step) == false {
+            force_active_gene_cache_pinned = false
+            force_active_gene_cache_valid = false
+            return false
+        }
+        let mut max_x: f64 = 0.0
+        let mut max_y: f64 = 0.0
+        let mut max_z: f64 = 0.0
+        i = 1
+        while i <= nd {
+            let dx: f64 = fabs(full[i].x - node[i].x) * inverse_step
+            let dy: f64 = fabs(full[i].y - node[i].y) * inverse_step
+            let dz: f64 = fabs(full[i].z - node[i].z) * inverse_step
+            if dx > max_x { max_x = dx }
+            if dy > max_y { max_y = dy }
+            if dz > max_z { max_z = dz }
+            i = i + 1
+        }
+        let mut error: f64 = max_x
+        if max_x >= max_y and max_x >= max_z { error = max_x }
+        if max_y >= max_z { error = max_y }
+        if max_z >= max_y and max_z >= max_x { error = max_z }
+        if error > prec {
+            if error > 0.0 { delta = 0.9 * prec * delta / error }
+        } else {
+            retry = false
+        }
+    }
+    force_active_gene_cache_pinned = false
+    force_active_gene_cache_valid = false
+    return true
+}
+
+export forces, forces_calculating_distances, iterdiferencial, rungekutta4, adaptive_rungekutta

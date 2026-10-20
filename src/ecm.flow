@@ -1,0 +1,231 @@
+import embryo.general {
+    nd, ndx, node, nodeo, cels, nod_zero, delta, ecmmax, desmax, temp,
+    ffu, node_capacity, resize_node_buffers
+}
+import embryo.genetic {
+    ng, npag, whonpag, gex, agex, gene_effects,
+    gene_expression_index, gene_effect_index, gene_resize_nodes
+}
+import embryo.aleas { nvaloq, particions_esfera, partition_index }
+import embryo.neighboring { nneigh, neigh, neighbor_index }
+import embryo.rng { rng_real }
+
+extern { function sqrt(x: f64) -> f64 }
+
+const PARAMETER_ECM_SECRETION: i32 = 39
+
+let mut ecm_error: i32 = 0
+
+function secretion_effect(node_id: i32, property: i32) -> f64 {
+    let mut value: f64 = 0.0
+    let mut slot: i32 = 1
+    while slot <= npag[property] {
+        let gene_id: i32 = whonpag[property * (ng + 1) + slot]
+        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+        if expression > 0.0 {
+            value = value + expression * gene_effects[gene_effect_index(gene_id, property)]
+        }
+        slot = slot + 1
+    }
+    return value
+}
+
+function ecm_secretion(source_id: i32) -> bool {
+    let old_capacity: i32 = node_capacity
+    if nd + 1 > old_capacity {
+        let growth: i32 = if old_capacity < 10 { 10 } else { old_capacity / 2 }
+        let new_capacity: i32 = old_capacity + growth
+        if gene_resize_nodes(old_capacity, new_capacity) == false { ecm_error = 2; return false }
+        if resize_node_buffers(new_capacity) == false { ecm_error = 2; return false }
+    }
+
+    let mut x: f64 = 0.0
+    let mut y: f64 = 0.0
+    let mut z: f64 = 0.0
+    let source_type: i32 = node[source_id].tipus
+    if source_type < 3 {
+        let paired_id: i32 = node[source_id].altre
+        if paired_id < 1 { ecm_error = 3; return false }
+        let dx: f64 = node[source_id].x - node[paired_id].x
+        let dy: f64 = node[source_id].y - node[paired_id].y
+        let dz: f64 = node[source_id].z - node[paired_id].z
+        let length: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+        if length == 0.0 { ecm_error = 3; return false }
+        let random_value: f64 = rng_real()
+        let distance: f64 = node[source_id].eqd + (random_value * 0.1)
+        x = node[source_id].x + (dx / length) * distance
+        y = node[source_id].y + (dy / length) * distance
+        z = node[source_id].z + (dz / length) * distance
+    } else {
+        let cell_id: i32 = node[source_id].icel
+        if cell_id < 1 { ecm_error = 3; return false }
+        let cx: f64 = cels[cell_id].cex
+        let cy: f64 = cels[cell_id].cey
+        let cz: f64 = cels[cell_id].cez
+        if ffu[19] == 0 and npag[46] > 0 {
+            if nvaloq <= 0 or particions_esfera == null { ecm_error = 5; return false }
+            let random_index: f64 = rng_real()
+            let partition: i32 = ((random_index * nvaloq as f64) as i32) + 1
+            let radius: f64 = node[source_id].eqd
+            let mut random_scale: f64 = 1.0 + (rng_real() * 0.1)
+            let random_x: f64 = particions_esfera[partition_index(partition, 1)] * radius * random_scale
+            let random_y: f64 = particions_esfera[partition_index(partition, 2)] * radius * random_scale
+            let random_z: f64 = particions_esfera[partition_index(partition, 3)] * radius * random_scale
+
+            let mut gradient_x: f64 = 0.0
+            let mut gradient_y: f64 = 0.0
+            let mut gradient_z: f64 = 0.0
+            let mut neighbor_slot: i32 = 1
+            while neighbor_slot <= nneigh[source_id] {
+                let other_id: i32 = neigh[neighbor_index(source_id, neighbor_slot)]
+                let dx: f64 = node[other_id].x - node[source_id].x
+                let dy: f64 = node[other_id].y - node[source_id].y
+                let dz: f64 = node[other_id].z - node[source_id].z
+                let inverse_distance: f64 = 1.0 / sqrt((dx * dx) + (dy * dy) + (dz * dz))
+                let mut gene_slot: i32 = 1
+                while gene_slot <= npag[46] {
+                    let gene_id: i32 = whonpag[46 * (ng + 1) + gene_slot]
+                    let expression: f64 = gex[gene_expression_index(other_id, gene_id)]
+                    if expression > 0.0 {
+                        let influence: f64 = expression * gene_effects[gene_effect_index(gene_id, 46)] * inverse_distance
+                        gradient_x = gradient_x + dx * influence
+                        gradient_y = gradient_y + dy * influence
+                        gradient_z = gradient_z + dz * influence
+                    }
+                    gene_slot = gene_slot + 1
+                }
+                neighbor_slot = neighbor_slot + 1
+            }
+            let gradient_squared: f64 = (gradient_x * gradient_x) + (gradient_y * gradient_y) + (gradient_z * gradient_z)
+            let mut polarity_x: f64 = 0.0
+            let mut polarity_y: f64 = 0.0
+            let mut polarity_z: f64 = 0.0
+            if gradient_squared > 0.0 {
+                let inverse_gradient: f64 = 1.0 / sqrt(gradient_squared)
+                polarity_x = gradient_x * inverse_gradient
+                polarity_y = gradient_y * inverse_gradient
+                polarity_z = gradient_z * inverse_gradient
+            }
+
+            # Fortran reads an uninitialized d in the blend. Use zero as the
+            # defined baseline and preserve its last-gene assignment behavior.
+            let mut blend: f64 = 0.0
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[46] {
+                let gene_id: i32 = whonpag[46 * (ng + 1) + gene_slot]
+                blend = gex[gene_expression_index(source_id, gene_id)] * gene_effects[gene_effect_index(gene_id, 46)]
+                gene_slot = gene_slot + 1
+            }
+            blend = 1.0 / (1.0 + blend)
+            let result_x: f64 = ((1.0 - blend) * polarity_x) + (blend * random_x)
+            let result_y: f64 = ((1.0 - blend) * polarity_y) + (blend * random_y)
+            let result_z: f64 = ((1.0 - blend) * polarity_z) + (blend * random_z)
+            let result_squared: f64 = (result_x * result_x) + (result_y * result_y) + (result_z * result_z)
+            if result_squared == 0.0 { ecm_error = 6; return false }
+            let inverse_result: f64 = 1.0 / sqrt(result_squared)
+            x = node[source_id].x + desmax * result_x * inverse_result
+            y = node[source_id].y + desmax * result_y * inverse_result
+            z = node[source_id].z + desmax * result_z * inverse_result
+        } else {
+            let mut dx: f64 = node[source_id].x - cx
+            let mut dy: f64 = node[source_id].y - cy
+            let mut dz: f64 = node[source_id].z - cz
+            if ffu[1] == 0 {
+                if nvaloq <= 0 or particions_esfera == null { ecm_error = 5; return false }
+                let random_value: f64 = rng_real()
+                let partition: i32 = ((random_value * nvaloq as f64) as i32) + 1
+                let distance: f64 = node[source_id].eqd
+                dx = particions_esfera[partition_index(partition, 1)] * distance
+                dy = particions_esfera[partition_index(partition, 2)] * distance
+                dz = particions_esfera[partition_index(partition, 3)] * distance
+            } else {
+                let mut best_projection: f64 = 0.0
+                let mut best_x: f64 = 0.0
+                let mut best_y: f64 = 0.0
+                let mut best_z: f64 = 0.0
+                let base_x: f64 = dx
+                let base_y: f64 = dy
+                let base_z: f64 = dz
+                let mut slot: i32 = 1
+                while slot <= cels[cell_id].nunodes {
+                    let other_id: i32 = cels[cell_id].node[slot]
+                    let ox: f64 = node[other_id].x - cx
+                    let oy: f64 = node[other_id].y - cy
+                    let oz: f64 = node[other_id].z - cz
+                    let projection: f64 = (base_x * ox) + (base_y * oy) + (base_z * oz)
+                    if projection > best_projection {
+                        best_projection = projection
+                        best_x = ox; best_y = oy; best_z = oz
+                    }
+                    slot = slot + 1
+                }
+                dx = best_x; dy = best_y; dz = best_z
+            }
+            let scale_random: f64 = rng_real()
+            let scale: f64 = 1.0 + (scale_random * 0.1)
+            x = cx + dx * scale
+            y = cy + dy * scale
+            z = cz + dz * scale
+        }
+    }
+
+    nd = nd + 1
+    ndx = ndx + 1
+    node[nd] = nod_zero()
+    node[nd].x = x; node[nd].y = y; node[nd].z = z
+    node[nd].tipus = 4; node[nd].icel = 0 - nd; node[nd].altre = 0
+    node[nd].eqd = ecmmax; node[nd].grd = ecmmax
+    node[nd].dmo = desmax; node[nd].mov = temp; node[nd].marge = 1
+    node[nd].orix = x; node[nd].oriy = y; node[nd].oriz = z
+    node[nd].rec = secretion_effect(source_id, 41)
+    if node[nd].rec <= 0.0 { node[nd].rec = 50.0 }
+    node[nd].add = ecmmax + secretion_effect(source_id, 42)
+    let mut gene_id: i32 = 0
+    while gene_id <= ng {
+        agex[gene_expression_index(nd, gene_id)] = 0.0
+        gene_id = gene_id + 1
+    }
+    let mut slot: i32 = 1
+    while slot <= npag[40] {
+        let gene_id: i32 = whonpag[40 * (ng + 1) + slot]
+        let transfer: f64 = gene_effects[gene_effect_index(gene_id, 40)]
+        let source_expression: f64 = gex[gene_expression_index(source_id, gene_id)]
+        agex[gene_expression_index(source_id, gene_id)] = source_expression * (1.0 - transfer)
+        agex[gene_expression_index(nd, gene_id)] = source_expression * transfer
+        slot = slot + 1
+    }
+    nodeo[nd] = node[nd]
+    nneigh[nd] = 0
+    return true
+}
+
+# Apply gene-controlled ECM accumulation. Crossing the secretion threshold
+# requires ecm_secretion, which adds a node and is ported separately.
+function should_i_secrete() -> bool {
+    ecm_error = 0
+    let property: i32 = PARAMETER_ECM_SECRETION
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if node[node_id].tipus != 4 and node[node_id].fix != 1 {
+            let mut rate: f64 = 0.0
+            let factor: f64 = 1.0 - node[node_id].dif
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[property] {
+                let gene_id: i32 = whonpag[property * (ng + 1) + gene_slot]
+                rate = rate + gex[gene_expression_index(node_id, gene_id)] * gene_effects[gene_effect_index(gene_id, property)] * factor
+                gene_slot = gene_slot + 1
+            }
+            rate = rate * delta
+            node[node_id].ecm = node[node_id].ecm + rate
+            if node[node_id].ecm >= ecmmax {
+                if ecm_secretion(node_id) == false { return false }
+                node[node_id].ecm = node[node_id].ecm - ecmmax
+                if node[node_id].ecm < 0.0 { node[node_id].ecm = 0.0 }
+            }
+        }
+        node_id = node_id + 1
+    }
+    return true
+}
+
+export ecm_error, ecm_secretion, should_i_secrete

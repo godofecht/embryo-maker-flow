@@ -1,0 +1,121 @@
+import std.io { FileRead, io_read_file }
+import std.process { proc_argc, proc_argv }
+import std.string { ParseF64, str_parse_f64_at }
+
+extern {
+    function printf(format: string, ...) -> i32
+    function fabs(value: f64) -> f64
+    function malloc(size: i64) -> ptr<void>
+    function free(value: ptr<void>)
+}
+
+struct NumericToken {
+    found: bool,
+    value: f64,
+    next: i32
+}
+
+function is_space(value: u8) -> bool {
+    return value == 32 or value == 9 or value == 10 or value == 13
+}
+
+function next_number(data: string, length: i32, start: i32) -> NumericToken {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length {
+        let mut line_end: i32 = cursor
+        while line_end < length and bytes[line_end] != 10 { line_end = line_end + 1 }
+        let mut token_start: i32 = cursor
+        while token_start < line_end and (bytes[token_start] == 32 or bytes[token_start] == 9 or bytes[token_start] == 13) { token_start = token_start + 1 }
+        if token_start >= line_end {
+            cursor = line_end + 1
+            continue
+        }
+        let mut token_end: i32 = token_start
+        while token_end < line_end and is_space(bytes[token_end]) == false { token_end = token_end + 1 }
+        let line_length: i32 = line_end - cursor
+        let line_buffer: ptr<u8> = malloc((line_length + 1) as i64) as ptr<u8>
+        let mut copy_index: i32 = 0
+        while copy_index < line_length {
+            line_buffer[copy_index] = bytes[cursor + copy_index]
+            copy_index = copy_index + 1
+        }
+        line_buffer[line_length] = 0
+        let parsed: ParseF64 = str_parse_f64_at(line_buffer as string, token_start - cursor)
+        free(line_buffer as ptr<void>)
+        if parsed.ok and parsed.end + cursor == token_end {
+            return NumericToken { found: true, value: parsed.value, next: token_end }
+        }
+        cursor = line_end + 1
+    }
+    return NumericToken { found: false, value: 0.0, next: length }
+}
+
+function skip_lines(data: string, length: i32, count: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = 0
+    let mut skipped: i32 = 0
+    while cursor < length and skipped < count {
+        if bytes[cursor] == 10 { skipped = skipped + 1 }
+        cursor = cursor + 1
+    }
+    return cursor
+}
+
+function main() -> i32 {
+    let argc: i32 = proc_argc()
+    if argc < 3 or argc > 4 {
+        println("usage: snapdiff <reference.dat> <flow.dat> [relative_tolerance]")
+        return 2
+    }
+    let reference: FileRead = io_read_file(proc_argv(1))
+    let actual: FileRead = io_read_file(proc_argv(2))
+    if reference.ok == false or actual.ok == false {
+        println("could not read one of the snapshots")
+        return 2
+    }
+    let mut tolerance: f64 = 1.0e-9
+    if argc == 4 {
+        let parsed: ParseF64 = str_parse_f64_at(proc_argv(3), 0)
+        if parsed.ok == false or parsed.value < 0.0 {
+            println("relative tolerance must be a nonnegative number")
+            return 2
+        }
+        tolerance = parsed.value
+    }
+    let reference_length: i32 = reference.len as i32
+    let actual_length: i32 = actual.len as i32
+    let mut reference_position: i32 = skip_lines(reference.data, reference_length, 2)
+    let mut actual_position: i32 = skip_lines(actual.data, actual_length, 2)
+    let mut compared: i32 = 0
+    let mut mismatched: i32 = 0
+    let mut largest_absolute: f64 = 0.0
+    let mut largest_relative: f64 = 0.0
+    let mut largest_index: i32 = 0
+    let mut numeric_index: i32 = 0
+    while reference_position < reference_length or actual_position < actual_length {
+        let expected: NumericToken = next_number(reference.data, reference_length, reference_position)
+        let observed: NumericToken = next_number(actual.data, actual_length, actual_position)
+        if expected.found == false or observed.found == false {
+            if expected.found != observed.found {
+                printf("numeric field counts differ after %d paired fields\n", compared)
+                return 1
+            }
+            break
+        }
+        reference_position = expected.next
+        actual_position = observed.next
+        compared = compared + 1
+        numeric_index = numeric_index + 1
+        let absolute: f64 = fabs(expected.value - observed.value)
+        let mut denominator: f64 = fabs(expected.value)
+        if denominator < 1.0 { denominator = 1.0 }
+        let relative: f64 = absolute / denominator
+        if absolute > largest_absolute { largest_absolute = absolute }
+        if relative > largest_relative { largest_relative = relative; largest_index = numeric_index }
+        if relative > tolerance { mismatched = mismatched + 1 }
+    }
+    printf("numeric fields: %d, over tolerance: %d, max abs: %.17g, max rel: %.17g at token %d\n", compared, mismatched, largest_absolute, largest_relative, largest_index)
+    if mismatched > 0 { return 1 }
+    return 0
+}

@@ -1,0 +1,492 @@
+import embryo.general { ncels, cels, node, nodeo, nd, delta, ffu, reqmin, df_reqmax, fmeanl, ttalone, nneigh, neigh, neigh_ld, dif_req }
+import embryo.mitosis { division, mitosis_error }
+import embryo.genetic {
+    ng, npag, whonpag, gex, gene_effects,
+    gene_expression_index, gene_effect_index
+}
+import embryo.growth { should_i_grow }
+import embryo.death { should_i_die, apoptosis, compact_cell }
+import embryo.ecm { should_i_secrete }
+import embryo.polarization { polarization }
+import embryo.single_node { should_i_divide_single, polarization_single }
+
+extern { function sqrt(value: f64) -> f64 }
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function realloc(p: ptr<void>, size: i64) -> ptr<void>
+}
+
+const PARAMETER_MINIMUM_DIVISION_SIZE: i32 = 45
+const PARAMETER_MAXIMUM_DIVISION_SIZE: i32 = 50
+const PARAMETER_CELL_DIVISION: i32 = 37
+let mut nexus_error: i32 = 0
+let mut diffusion_scratch: ptr<f64> = null
+let mut diffusion_scratch_capacity: i32 = 0
+let mut diffusion_offsets: ptr<i32> = null
+let mut diffusion_offsets_capacity: i32 = 0
+let mut diffusion_neighbors: ptr<i32> = null
+let mut diffusion_neighbors_capacity: i32 = 0
+
+function nexe_gradual() -> bool {
+    nexus_error = 0
+    if npag[39] > 0 and should_i_secrete() == false { nexus_error = 1; return false }
+    if ffu[1] == 1 {
+        if npag[43] > 0 and polarization() == false { nexus_error = 2; return false }
+        if npag[36] > 0 and should_i_grow() == false { nexus_error = 3; return false }
+        if should_i_divide() == false { return false }
+        if (npag[38] > 0 or npag[49] > 0) and should_i_die() == false { nexus_error = 4; return false }
+        if npag[45] > 0 and change_minsize_for_div() == false { nexus_error = 5; return false }
+        if npag[50] > 0 and change_maxsize_for_div() == false { nexus_error = 6; return false }
+    } else {
+        if ffu[18] == 0 and npag[36] > 0 and should_i_grow() == false { nexus_error = 3; return false }
+        if npag[43] > 0 and polarization_single() == false { nexus_error = 11; return false }
+        if npag[37] > 0 and should_i_divide_single() == false { nexus_error = 7; return false }
+        if (npag[38] > 0 or npag[49] > 0) and should_i_die() == false { nexus_error = 4; return false }
+        if npag[48] > 0 and should_i_emt() == false { nexus_error = 9; return false }
+    }
+    if npag[48] > 0 and should_i_emt() == false { nexus_error = 9; return false }
+    if ffu[4] == 1 and nd > 2 and eliminate_lonely_nodes() == false { nexus_error = 10; return false }
+    if update_node_properties() == false { nexus_error = 8; return false }
+    return true
+}
+
+function eliminate_lonely_nodes() -> bool {
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if node[node_id].talone > ttalone {
+            let mut owner: i32 = node[node_id].icel
+            let mut remove: bool = node[node_id].tipus > 2
+            if remove == false {
+                let partner: i32 = node[node_id].altre
+                if partner >= 1 and partner <= nd and node[partner].talone > ttalone {
+                    remove = true
+                    owner = node[node_id].icel
+                }
+            }
+            if remove {
+                if apoptosis(node_id) == false { return false }
+                if owner > 0 and owner <= ncels and cels[owner].nunodes == 0 {
+                    if compact_cell(owner) == false { return false }
+                }
+            }
+        }
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function should_i_emt() -> bool {
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        if cels[cell_id].ctipus != 3 {
+            let mut signal: f64 = 0.0
+            let mut slot: i32 = 1
+            while slot <= cels[cell_id].nunodes {
+                let node_id: i32 = cels[cell_id].node[slot]
+                let mut gene_slot: i32 = 1
+                while gene_slot <= npag[48] {
+                    let gene_id: i32 = whonpag[48 * (ng + 1) + gene_slot]
+                    signal = signal + gex[gene_expression_index(node_id, gene_id)] * gene_effects[gene_effect_index(gene_id, 48)]
+                    gene_slot = gene_slot + 1
+                }
+                slot = slot + 1
+            }
+            cels[cell_id].temt = cels[cell_id].temt + signal * delta / (cels[cell_id].nunodes as f32 as f64)
+            if cels[cell_id].temt >= 1.0 {
+                cels[cell_id].ctipus = 3
+                slot = 1
+                while slot <= cels[cell_id].nunodes {
+                    let first: i32 = cels[cell_id].node[slot]
+                    if node[first].tipus == 1 {
+                        let second: i32 = node[first].altre
+                        let dx: f64 = node[second].x - node[first].x
+                        let dy: f64 = node[second].y - node[first].y
+                        let dz: f64 = node[second].z - node[first].z
+                        let inverse: f64 = 1.0 / sqrt(dx * dx + dy * dy + dz * dz)
+                        let midpoint_x: f64 = 0.5 * (node[second].x + node[first].x)
+                        let midpoint_y: f64 = 0.5 * (node[second].y + node[first].y)
+                        let midpoint_z: f64 = 0.5 * (node[second].z + node[first].z)
+                        let offset: f64 = (node[first].add + node[second].add) * 0.1
+                        node[first].x = midpoint_x - dx * inverse * offset
+                        node[first].y = midpoint_y - dy * inverse * offset
+                        node[first].z = midpoint_z - dz * inverse * offset
+                        node[second].x = midpoint_x + dx * inverse * offset
+                        node[second].y = midpoint_y + dy * inverse * offset
+                        node[second].z = midpoint_z + dz * inverse * offset
+                        node[first].altre = 0; node[second].altre = 0
+                        node[first].tipus = 3; node[second].tipus = 3
+                        if ffu[1] == 0 { node[first].marge = 0; node[second].marge = 0 }
+                    }
+                    slot = slot + 1
+                }
+            }
+        }
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+# Apply gene controlled node changes after cell behaviors and before movement.
+function update_node_properties() -> bool {
+    if ffu[11] == 1 and prepare_diffusion_neighbors() == false { return false }
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        if node[node_id].fix != 1 and node[node_id].fix != 2 {
+            if npag[25] > 0 {
+                let mut signal: f64 = 0.0
+                let mut slot: i32 = 1
+                while slot <= npag[25] {
+                    let gene_id: i32 = whonpag[25 * (ng + 1) + slot]
+                    let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                    if expression > 0.0 { signal = signal + expression * gene_effects[gene_effect_index(gene_id, 25)] }
+                    slot = slot + 1
+                }
+                if ng >= 11 { signal = gene_effects[gene_effect_index(11, 25)] * 0.1 }
+                node[node_id].dif = node[node_id].dif + signal * delta
+                if node[node_id].dif > 1.0 { node[node_id].dif = 1.0 }
+                if node[node_id].dif < 0.0 { node[node_id].dif = 0.0 }
+                nodeo[node_id].dif = node[node_id].dif
+            }
+            if node[node_id].tipus < 2 {
+                let partner: i32 = node[node_id].altre
+                if partner <= 0 or partner > nd { return false }
+                if ffu[6] == 1 {
+                    node[node_id].pld = node[node_id].pld + node[node_id].pla * fmeanl[node_id] * delta
+                    node[partner].pld = node[partner].pld + node[partner].pla * fmeanl[partner] * delta
+                    nodeo[node_id].pld = node[node_id].pld
+                    nodeo[partner].pld = node[partner].pld
+                } else {
+                    node[node_id].pld = 0.0
+                    node[partner].pld = 0.0
+                }
+                let contraction_a: f64 = node_gene_effect(node_id, 21)
+                let contraction_b: f64 = node_gene_effect(partner, 21)
+                if npag[21] > 0 {
+                    node[node_id].cod = nodeo[node_id].cod + contraction_a
+                    node[partner].cod = nodeo[partner].cod + contraction_b
+                } else { node[node_id].cod = 0.0; node[partner].cod = 0.0 }
+                if npag[22] > 0 {
+                    node[node_id].grd = nodeo[node_id].grd + node_gene_effect(node_id, 22)
+                    node[partner].grd = nodeo[partner].grd + node_gene_effect(partner, 22)
+                }
+                if ffu[10] == 0 {
+                    let volume_signal: f64 = node[node_id].cod + node[partner].cod
+                    if volume_signal > 0.00001 or volume_signal < -0.00001 {
+                        let mut magnitude_a: f64 = node[node_id].cod
+                        let mut magnitude_b: f64 = node[partner].cod
+                        if magnitude_a < 0.0 { magnitude_a = -magnitude_a }
+                        if magnitude_b < 0.0 { magnitude_b = -magnitude_b }
+                        if magnitude_a > magnitude_b { node[partner].vod = -node[node_id].cod * node[node_id].kvol }
+                        else { node[node_id].vod = -node[partner].cod * node[node_id].kvol }
+                    }
+                } else { node[node_id].vod = 0.0; node[partner].vod = 0.0 }
+                if ffu[11] == 1 and diffusion_apply_prepared() == false { nexus_error = 12; return false }
+                let old_add_delta_a: f64 = node[node_id].add - node[node_id].eqd
+                let old_add_delta_b: f64 = node[partner].add - node[partner].eqd
+                let old_eqd_a: f64 = node[node_id].eqd
+                let old_eqd_b: f64 = node[partner].eqd
+                node[node_id].eqd = node[node_id].grd + node[node_id].cod + node[node_id].pld + node[node_id].vod
+                node[partner].eqd = node[partner].grd + node[partner].cod + node[partner].pld + node[partner].vod
+                let upper_a: f64 = old_eqd_a + old_eqd_a * 0.005
+                let lower_a: f64 = old_eqd_a - old_eqd_a * 0.005
+                let upper_b: f64 = old_eqd_b + old_eqd_b * 0.005
+                let lower_b: f64 = old_eqd_b - old_eqd_b * 0.005
+                if node[node_id].eqd > upper_a { node[node_id].eqd = upper_a }
+                if node[node_id].eqd < lower_a { node[node_id].eqd = lower_a }
+                if node[partner].eqd > upper_b { node[partner].eqd = upper_b }
+                if node[partner].eqd < lower_b { node[partner].eqd = lower_b }
+                if node[node_id].eqd > df_reqmax { node[node_id].eqd = df_reqmax }
+                if node[node_id].eqd < reqmin { node[node_id].eqd = reqmin }
+                if node[partner].eqd > df_reqmax { node[partner].eqd = df_reqmax }
+                if node[partner].eqd < reqmin { node[partner].eqd = reqmin }
+                node[node_id].add = node[node_id].eqd + old_add_delta_a
+                node[partner].add = node[partner].eqd + old_add_delta_b
+                if npag[6] > 0 {
+                    node[node_id].add = gradual_node_property(node[node_id].add, nodeo[node_id].add, node_gene_effect(node_id, 6))
+                    node[partner].add = gradual_node_property(node[partner].add, nodeo[partner].add, node_gene_effect(partner, 6))
+                }
+                if npag[7] > 0 {
+                    node[node_id].you = gradual_node_property(node[node_id].you, nodeo[node_id].you, node_gene_effect(node_id, 7))
+                    node[partner].you = gradual_node_property(node[partner].you, nodeo[partner].you, node_gene_effect(partner, 7))
+                }
+                if npag[8] > 0 {
+                    node[node_id].adh = gradual_node_property(node[node_id].adh, nodeo[node_id].adh, node_gene_effect(node_id, 8))
+                    node[partner].adh = gradual_node_property(node[partner].adh, nodeo[partner].adh, node_gene_effect(partner, 8))
+                }
+                if npag[9] > 0 {
+                    node[node_id].rep = gradual_node_property(node[node_id].rep, nodeo[node_id].rep, node_gene_effect(node_id, 9))
+                    node[partner].rep = gradual_node_property(node[partner].rep, nodeo[partner].rep, node_gene_effect(partner, 9))
+                }
+                if npag[10] > 0 {
+                    node[node_id].rec = gradual_node_property(node[node_id].rec, nodeo[node_id].rec, node_gene_effect(node_id, 10))
+                    node[partner].rec = gradual_node_property(node[partner].rec, nodeo[partner].rec, node_gene_effect(partner, 10))
+                }
+                if npag[11] > 0 {
+                    node[node_id].erp = gradual_node_property(node[node_id].erp, nodeo[node_id].erp, node_gene_effect(node_id, 11))
+                    node[partner].erp = gradual_node_property(node[partner].erp, nodeo[partner].erp, node_gene_effect(partner, 11))
+                }
+                if npag[12] > 0 {
+                    node[node_id].est = gradual_node_property(node[node_id].est, nodeo[node_id].est, node_gene_effect(node_id, 12))
+                    node[partner].est = gradual_node_property(node[partner].est, nodeo[partner].est, node_gene_effect(partner, 12))
+                }
+                if npag[13] > 0 {
+                    node[node_id].eqs = gradual_node_property(node[node_id].eqs, nodeo[node_id].eqs, node_gene_effect(node_id, 13))
+                    node[partner].eqs = gradual_node_property(node[partner].eqs, nodeo[partner].eqs, node_gene_effect(partner, 13))
+                }
+                if npag[14] > 0 {
+                    node[node_id].hoo = gradual_node_property(node[node_id].hoo, nodeo[node_id].hoo, node_gene_effect(node_id, 14))
+                    node[partner].hoo = gradual_node_property(node[partner].hoo, nodeo[partner].hoo, node_gene_effect(partner, 14))
+                }
+                if npag[27] > 0 {
+                    node[node_id].pla = gradual_node_property(node[node_id].pla, nodeo[node_id].pla, node_gene_effect(node_id, 27))
+                    node[partner].pla = gradual_node_property(node[partner].pla, nodeo[partner].pla, node_gene_effect(partner, 27))
+                }
+                if npag[28] > 0 {
+                    node[node_id].kvol = gradual_node_property(node[node_id].kvol, nodeo[node_id].kvol, node_gene_effect(node_id, 28))
+                    node[partner].kvol = gradual_node_property(node[partner].kvol, nodeo[partner].kvol, node_gene_effect(partner, 28))
+                }
+                if node[node_id].erp > 10.0 * node[node_id].est { node[node_id].erp = 10.0 * node[node_id].est }
+                if node[node_id].est > 500.0 { node[node_id].est = 500.0 }
+                if node[node_id].erp > 500.0 { node[node_id].erp = 500.0 }
+                if node[node_id].est < 1.0 { node[node_id].est = 1.0 }
+                if node[node_id].erp < 1.0 { node[node_id].erp = 1.0 }
+                if node[partner].erp > 10.0 * node[partner].est { node[partner].erp = 10.0 * node[partner].est }
+                if node[partner].est > 500.0 { node[partner].est = 500.0 }
+                if node[partner].erp > 500.0 { node[partner].erp = 500.0 }
+                if node[partner].est < 1.0 { node[partner].est = 1.0 }
+                if node[partner].erp < 1.0 { node[partner].erp = 1.0 }
+            } elif node[node_id].tipus > 2 {
+                let factor: f64 = 1.0 - node[node_id].dif
+                if npag[21] > 0 { node[node_id].cod = nodeo[node_id].cod + node_gene_effect(node_id, 21) }
+                else { node[node_id].cod = 0.0 }
+                let old_add_delta: f64 = nodeo[node_id].add - node[node_id].eqd
+                node[node_id].eqd = node[node_id].grd + node[node_id].cod
+                if node[node_id].eqd > df_reqmax { node[node_id].eqd = df_reqmax }
+                if node[node_id].eqd < reqmin { node[node_id].eqd = reqmin }
+                node[node_id].add = node[node_id].eqd + old_add_delta
+                if npag[6] > 0 { node[node_id].add = nodeo[node_id].add + node_gene_effect(node_id, 6) * factor; if node[node_id].add < 0.0 { node[node_id].add = 0.0 } }
+                if npag[7] > 0 { node[node_id].you = nodeo[node_id].you + node_gene_effect(node_id, 7) * factor; if node[node_id].you < 0.0 { node[node_id].you = 0.0 } }
+                if npag[8] > 0 { node[node_id].adh = nodeo[node_id].adh + node_gene_effect(node_id, 8) * factor; if node[node_id].adh < 0.0 { node[node_id].adh = 0.0 } }
+                if npag[9] > 0 { node[node_id].rep = nodeo[node_id].rep + node_gene_effect(node_id, 9) * factor; if node[node_id].rep < 0.0 { node[node_id].rep = 0.0 } }
+                if npag[10] > 0 { node[node_id].rec = nodeo[node_id].rec + node_gene_effect(node_id, 10) * factor; if node[node_id].rec < 0.0 { node[node_id].rec = 0.0 } }
+                if npag[11] > 0 { node[node_id].erp = nodeo[node_id].erp + node_gene_effect(node_id, 11) * factor; if node[node_id].erp < 0.0 { node[node_id].erp = 0.0 } }
+                if npag[12] > 0 { node[node_id].est = nodeo[node_id].est + node_gene_effect(node_id, 12) * factor; if node[node_id].est < 0.0 { node[node_id].est = 0.0 } }
+                if npag[13] > 0 { node[node_id].eqs = nodeo[node_id].eqs + node_gene_effect(node_id, 13) * delta; if node[node_id].eqs < 0.0 { node[node_id].eqs = 0.0 } }
+                if npag[14] > 0 { node[node_id].hoo = nodeo[node_id].hoo + node_gene_effect(node_id, 14) * factor; if node[node_id].hoo < 0.0 { node[node_id].hoo = 0.0 } }
+                if npag[15] > 0 { node[node_id].mov = nodeo[node_id].mov + node_gene_effect(node_id, 15) * factor; if node[node_id].mov < 0.0 { node[node_id].mov = 0.0 } }
+                elif node[node_id].mov == 10.0 { node[node_id].mov = 1000.0 }
+                if npag[16] > 0 { node[node_id].dmo = nodeo[node_id].dmo + node_gene_effect(node_id, 16) * factor; if node[node_id].dmo < 0.0 { node[node_id].dmo = 0.0 } }
+            }
+        }
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function prepare_diffusion_neighbors() -> bool {
+    let required_offsets: i32 = nd + 2
+    if required_offsets > diffusion_offsets_capacity {
+        let grown_offsets: ptr<i32> = realloc(diffusion_offsets as ptr<void>, required_offsets as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_offsets == null { return false }
+        diffusion_offsets = grown_offsets
+        diffusion_offsets_capacity = required_offsets
+    }
+    diffusion_offsets[1] = 0
+    let mut current: i32 = 1
+    while current <= nd {
+        let mut count: i32 = 0
+        if node[current].tipus <= 2 {
+            let current_cell: i32 = node[current].icel
+            let current_type: i32 = node[current].tipus
+            let mut slot: i32 = 1
+            while slot <= nneigh[current] {
+                let other: i32 = neigh[current * neigh_ld + slot]
+                if current_cell == node[other].icel and current_type == node[other].tipus { count = count + 1 }
+                slot = slot + 1
+            }
+        }
+        diffusion_offsets[current + 1] = diffusion_offsets[current] + count
+        current = current + 1
+    }
+    let required_neighbors: i32 = diffusion_offsets[nd + 1]
+    if required_neighbors > diffusion_neighbors_capacity {
+        let grown_neighbors: ptr<i32> = realloc(diffusion_neighbors as ptr<void>, required_neighbors as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_neighbors == null { return false }
+        diffusion_neighbors = grown_neighbors
+        diffusion_neighbors_capacity = required_neighbors
+    }
+    current = 1
+    while current <= nd {
+        if node[current].tipus <= 2 {
+            let current_cell: i32 = node[current].icel
+            let current_type: i32 = node[current].tipus
+            let mut write_index: i32 = diffusion_offsets[current]
+            let mut slot: i32 = 1
+            while slot <= nneigh[current] {
+                let other: i32 = neigh[current * neigh_ld + slot]
+                if current_cell == node[other].icel and current_type == node[other].tipus {
+                    diffusion_neighbors[write_index] = other
+                    write_index = write_index + 1
+                }
+                slot = slot + 1
+            }
+        }
+        current = current + 1
+    }
+    return true
+}
+
+function diffusion_apply_prepared() -> bool {
+    let required: i32 = nd + 1
+    if required > diffusion_scratch_capacity {
+        let grown: ptr<f64> = realloc(diffusion_scratch as ptr<void>, required as i64 * sizeof<f64>()) as ptr<f64>
+        if grown == null { return false }
+        diffusion_scratch = grown
+        diffusion_scratch_capacity = required
+    }
+    let mut current: i32 = 1
+    while current <= nd {
+        let mut gradient: f64 = 0.0
+        let current_gradient: f64 = node[current].grd
+        let mut edge: i32 = diffusion_offsets[current]
+        let edge_end: i32 = diffusion_offsets[current + 1]
+        while edge < edge_end {
+            let other: i32 = diffusion_neighbors[edge]
+            gradient = gradient + (node[other].grd - current_gradient)
+            edge = edge + 1
+        }
+        diffusion_scratch[current] = gradient * dif_req
+        current = current + 1
+    }
+    current = 1
+    while current <= nd {
+        node[current].grd = node[current].grd + delta * diffusion_scratch[current]
+        current = current + 1
+    }
+    return true
+}
+
+function diffusion_of_reqcr() -> bool {
+    if prepare_diffusion_neighbors() == false { return false }
+    return diffusion_apply_prepared()
+}
+
+function node_gene_effect(node_id: i32, property_id: i32) -> f64 {
+    let mut total: f64 = 0.0
+    let mut slot: i32 = 1
+    while slot <= npag[property_id] {
+        let gene_id: i32 = whonpag[property_id * (ng + 1) + slot]
+        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+        if expression > 0.0 { total = total + expression * gene_effects[gene_effect_index(gene_id, property_id)] }
+        slot = slot + 1
+    }
+    return total
+}
+
+function gradual_node_property(current: f64, baseline: f64, change: f64) -> f64 {
+    let mut value: f64 = baseline + change
+    if baseline != 0.0 {
+        if value > current + baseline * 0.005 { value = current + baseline * 0.005 }
+        if value < current - baseline * 0.005 { value = current - baseline * 0.005 }
+    }
+    if value < 0.0 { value = 0.0 }
+    return value
+}
+
+function should_i_divide() -> bool {
+    nexus_error = 0
+    let original_cells: i32 = ncels
+    let mut cell_id: i32 = 1
+    while cell_id <= original_cells {
+        let node_count: i32 = cels[cell_id].nunodes
+        if node_count <= 0 { cell_id = cell_id + 1; continue }
+        let mut signal: f64 = 0.0
+        let mut node_slot: i32 = 1
+        while node_slot <= node_count {
+            let node_id: i32 = cels[cell_id].node[node_slot]
+            let factor: f64 = 1.0 - node[node_id].dif
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[PARAMETER_CELL_DIVISION] {
+                let gene_id: i32 = whonpag[PARAMETER_CELL_DIVISION * (ng + 1) + gene_slot]
+                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                if expression > 0.0 {
+                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_CELL_DIVISION)] * factor
+                }
+                gene_slot = gene_slot + 1
+            }
+            node_slot = node_slot + 1
+        }
+        signal = signal / node_count as f64
+        cels[cell_id].fase = cels[cell_id].fase + signal * delta
+        if cels[cell_id].fase >= 1.0 and node_count >= 2 and node_count >= cels[cell_id].minsize_for_div as i32 {
+            if division(cell_id) == false { nexus_error = 10 + mitosis_error; return false }
+            cels[cell_id].fase = cels[cell_id].fase - 1.0
+        }
+        if cels[cell_id].nunodes >= 2 and cels[cell_id].nunodes as f64 >= cels[cell_id].maxsize_for_div {
+            if division(cell_id) == false { nexus_error = 10 + mitosis_error; return false }
+            cels[cell_id].fase = cels[cell_id].fase - 1.0
+        }
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+function change_minsize_for_div() -> bool {
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let node_count: i32 = cels[cell_id].nunodes
+        if node_count <= 0 { return false }
+        let mut signal: f64 = 0.0
+        let mut node_slot: i32 = 1
+        while node_slot <= node_count {
+            let node_id: i32 = cels[cell_id].node[node_slot]
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[PARAMETER_MINIMUM_DIVISION_SIZE] {
+                let gene_id: i32 = whonpag[PARAMETER_MINIMUM_DIVISION_SIZE * (ng + 1) + gene_slot]
+                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                if expression > 0.0 {
+                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_MINIMUM_DIVISION_SIZE)]
+                }
+                gene_slot = gene_slot + 1
+            }
+            node_slot = node_slot + 1
+        }
+        signal = signal * delta
+        signal = signal / node_count as f64
+        cels[cell_id].minsize_for_div = cels[cell_id].minsize_for_div + signal
+        if cels[cell_id].minsize_for_div < 1.0 { cels[cell_id].minsize_for_div = 1.0 }
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+function change_maxsize_for_div() -> bool {
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let node_count: i32 = cels[cell_id].nunodes
+        if node_count <= 0 { return false }
+        let mut signal: f64 = 0.0
+        let mut node_slot: i32 = 1
+        while node_slot <= node_count {
+            let node_id: i32 = cels[cell_id].node[node_slot]
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[PARAMETER_MAXIMUM_DIVISION_SIZE] {
+                let gene_id: i32 = whonpag[PARAMETER_MAXIMUM_DIVISION_SIZE * (ng + 1) + gene_slot]
+                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                if expression > 0.0 {
+                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_MAXIMUM_DIVISION_SIZE)]
+                }
+                gene_slot = gene_slot + 1
+            }
+            node_slot = node_slot + 1
+        }
+        signal = signal * delta
+        signal = signal / node_count as f64
+        cels[cell_id].maxsize_for_div = cels[cell_id].maxsize_for_div + signal
+        if cels[cell_id].maxsize_for_div < 1.0 { cels[cell_id].maxsize_for_div = 1.0 }
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+export nexus_error, nexe_gradual, should_i_divide, change_minsize_for_div, change_maxsize_for_div, update_node_properties

@@ -1,0 +1,497 @@
+# Shared EmbryoMaker state. Indices in this port follow the Fortran source and
+# reserve element zero whenever a module allocates an indexed buffer.
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(p: ptr<void>)
+}
+
+const NPARAM: i32 = 35
+const NPARAM_PER_NODE: i32 = 35
+const NPARAM_PER_NODER: i32 = 28
+const NPARAM_PER_NODEI: i32 = 7
+const NGCB: i32 = 17
+const NGA: i32 = 52
+const NFU: i32 = 28
+const NFI: i32 = 14
+const STATUS: i32 = 10
+const NUE: f64 = 2.71828
+const PI: f64 = 3.141592653589793
+const PII: f64 = 3.141592653589793
+
+# Model controls and counters shared by the simulation modules.
+let mut aut: i32 = 0
+let mut getot: i32 = 0
+let mut nd: i32 = 0
+let mut ng: i32 = 0
+let mut ncels: i32 = 0
+let mut ncals: i32 = 0
+let mut nda: i32 = 0
+let mut ndepi: i32 = 0
+let mut ndmes: i32 = 0
+let mut ndx: i32 = 0
+let mut ncelsepi: i32 = 0
+let mut ncelsmes: i32 = 0
+let mut itacc: i32 = 0
+let mut itv: i32 = 0
+let mut nodecel: i32 = 0
+let mut ntipusadh: i32 = 0
+let mut nvarglobal_out: i32 = 0
+let mut varglobal_out: array<f64, 65> = []
+let mut mnn_dyn: i32 = 0
+let mut omnn: i32 = 0
+let mut mnn_dynam: i32 = 0
+let mut ndmax: i32 = 0
+let mut ndch: i32 = 0
+let mut nseed: i32 = 8
+let mut whichend: i32 = 0
+let mut maxnodenr: i32 = 5000
+let mut ndoo: i32 = 0
+let mut ndo: i32 = 0
+let mut tellme2: i32 = 0
+let mut ndu: i32 = 0
+let mut desplacament: f64 = 0.0
+let mut ene: f64 = 0.0
+let mut realq: f32 = 0.0
+let mut extre: f64 = 0.0
+let mut rdiffmax: f64 = 0.0
+let mut maxad: f64 = 0.0
+let mut maxbox: f64 = 0.0
+let mut maxcycl: f64 = 0.0
+let mut newfase: f64 = 0.0
+let mut maxelong: f64 = 0.0
+let mut start_time: f64 = 0.0
+let mut stop_time: f64 = 0.0
+let mut current_time1: f64 = 0.0
+let mut current_time2: f64 = 0.0
+let mut total_gabriel: f64 = 0.0
+let mut delta: f64 = 0.0
+let mut rtime: f64 = 0.0
+let mut temp: f64 = 0.0
+let mut rv: f64 = 0.0
+let mut urv: f64 = 0.0
+let mut prop_noise: f64 = 0.0
+let mut reqmin: f64 = 0.0
+let mut ecmmax: f64 = 0.0
+let mut mmae: f64 = 0.0
+let mut dmax: f64 = 0.0
+let mut prec: f64 = 0.0
+let mut dif_req: f64 = 0.0
+let mut min_comp: f64 = 0.0
+let mut mnn: i32 = 0
+let mut ramax: f64 = 0.0
+let mut deltamax: f64 = 0.0
+let mut deltamin: f64 = 0.0
+let mut desmax: f64 = 0.0
+let mut resmax: f64 = 0.0
+let mut nparti: i32 = 0
+let mut movi: i32 = 0
+let mut ttalone: f64 = 0.0
+let mut khold: i32 = 0
+let mut screen_radius: f64 = 0.0
+let mut df_reqmax: f64 = 0.0
+let mut angletor: f64 = 0.0
+let mut ldi: f64 = 0.0
+let mut eva: i32 = 0
+let mut i: i32 = 0
+let mut j: i32 = 0
+let mut k: i32 = 0
+let mut ii: i32 = 0
+let mut jj: i32 = 0
+let mut kk: i32 = 0
+let mut iii: i32 = 0
+let mut jjj: i32 = 0
+let mut kkk: i32 = 0
+let mut iiii: i32 = 0
+let mut jjjj: i32 = 0
+let mut kkkk: i32 = 0
+let mut iiiii: i32 = 0
+let mut jjjjj: i32 = 0
+let mut kkkkk: i32 = 0
+let mut a: f64 = 0.0
+let mut b: f64 = 0.0
+let mut c: f64 = 0.0
+let mut d: f64 = 0.0
+let mut e: f64 = 0.0
+let mut f: f64 = 0.0
+let mut g: f64 = 0.0
+let mut h: f64 = 0.0
+let mut aa: f64 = 0.0
+let mut bb: f64 = 0.0
+let mut cc: f64 = 0.0
+let mut dd: f64 = 0.0
+let mut ee: f64 = 0.0
+let mut ff: f64 = 0.0
+let mut gg: f64 = 0.0
+let mut hh: f64 = 0.0
+let mut aaa: f64 = 0.0
+let mut bbb: f64 = 0.0
+let mut ccc: f64 = 0.0
+let mut ddd: f64 = 0.0
+let mut eee: f64 = 0.0
+let mut fff: f64 = 0.0
+let mut ggg: f64 = 0.0
+let mut hhh: f64 = 0.0
+
+struct Nod {
+    x: f64, y: f64, z: f64, e: f64,
+    eqd: f64, add: f64, you: f64, adh: f64, rep: f64, rec: f64,
+    erp: f64, est: f64, eqs: f64, hoo: f64, mov: f64, dmo: f64,
+    orix: f64, oriy: f64, oriz: f64, ecm: f64, cod: f64, grd: f64,
+    pld: f64, vod: f64, dif: f64, kfi: f64, pla: f64, kvol: f64,
+    tipus: i32, icel: i32, altre: i32, marge: i32, talone: i32,
+    fix: i32, ndiv: i32
+}
+
+struct Cel {
+    minsize_for_div: f64, maxsize_for_div: f64,
+    cex: f64, cey: f64, cez: f64,
+    polx: f64, poly: f64, polz: f64,
+    hpolx: f64, hpoly: f64, hpolz: f64,
+    fase: f64, temt: f64,
+    nunodes: i32, nodela: i32, ctipus: i32,
+    node: ptr<i32>
+}
+
+let mut node: ptr<Nod> = null
+let mut nodeo: ptr<Nod> = null
+let mut cels: ptr<Cel> = null
+let mut node_capacity: i32 = 0
+let mut cell_capacity: i32 = 0
+let mut resize_error: bool = false
+let mut idum: array<i32, 12> = []
+let mut idumoriginal: array<i32, 12> = []
+let mut neigh: ptr<i32> = null
+let mut nneigh: ptr<i32> = null
+let mut dneigh: ptr<f64> = null
+let mut px: ptr<f64> = null
+let mut py: ptr<f64> = null
+let mut pz: ptr<f64> = null
+let mut dex: ptr<f64> = null
+let mut vcilx: ptr<f64> = null
+let mut vcily: ptr<f64> = null
+let mut vcilz: ptr<f64> = null
+let mut vtorx: ptr<f64> = null
+let mut vtory: ptr<f64> = null
+let mut vtorz: ptr<f64> = null
+let mut vstorx: ptr<f64> = null
+let mut vstory: ptr<f64> = null
+let mut vstorz: ptr<f64> = null
+let mut vsprx: ptr<f64> = null
+let mut vspry: ptr<f64> = null
+let mut vsprz: ptr<f64> = null
+let mut erep: ptr<f64> = null
+let mut erepcel: ptr<f64> = null
+let mut eyou: ptr<f64> = null
+let mut eadh: ptr<f64> = null
+let mut etor: ptr<f64> = null
+let mut espring: ptr<f64> = null
+let mut fmeanl: ptr<f64> = null
+let mut fmeanv: ptr<f64> = null
+let mut ffu: ptr<i32> = null
+let mut kadh: ptr<f64> = null
+let mut kadh_ld: i32 = 0
+let mut ffufi: ptr<i32> = null
+let mut neigh_ld: i32 = 0
+
+# These constants are shared by the physics and serialization modules.
+function nod_zero() -> Nod {
+    return Nod {
+        x: 0.0, y: 0.0, z: 0.0, e: 0.0,
+        eqd: 0.0, add: 0.0, you: 0.0, adh: 0.0, rep: 0.0, rec: 0.0,
+        erp: 0.0, est: 0.0, eqs: 0.0, hoo: 0.0, mov: 0.0, dmo: 0.0,
+        orix: 0.0, oriy: 0.0, oriz: 0.0, ecm: 0.0, cod: 0.0, grd: 0.0,
+        pld: 0.0, vod: 0.0, dif: 0.0, kfi: 0.0, pla: 0.0, kvol: 0.0,
+        tipus: 0, icel: 0, altre: 0, marge: 0, talone: 0, fix: 0, ndiv: 0
+    }
+}
+
+function cel_zero() -> Cel {
+    return Cel {
+        minsize_for_div: 10000.0, maxsize_for_div: 0.0,
+        cex: 0.0, cey: 0.0, cez: 0.0,
+        polx: 0.0, poly: 0.0, polz: 0.0,
+        hpolx: 0.0, hpoly: 0.0, hpolz: 0.0,
+        fase: 0.0, temt: 0.0,
+        nunodes: 0, nodela: 0, ctipus: 0, node: null
+    }
+}
+
+# Allocate the shared node and cell records with the original 1-based layout.
+function iniarrays(node_count: i32, cell_count: i32) -> void {
+    if node != null { free(node as ptr<void>) }
+    if nodeo != null { free(nodeo as ptr<void>) }
+    if cels != null { free(cels as ptr<void>) }
+    if neigh != null { free(neigh as ptr<void>) }
+    if nneigh != null { free(nneigh as ptr<void>) }
+    if dneigh != null { free(dneigh as ptr<void>) }
+    if px != null { free(px as ptr<void>) }
+    if py != null { free(py as ptr<void>) }
+    if pz != null { free(pz as ptr<void>) }
+    if dex != null { free(dex as ptr<void>) }
+    if vcilx != null { free(vcilx as ptr<void>) }
+    if vcily != null { free(vcily as ptr<void>) }
+    if vcilz != null { free(vcilz as ptr<void>) }
+    if vtorx != null { free(vtorx as ptr<void>) }
+    if vtory != null { free(vtory as ptr<void>) }
+    if vtorz != null { free(vtorz as ptr<void>) }
+    if vstorx != null { free(vstorx as ptr<void>) }
+    if vstory != null { free(vstory as ptr<void>) }
+    if vstorz != null { free(vstorz as ptr<void>) }
+    if vsprx != null { free(vsprx as ptr<void>) }
+    if vspry != null { free(vspry as ptr<void>) }
+    if vsprz != null { free(vsprz as ptr<void>) }
+    if erep != null { free(erep as ptr<void>) }
+    if erepcel != null { free(erepcel as ptr<void>) }
+    if eyou != null { free(eyou as ptr<void>) }
+    if eadh != null { free(eadh as ptr<void>) }
+    if etor != null { free(etor as ptr<void>) }
+    if espring != null { free(espring as ptr<void>) }
+    if fmeanl != null { free(fmeanl as ptr<void>) }
+    if fmeanv != null { free(fmeanv as ptr<void>) }
+    if ffu != null { free(ffu as ptr<void>) }
+    if kadh != null { free(kadh as ptr<void>) }
+    if ffufi != null { free(ffufi as ptr<void>) }
+    node = calloc((node_count + 1) as i64, sizeof<Nod>()) as ptr<Nod>
+    nodeo = calloc((node_count + 1) as i64, sizeof<Nod>()) as ptr<Nod>
+    cels = calloc((cell_count + 1) as i64, sizeof<Cel>()) as ptr<Cel>
+    neigh_ld = mnn + 1
+    neigh = calloc(((node_count + 1) * neigh_ld) as i64, sizeof<i32>()) as ptr<i32>
+    dneigh = calloc(((node_count + 1) * neigh_ld) as i64, sizeof<f64>()) as ptr<f64>
+    nneigh = calloc((node_count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    px = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    py = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    pz = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    dex = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vcilx = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vcily = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vcilz = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vtorx = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vtory = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vtorz = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vstorx = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vstory = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vstorz = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vsprx = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vspry = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    vsprz = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    erep = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    erepcel = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    eyou = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    eadh = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    etor = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    espring = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    fmeanl = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    fmeanv = calloc((node_count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    kadh_ld = ntipusadh + 1
+    if kadh_ld < 1 { kadh_ld = 1 }
+    kadh = calloc(((ntipusadh + 1) * kadh_ld) as i64, sizeof<f64>()) as ptr<f64>
+    ffu = calloc((NFU + 1) as i64, sizeof<i32>()) as ptr<i32>
+    ffufi = calloc(((NFI + 1) * 4) as i64, sizeof<i32>()) as ptr<i32>
+    node_capacity = node_count
+    cell_capacity = cell_count
+    let mut n: i32 = 0
+    while n <= node_count {
+        node[n] = nod_zero()
+        nodeo[n] = nod_zero()
+        n = n + 1
+    }
+    let mut q: i32 = 0
+    while q <= cell_count {
+        cels[q] = cel_zero()
+        q = q + 1
+    }
+}
+
+function resize_f64_buffer(values: ptr<f64>, old_capacity: i32, new_capacity: i32) -> ptr<f64> {
+    let resized: ptr<f64> = calloc((new_capacity + 1) as i64, sizeof<f64>()) as ptr<f64>
+    if resized == null { resize_error = true; return values }
+    let mut i: i32 = 0
+    while i <= old_capacity { resized[i] = values[i]; i = i + 1 }
+    if values != null { free(values as ptr<void>) }
+    return resized
+}
+
+function resize_node_buffers(new_capacity: i32) -> bool {
+    if new_capacity <= node_capacity { return true }
+    if node == null or nodeo == null { return false }
+    resize_error = false
+    let resized_node: ptr<Nod> = calloc((new_capacity + 1) as i64, sizeof<Nod>()) as ptr<Nod>
+    let resized_nodeo: ptr<Nod> = calloc((new_capacity + 1) as i64, sizeof<Nod>()) as ptr<Nod>
+    if resized_node == null or resized_nodeo == null {
+        if resized_node != null { free(resized_node as ptr<void>) }
+        if resized_nodeo != null { free(resized_nodeo as ptr<void>) }
+        return false
+    }
+    let mut i: i32 = 0
+    while i <= node_capacity {
+        resized_node[i] = node[i]
+        resized_nodeo[i] = nodeo[i]
+        i = i + 1
+    }
+    free(node as ptr<void>); free(nodeo as ptr<void>)
+    node = resized_node; nodeo = resized_nodeo
+    let mut row: i32 = 0
+    px = resize_f64_buffer(px, node_capacity, new_capacity)
+    py = resize_f64_buffer(py, node_capacity, new_capacity)
+    pz = resize_f64_buffer(pz, node_capacity, new_capacity)
+    dex = resize_f64_buffer(dex, node_capacity, new_capacity)
+    vcilx = resize_f64_buffer(vcilx, node_capacity, new_capacity)
+    vcily = resize_f64_buffer(vcily, node_capacity, new_capacity)
+    vcilz = resize_f64_buffer(vcilz, node_capacity, new_capacity)
+    vtorx = resize_f64_buffer(vtorx, node_capacity, new_capacity)
+    vtory = resize_f64_buffer(vtory, node_capacity, new_capacity)
+    vtorz = resize_f64_buffer(vtorz, node_capacity, new_capacity)
+    vstorx = resize_f64_buffer(vstorx, node_capacity, new_capacity)
+    vstory = resize_f64_buffer(vstory, node_capacity, new_capacity)
+    vstorz = resize_f64_buffer(vstorz, node_capacity, new_capacity)
+    vsprx = resize_f64_buffer(vsprx, node_capacity, new_capacity)
+    vspry = resize_f64_buffer(vspry, node_capacity, new_capacity)
+    vsprz = resize_f64_buffer(vsprz, node_capacity, new_capacity)
+    erep = resize_f64_buffer(erep, node_capacity, new_capacity)
+    erepcel = resize_f64_buffer(erepcel, node_capacity, new_capacity)
+    eyou = resize_f64_buffer(eyou, node_capacity, new_capacity)
+    eadh = resize_f64_buffer(eadh, node_capacity, new_capacity)
+    etor = resize_f64_buffer(etor, node_capacity, new_capacity)
+    espring = resize_f64_buffer(espring, node_capacity, new_capacity)
+    fmeanl = resize_f64_buffer(fmeanl, node_capacity, new_capacity)
+    fmeanv = resize_f64_buffer(fmeanv, node_capacity, new_capacity)
+    if resize_error { return false }
+    if neigh != null {
+        let old_neigh: ptr<i32> = neigh
+        let old_dneigh: ptr<f64> = dneigh
+        let new_neigh: ptr<i32> = calloc(((new_capacity + 1) * neigh_ld) as i64, sizeof<i32>()) as ptr<i32>
+        let new_dneigh: ptr<f64> = calloc(((new_capacity + 1) * neigh_ld) as i64, sizeof<f64>()) as ptr<f64>
+        if new_neigh == null or new_dneigh == null {
+            if new_neigh != null { free(new_neigh as ptr<void>) }
+            if new_dneigh != null { free(new_dneigh as ptr<void>) }
+            return false
+        }
+        row = 0
+        while row <= node_capacity {
+            let mut column: i32 = 0
+            while column < neigh_ld {
+                let index: i32 = row * neigh_ld + column
+                new_neigh[index] = old_neigh[index]
+                new_dneigh[index] = old_dneigh[index]
+                column = column + 1
+            }
+            row = row + 1
+        }
+        free(old_neigh as ptr<void>); free(old_dneigh as ptr<void>)
+        neigh = new_neigh; dneigh = new_dneigh
+    }
+    if nneigh != null {
+        let old_nneigh: ptr<i32> = nneigh
+        let new_nneigh: ptr<i32> = calloc((new_capacity + 1) as i64, sizeof<i32>()) as ptr<i32>
+        if new_nneigh == null { return false }
+        i = 0
+        while i <= node_capacity { new_nneigh[i] = old_nneigh[i]; i = i + 1 }
+        free(old_nneigh as ptr<void>); nneigh = new_nneigh
+    }
+    node_capacity = new_capacity
+    nda = new_capacity
+    return true
+}
+
+function resize_cell_buffers(new_capacity: i32) -> bool {
+    if new_capacity <= cell_capacity { return true }
+    let resized: ptr<Cel> = calloc((new_capacity + 1) as i64, sizeof<Cel>()) as ptr<Cel>
+    if resized == null { return false }
+    let mut i: i32 = 0
+    while i <= new_capacity {
+        resized[i] = cel_zero()
+        i = i + 1
+    }
+    i = 0
+    while i <= cell_capacity {
+        resized[i] = cels[i]
+        i = i + 1
+    }
+    if cels != null { free(cels as ptr<void>) }
+    cels = resized
+    cell_capacity = new_capacity
+    return true
+}
+
+# Remove one node row while preserving the 1-based indexing used by the model.
+function remove_node_slot(deleted_id: i32) -> bool {
+    if deleted_id < 1 or deleted_id > nd { return false }
+    if neigh != null and dneigh != null and nneigh != null and neigh_ld > 0 {
+        let mut source: i32 = 1
+        while source <= nd {
+            if source != deleted_id {
+                let old_count: i32 = nneigh[source]
+                let mut read_column: i32 = 1
+                let mut write_column: i32 = 1
+                while read_column <= old_count {
+                    let source_index: i32 = source * neigh_ld + read_column
+                    let neighbor_id: i32 = neigh[source_index]
+                    if neighbor_id != deleted_id {
+                        let adjusted_id: i32 = if neighbor_id > deleted_id { neighbor_id - 1 } else { neighbor_id }
+                        let target_index: i32 = source * neigh_ld + write_column
+                        neigh[target_index] = adjusted_id
+                        dneigh[target_index] = dneigh[source_index]
+                        write_column = write_column + 1
+                    }
+                    read_column = read_column + 1
+                }
+                let mut clear_column: i32 = write_column
+                while clear_column <= old_count {
+                    let clear_index: i32 = source * neigh_ld + clear_column
+                    neigh[clear_index] = 0
+                    dneigh[clear_index] = 0.0
+                    clear_column = clear_column + 1
+                }
+                nneigh[source] = write_column - 1
+            }
+            source = source + 1
+        }
+    }
+    let mut row: i32 = deleted_id
+    while row < nd {
+        node[row] = node[row + 1]
+        nneigh[row] = nneigh[row + 1]
+        if neigh != null and dneigh != null and neigh_ld > 0 {
+            let mut column: i32 = 0
+            while column < neigh_ld {
+                let target_index: i32 = row * neigh_ld + column
+                let source_index: i32 = (row + 1) * neigh_ld + column
+                neigh[target_index] = neigh[source_index]
+                dneigh[target_index] = dneigh[source_index]
+                column = column + 1
+            }
+        }
+        row = row + 1
+    }
+    nneigh[nd] = 0
+    if neigh != null and dneigh != null and neigh_ld > 0 {
+        let mut column: i32 = 0
+        while column < neigh_ld {
+            let index: i32 = nd * neigh_ld + column
+            neigh[index] = 0
+            dneigh[index] = 0.0
+            column = column + 1
+        }
+    }
+    nd = nd - 1
+    return true
+}
+
+function matrix_index(row: i32, column: i32, leading_dimension: i32) -> i32 {
+    return row * leading_dimension + column
+}
+
+export NPARAM, NPARAM_PER_NODE, NPARAM_PER_NODER, NPARAM_PER_NODEI, NGCB, NGA, NFU, NFI, STATUS, NUE, PI, PII
+export aut, getot, nd, ng, ncels, ncals, nda, ndepi, ndmes, ndx, ncelsepi, ncelsmes, itacc, itv, nodecel, ntipusadh
+export nvarglobal_out, varglobal_out, mnn_dyn, omnn, mnn_dynam, ndmax, ndch, nseed, whichend, maxnodenr, ndoo, ndo, tellme2, ndu
+export desplacament, ene, realq, extre, rdiffmax, maxad, maxbox, maxcycl, newfase, maxelong, start_time, stop_time, current_time1, current_time2, total_gabriel
+export delta, rtime, temp, rv, urv, prop_noise, reqmin, ecmmax, mmae, dmax, prec, dif_req, min_comp
+export mnn, ramax, deltamax, deltamin, desmax, resmax, nparti, movi, ttalone, khold, screen_radius, df_reqmax, angletor, ldi, ndmax, ndch, whichend, eva
+export i, j, k, ii, jj, kk, iii, jjj, kkk, iiii, jjjj, kkkk, iiiii, jjjjj, kkkkk
+export a, b, c, d, e, f, g, h, aa, bb, cc, dd, ee, ff, gg, hh, aaa, bbb, ccc, ddd, eee, fff, ggg, hhh
+export Nod, Cel, nod_zero, cel_zero, iniarrays, resize_node_buffers, resize_cell_buffers, remove_node_slot, node, nodeo, cels, node_capacity, cell_capacity
+export idum, idumoriginal
+export neigh, nneigh, dneigh, px, py, pz, dex, neigh_ld, matrix_index
+export vcilx, vcily, vcilz, vtorx, vtory, vtorz, vstorx, vstory, vstorz, vsprx, vspry, vsprz
+export erep, erepcel, eyou, eadh, etor, espring, fmeanl, fmeanv, ffu, ffufi, kadh, kadh_ld

@@ -1,0 +1,162 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, ndx, ng, nparti, ecmmax, desmax, node, nodeo }
+import embryo.aleas { inialea3d }
+import embryo.genetic { gex, agex, gene_expression_index }
+import embryo.neighboring { nneigh }
+import embryo.ecm { ecm_secretion, should_i_secrete, ecm_error }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function close_f64(actual: f64, expected: f64) -> bool {
+    let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+    return fabs(actual - expected) <= 1.0e-9 * scale
+}
+
+function check_ecm_node(input_path: string, fixture_path: string) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    inialea3d(nparti)
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 2 }
+    let mut cursor: i32 = 0
+    let end_count: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let count_line: string = copy_line(reference.data, cursor, end_count)
+    let old_count: ParseI64 = str_parse_i64_at(count_line, 0)
+    if old_count.ok == false or old_count.value != nd as i64 { return 3 }
+    let old_ecm_count: i32 = ndx
+    if ecm_secretion(1) == false { return 4 }
+    if nd != old_count.value as i32 + 1 { return 5 }
+    if ndx != old_ecm_count + 1 { return 41 }
+    if nneigh[nd] != 0 or node[nd].ecm != 0.0 or node[nd].fix != 0 { return 42 }
+    if node[nd].marge != 1 or node[nd].dmo != desmax { return 43 }
+    if close_f64(nodeo[nd].x, node[nd].x) == false or close_f64(nodeo[nd].y, node[nd].y) == false or close_f64(nodeo[nd].z, node[nd].z) == false { return 44 }
+    cursor = line_next(reference.data, reference.len as i32, end_count)
+    let node_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let node_line: string = copy_line(reference.data, cursor, node_end)
+    let id: ParseI64 = str_parse_i64_at(node_line, 0)
+    if id.ok == false or id.value != nd as i64 { return 6 }
+    let mut pos: i32 = id.end
+    let mut field: i32 = 0
+    while field < 7 {
+        let expected: ParseF64 = str_parse_f64_at(node_line, pos)
+        if expected.ok == false { return 7 }
+        let mut actual: f64 = node[nd].x
+        if field == 1 { actual = node[nd].y }
+        elif field == 2 { actual = node[nd].z }
+        elif field == 3 { actual = node[nd].eqd }
+        elif field == 4 { actual = node[nd].grd }
+        elif field == 5 { actual = node[nd].add }
+        elif field == 6 { actual = node[nd].rec }
+        if close_f64(actual, expected.value) == false { return 10 + field }
+        pos = expected.end
+        field = field + 1
+    }
+    let expected_type: ParseI64 = str_parse_i64_at(node_line, pos)
+    let expected_cell: ParseI64 = str_parse_i64_at(node_line, expected_type.end)
+    if expected_type.ok == false or expected_cell.ok == false { return 20 }
+    if node[nd].tipus != expected_type.value as i32 or node[nd].icel != expected_cell.value as i32 { return 21 }
+
+    cursor = line_next(reference.data, reference.len as i32, node_end)
+    let mut gene_id: i32 = 1
+    while gene_id <= ng {
+        let gene_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let gene_line: string = copy_line(reference.data, cursor, gene_end)
+        let parsed_id: ParseI64 = str_parse_i64_at(gene_line, 0)
+        if parsed_id.ok == false or parsed_id.value != gene_id as i64 { return 22 }
+        pos = parsed_id.end
+        field = 0
+        while field < 4 {
+            let expected: ParseF64 = str_parse_f64_at(gene_line, pos)
+            if expected.ok == false { return 23 }
+            let mut actual: f64 = gex[gene_expression_index(1, gene_id)]
+            if field == 1 { actual = agex[gene_expression_index(1, gene_id)] }
+            elif field == 2 { actual = gex[gene_expression_index(nd, gene_id)] }
+            elif field == 3 { actual = agex[gene_expression_index(nd, gene_id)] }
+            if close_f64(actual, expected.value) == false { return 30 + field }
+            pos = expected.end
+            field = field + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, gene_end)
+        gene_id = gene_id + 1
+    }
+    if cursor < reference.len as i32 { return 40 }
+    return 0
+}
+
+function check_threshold_trigger() -> i32 {
+    if read_snapshot_parameters("../reference/examples/ecm_secretion/ecm_secretion.txt") != 0 { return 50 }
+    inialea3d(nparti)
+    node[1].ecm = ecmmax
+    if should_i_secrete() == false { return 51 + ecm_error }
+    let reference: FileRead = io_read_file("fixtures/ecm_secretion_ecm_trigger.ref")
+    if reference.ok == false { return 55 }
+    let mut cursor: i32 = 0
+    let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let line: string = copy_line(reference.data, cursor, end)
+    let old_count: ParseI64 = str_parse_i64_at(line, 0)
+    let new_count: ParseI64 = str_parse_i64_at(line, old_count.end)
+    let source_ecm: ParseF64 = str_parse_f64_at(line, new_count.end)
+    if old_count.ok == false or new_count.ok == false or source_ecm.ok == false { return 56 }
+    if old_count.value + 1 != new_count.value or nd as i64 != new_count.value { return 57 }
+    if close_f64(node[1].ecm, source_ecm.value) == false { return 58 }
+    cursor = line_next(reference.data, reference.len as i32, end)
+    let node_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+    let node_line: string = copy_line(reference.data, cursor, node_end)
+    let count: ParseI64 = str_parse_i64_at(node_line, 0)
+    let x: ParseF64 = str_parse_f64_at(node_line, count.end)
+    let y: ParseF64 = str_parse_f64_at(node_line, x.end)
+    let z: ParseF64 = str_parse_f64_at(node_line, y.end)
+    if count.ok == false or x.ok == false or y.ok == false or z.ok == false { return 59 }
+    if count.value != 1 { return 60 }
+    if close_f64(node[nd].x, x.value) == false or close_f64(node[nd].y, y.value) == false or close_f64(node[nd].z, z.value) == false { return 61 }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_ecm_node("../reference/examples/migration/migration.txt", "fixtures/migration_ecm_emit.ref")
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_ecm_node("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_ecm_emit.ref")
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_ecm_node("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_ecm_emit.ref")
+    if adhesion != 0 { return adhesion }
+    let polar_growth: i32 = check_ecm_node("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_ecm_emit.ref")
+    if polar_growth != 0 { return polar_growth }
+    let apical: i32 = check_ecm_node("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_ecm_emit.ref")
+    if apical != 0 { return apical }
+    let ecm: i32 = check_ecm_node("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_ecm_emit.ref")
+    if ecm != 0 { return ecm }
+    let figure_six: i32 = check_ecm_node("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_ecm_emit.ref")
+    if figure_six != 0 { return figure_six }
+    let sea_urchin: i32 = check_ecm_node("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_ecm_emit.ref")
+    if sea_urchin != 0 { return sea_urchin }
+    return check_threshold_trigger()
+}

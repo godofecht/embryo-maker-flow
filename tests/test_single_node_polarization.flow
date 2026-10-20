@@ -1,0 +1,93 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, ncels, cels, node, ffu }
+import embryo.genetic { ng, npag, whonpag, gex, gene_effects, gene_expression_index, gene_effect_index }
+import embryo.neighboring { neighbor_build }
+import embryo.single_node { polarization_single }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(value: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let result: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { result[target] = bytes[source]; source = source + 1; target = target + 1 }
+    result[target] = 0
+    return result as string
+}
+
+function close(actual: f64, expected: f64) -> bool {
+    let scale: f64 = if fabs(expected) > 1.0 { fabs(expected) } else { 1.0 }
+    return fabs(actual - expected) <= 1.0e-9 * scale
+}
+
+function check_case(input_path: string, fixture_path: string, mode: i32) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    if neighbor_build() == false { return 2 }
+    ffu[1] = 0; ffu[9] = mode
+    npag[43] = 1; whonpag[43 * (ng + 1) + 1] = 1
+    gene_effects[gene_effect_index(1, 43)] = 0.75
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        gex[gene_expression_index(node_id, 1)] = 1.0 + 0.2 * node[node_id].x + 0.1 * node[node_id].y + 0.05 * node[node_id].z
+        node_id = node_id + 1
+    }
+    if polarization_single() == false { return 3 }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 4 }
+    let mut cursor: i32 = 0
+    let mut cell_id: i32 = 1
+    while cell_id <= ncels {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let id: ParseI64 = str_parse_i64_at(line, 0)
+        let x: ParseF64 = str_parse_f64_at(line, id.end)
+        let y: ParseF64 = str_parse_f64_at(line, x.end)
+        let z: ParseF64 = str_parse_f64_at(line, y.end)
+        if id.ok == false or x.ok == false or y.ok == false or z.ok == false { return 5 }
+        if id.value != cell_id as i64 { return 6 }
+        if close(cels[cell_id].polx, x.value) == false or close(cels[cell_id].poly, y.value) == false or close(cels[cell_id].polz, z.value) == false { println("polar mismatch", cell_id, cels[cell_id].polx, cels[cell_id].poly, cels[cell_id].polz, x.value, y.value, z.value); return 10 + cell_id }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        cell_id = cell_id + 1
+    }
+    return 0
+}
+
+function main() -> i32 {
+    let paths: array<string, 6> = [
+        "migration", "apoptosis", "differential_adhesion", "polar_growth", "ecm_secretion", "sea_urchin"
+    ]
+    let mut index: i32 = 0
+    while index < 6 {
+        let name: string = paths[index]
+        let input: string = if index == 5 { "../reference/examples/sea_urchin_gastrulation/sea_urchin.txt" } else { "../reference/examples/" + name + "/" + name + ".txt" }
+        let new_fixture: string = "fixtures/" + name + "_single_polarization_new.ref"
+        let old_fixture: string = "fixtures/" + name + "_single_polarization_old.ref"
+        let new_result: i32 = check_case(input, new_fixture, 0)
+        if new_result != 0 { return new_result }
+        let old_result: i32 = check_case(input, old_fixture, 1)
+        if old_result != 0 { return 100 + old_result }
+        index = index + 1
+    }
+    return 0
+}

@@ -1,0 +1,265 @@
+import std.io { FileRead, io_read_file }
+import std.process { proc_argc, proc_argv }
+import std.string { ParseI64, ParseF64, str_parse_i64, str_parse_f64 }
+
+@cEmbed("#include <dlfcn.h>")
+@cEmbed("static int flow_png_uncompress(unsigned char *dst, unsigned long *dst_len, const unsigned char *src, unsigned long src_len) { static void *handle = 0; typedef int (*fn_t)(unsigned char *, unsigned long *, const unsigned char *, unsigned long); if (!handle) handle = dlopen(\"/usr/lib/libz.1.dylib\", RTLD_LAZY); if (!handle) return -1; fn_t fn = (fn_t)dlsym(handle, \"uncompress\"); if (!fn) return -1; return fn(dst, dst_len, src, src_len); }")
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function free(value: ptr<void>) -> void
+    function flow_png_uncompress(dest: ptr<u8>, dest_len: ptr<u64>, source: ptr<u8>, source_len: u64) -> i32
+    function printf(format: string, ...) -> i32
+}
+
+struct Image {
+    width: i32,
+    height: i32,
+    channels: i32,
+    pixels: ptr<u8>,
+    ok: bool
+}
+
+struct Bounds {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    count: i64
+}
+
+function be32(data: ptr<u8>, at: i32) -> u32 {
+    return ((data[at] as u32) << 24) | ((data[at + 1] as u32) << 16) | ((data[at + 2] as u32) << 8) | (data[at + 3] as u32)
+}
+
+function paeth(a: i32, b: i32, c: i32) -> i32 {
+    let p: i32 = a + b - c
+    let pa: i32 = if p > a { p - a } else { a - p }
+    let pb: i32 = if p > b { p - b } else { b - p }
+    let pc: i32 = if p > c { p - c } else { c - p }
+    if pa <= pb and pa <= pc { return a }
+    if pb <= pc { return b }
+    return c
+}
+
+function rounded_average(sum: i32, count: i32) -> i32 {
+    let quotient: i32 = sum / count
+    let remainder: i32 = sum % count
+    if remainder * 2 > count { return quotient + 1 }
+    if remainder * 2 == count and quotient % 2 != 0 { return quotient + 1 }
+    return quotient
+}
+
+function decode_png(path: string) -> Image {
+    let file: FileRead = io_read_file(path)
+    if file.ok == false or file.len < 33 { return Image { width: 0, height: 0, channels: 0, pixels: null, ok: false } }
+    let data: ptr<u8> = file.data as ptr<u8>
+    if data[0] != 137 or data[1] != 80 or data[2] != 78 or data[3] != 71 { return Image { width: 0, height: 0, channels: 0, pixels: null, ok: false } }
+    let width: i32 = be32(data, 16) as i32
+    let height: i32 = be32(data, 20) as i32
+    let depth: i32 = data[24] as i32
+    let color: i32 = data[25] as i32
+    let mut channels: i32 = 0
+    if color == 2 { channels = 3 }
+    if color == 6 { channels = 4 }
+    if width <= 0 or height <= 0 or depth != 8 or channels == 0 or data[26] != 0 or data[27] != 0 or data[28] != 0 {
+        return Image { width: 0, height: 0, channels: 0, pixels: null, ok: false }
+    }
+    let stride: i32 = width * 3
+    let compressed: ptr<u8> = malloc(file.len) as ptr<u8>
+    let raw_size: i64 = (width * channels + 1) as i64 * height as i64
+    let raw: ptr<u8> = malloc(raw_size) as ptr<u8>
+    let pixels: ptr<u8> = malloc(stride as i64 * height as i64) as ptr<u8>
+    if compressed == null or raw == null or pixels == null { return Image { width: 0, height: 0, channels: 0, pixels: null, ok: false } }
+    let mut y: i32 = 0
+    let mut cursor: i32 = 8
+    let mut compressed_len: i32 = 0
+    while cursor + 12 <= file.len as i32 {
+        let size: i32 = be32(data, cursor) as i32
+        if size < 0 or cursor + 12 + size > file.len as i32 { break }
+        if data[cursor + 4] == 73 and data[cursor + 5] == 68 and data[cursor + 6] == 65 and data[cursor + 7] == 84 {
+            let mut j: i32 = 0
+            while j < size { compressed[compressed_len + j] = data[cursor + 8 + j]; j = j + 1 }
+            compressed_len = compressed_len + size
+        }
+        if data[cursor + 4] == 73 and data[cursor + 5] == 69 and data[cursor + 6] == 78 and data[cursor + 7] == 68 { break }
+        cursor = cursor + size + 12
+    }
+    let mut output_len: u64 = raw_size as u64
+    let inflate_result: i32 = flow_png_uncompress(raw, &output_len, compressed, compressed_len as u64)
+    free(compressed)
+    if inflate_result != 0 or output_len != raw_size as u64 { free(raw); free(pixels); return Image { width: 0, height: 0, channels: 0, pixels: null, ok: false } }
+    while y < height {
+        let filter: i32 = raw[y * (width * channels + 1)] as i32
+        let mut x: i32 = 0
+        while x < width * channels {
+            let source: i32 = y * (width * channels + 1) + x + 1
+            let left: i32 = if x >= channels { raw[source - channels] as i32 } else { 0 }
+            let above: i32 = if y > 0 { raw[(y - 1) * (width * channels + 1) + x + 1] as i32 } else { 0 }
+            let upper_left: i32 = if y > 0 and x >= channels { raw[(y - 1) * (width * channels + 1) + x - channels + 1] as i32 } else { 0 }
+            let mut predictor: i32 = 0
+            if filter == 1 { predictor = left }
+            if filter == 2 { predictor = above }
+            if filter == 3 { predictor = (left + above) / 2 }
+            if filter == 4 { predictor = paeth(left, above, upper_left) }
+            if filter > 4 { free(raw); free(pixels); return Image { width: 0, height: 0, channels: 0, pixels: null, ok: false } }
+            let decoded: u8 = ((raw[source] as i32 + predictor) & 255) as u8
+            raw[source] = decoded
+            let px: i32 = x / channels
+            let component: i32 = x % channels
+            if component < 3 { pixels[y * stride + px * 3 + component] = decoded }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    free(raw)
+    return Image { width: width, height: height, channels: 3, pixels: pixels, ok: true }
+}
+
+function model_pixel(image: Image, x: i32, y: i32, blue_min: i32, green_max: i32, ratio: f64) -> bool {
+    let at: i32 = (y * image.width + x) * image.channels
+    let red: i32 = image.pixels[at] as i32
+    let green: i32 = image.pixels[at + 1] as i32
+    let blue: i32 = image.pixels[at + 2] as i32
+    return blue >= blue_min and green <= green_max and blue as f64 >= red as f64 * ratio
+}
+
+function find_bounds(image: Image, blue_min: i32, green_max: i32, ratio: f64) -> Bounds {
+    let mut b: Bounds = Bounds { x0: image.width, y0: image.height, x1: -1, y1: -1, count: 0 }
+    let mut y: i32 = 0
+    while y < image.height {
+        let mut x: i32 = 0
+        while x < image.width {
+            if model_pixel(image, x, y, blue_min, green_max, ratio) {
+                if x < b.x0 { b.x0 = x }; if x > b.x1 { b.x1 = x }
+                if y < b.y0 { b.y0 = y }; if y > b.y1 { b.y1 = y }
+                b.count = b.count + 1
+            }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    return b
+}
+
+function channel(image: Image, x: i32, y: i32, c: i32) -> i32 {
+    return image.pixels[(y * image.width + x) * image.channels + c] as i32
+}
+
+function int_arg(index: i32) -> i32 {
+    let parsed: ParseI64 = str_parse_i64(proc_argv(index))
+    if parsed.ok { return parsed.value as i32 }
+    return 0
+}
+
+function float_arg(index: i32) -> f64 {
+    let parsed: ParseF64 = str_parse_f64(proc_argv(index))
+    if parsed.ok { return parsed.value }
+    return 0.0
+}
+
+function main() -> i32 {
+    let argc: i32 = proc_argc()
+    if argc < 3 { println("usage: flow run tools/render_diff.flow <reference.png> <candidate.png> [--reference-scale N] [--reference-view X Y W H --candidate-view X Y W H] [--blue-min N --green-max N --blue-red-ratio R]"); return 2 }
+    let mut scale: i32 = 2
+    let mut blue_min: i32 = 70
+    let mut green_max: i32 = 90
+    let mut ratio: f64 = 1.2
+    let mut rvx: i32 = -1; let mut rvy: i32 = 0; let mut rvw: i32 = 0; let mut rvh: i32 = 0
+    let mut cvx: i32 = -1; let mut cvy: i32 = 0; let mut cvw: i32 = 0; let mut cvh: i32 = 0
+    let mut i: i32 = 3
+    while i < argc {
+        let arg: string = proc_argv(i)
+        if arg == "--reference-scale" { i = i + 1; scale = int_arg(i) }
+        elif arg == "--blue-min" { i = i + 1; blue_min = int_arg(i) }
+        elif arg == "--green-max" { i = i + 1; green_max = int_arg(i) }
+        elif arg == "--blue-red-ratio" { i = i + 1; ratio = float_arg(i) }
+        elif arg == "--reference-view" { i = i + 1; rvx = int_arg(i); i = i + 1; rvy = int_arg(i); i = i + 1; rvw = int_arg(i); i = i + 1; rvh = int_arg(i) }
+        elif arg == "--candidate-view" { i = i + 1; cvx = int_arg(i); i = i + 1; cvy = int_arg(i); i = i + 1; cvw = int_arg(i); i = i + 1; cvh = int_arg(i) }
+        i = i + 1
+    }
+    let ref: Image = decode_png(proc_argv(1))
+    let cand: Image = decode_png(proc_argv(2))
+    if ref.ok == false or cand.ok == false { println("could not decode PNG. Expected 8-bit RGB or RGBA captures."); return 2 }
+    let rb: Bounds = find_bounds(ref, blue_min, green_max, ratio)
+    let cb: Bounds = find_bounds(cand, blue_min, green_max, ratio)
+    if rb.count == 0 or cb.count == 0 { println("no model pixels matched the color mask. Adjust mask thresholds."); return 2 }
+    let rw: i32 = rb.x1 - rb.x0 + 1; let rh: i32 = rb.y1 - rb.y0 + 1
+    let cw: i32 = cb.x1 - cb.x0 + 1; let ch: i32 = cb.y1 - cb.y0 + 1
+    if scale < 1 or rw % scale != 0 or rh % scale != 0 { println("OG model bounds must divide evenly by the reference scale"); return 2 }
+    let sw: i32 = rw / scale; let sh: i32 = rh / scale
+    let views: bool = rvx >= 0 and cvx >= 0
+    if (rvx >= 0) != (cvx >= 0) { println("provide both viewport rectangles"); return 2 }
+    if views and (rvw % scale != 0 or rvh % scale != 0 or rvw / scale != cvw or rvh / scale != cvh) { println("scaled OG viewport dimensions differ from Flow viewport"); return 2 }
+    if views and (rvw <= 0 or rvh <= 0 or cvw <= 0 or cvh <= 0 or rvx < 0 or rvy < 0 or cvx < 0 or cvy < 0 or rvx + rvw > ref.width or rvy + rvh > ref.height or cvx + cvw > cand.width or cvy + cvh > cand.height) { println("viewport rectangle falls outside its image"); return 2 }
+    let mut intersection: i64 = 0; let mut union: i64 = 0; let mut common: i64 = 0; let mut color_error: i64 = 0
+    let mut viewport_error: i64 = 0; let mut changed_pixels: i64 = 0
+    let mut ref_mask: i64 = 0; let mut cand_mask: i64 = 0
+    let compare_w: i32 = if views { cvw } else { if sw < cw { sw } else { cw } }
+    let compare_h: i32 = if views { cvh } else { if sh < ch { sh } else { ch } }
+    let mut y: i32 = 0
+    while y < compare_h {
+        let mut x: i32 = 0
+        while x < compare_w {
+            let mut rr: i32 = 0; let mut rg: i32 = 0; let mut rbv: i32 = 0
+            if views {
+                let mut dy: i32 = 0
+                while dy < scale {
+                    let mut dx: i32 = 0
+                    while dx < scale {
+                        rr = rr + channel(ref, rvx + x * scale + dx, rvy + y * scale + dy, 0)
+                        rg = rg + channel(ref, rvx + x * scale + dx, rvy + y * scale + dy, 1)
+                        rbv = rbv + channel(ref, rvx + x * scale + dx, rvy + y * scale + dy, 2)
+                        dx = dx + 1
+                    }
+                    dy = dy + 1
+                }
+                let samples: i32 = scale * scale
+                rr = rounded_average(rr, samples); rg = rounded_average(rg, samples); rbv = rounded_average(rbv, samples)
+            } else {
+                let mut dy: i32 = 0
+                while dy < scale {
+                    let mut dx: i32 = 0
+                    while dx < scale {
+                        rr = rr + channel(ref, rb.x0 + x * scale + dx, rb.y0 + y * scale + dy, 0)
+                        rg = rg + channel(ref, rb.x0 + x * scale + dx, rb.y0 + y * scale + dy, 1)
+                        rbv = rbv + channel(ref, rb.x0 + x * scale + dx, rb.y0 + y * scale + dy, 2)
+                        dx = dx + 1
+                    }
+                    dy = dy + 1
+                }
+                let samples: i32 = scale * scale
+                rr = rounded_average(rr, samples); rg = rounded_average(rg, samples); rbv = rounded_average(rbv, samples)
+            }
+            let fx: i32 = if views { cvx + x } else { cb.x0 + x }
+            let fy: i32 = if views { cvy + y } else { cb.y0 + y }
+            let fr: i32 = channel(cand, fx, fy, 0); let fg: i32 = channel(cand, fx, fy, 1); let fb: i32 = channel(cand, fx, fy, 2)
+            let pixel_error: i32 = (if rr > fr { rr - fr } else { fr - rr }) + (if rg > fg { rg - fg } else { fg - rg }) + (if rbv > fb { rbv - fb } else { fb - rbv })
+            if views { viewport_error = viewport_error + pixel_error; if pixel_error > 0 { changed_pixels = changed_pixels + 1 } }
+            let rm: bool = rbv >= blue_min and rg <= green_max and rbv as f64 >= rr as f64 * ratio
+            let fm: bool = fb >= blue_min and fg <= green_max and fb as f64 >= fr as f64 * ratio
+            if rm { ref_mask = ref_mask + 1 }; if fm { cand_mask = cand_mask + 1 }
+            if rm and fm { intersection = intersection + 1; common = common + 1; color_error = color_error + (if rr > fr { rr - fr } else { fr - rr }) + (if rg > fg { rg - fg } else { fg - rg }) + (if rbv > fb { rbv - fb } else { fb - rbv }) }
+            if rm or fm { union = union + 1 }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    let iou: f64 = if union > 0 { intersection as f64 / union as f64 } else { 1.0 }
+    let mae: f64 = if common > 0 { color_error as f64 / (common * 3) as f64 } else { 0.0 }
+    let ref_place_x: f64 = (rb.x0 - rvx) as f64 / scale as f64
+    let ref_place_y: f64 = (rb.y0 - rvy) as f64 / scale as f64
+    let mut placement_json: string = "null"
+    let mut full_view_json: string = "null"
+    if views {
+        placement_json = "{\"reference_model_bounds_css\":[" + ref_place_x + "," + ref_place_y + "," + sw + "," + sh + "],\"candidate_model_bounds_css\":[" + (cb.x0 - cvx) + "," + (cb.y0 - cvy) + "," + cw + "," + ch + "],\"candidate_minus_reference_css\":[" + ((cb.x0 - cvx) as f64 - ref_place_x) + "," + ((cb.y0 - cvy) as f64 - ref_place_y) + "," + (cw - sw) + "," + (ch - sh) + "]}"
+        let total_view_pixels: i64 = (cvw as i64) * (cvh as i64)
+        let view_mae: f64 = viewport_error as f64 / (total_view_pixels * 3) as f64
+        let changed_fraction: f64 = changed_pixels as f64 / total_view_pixels as f64
+        full_view_json = "{\"size_css\":[" + cvw + "," + cvh + "],\"rgb_mae\":" + view_mae + ",\"changed_pixel_fraction\":" + changed_fraction + ",\"changed_pixels\":" + changed_pixels + ",\"total_pixels\":" + total_view_pixels + "}"
+    }
+    printf("{\"reference_size\":[%d,%d],\"candidate_size\":[%d,%d],\"reference_model_bounds\":[%d,%d,%d,%d],\"candidate_model_bounds\":[%d,%d,%d,%d],\"scaled_model_bounds_match\":%s,\"full_canvas_placement\":%s,\"full_view_comparison\":%s,\"metrics_scope\":\"%s\",\"silhouette_iou\":%.6f,\"rgb_mae_on_overlap\":%.4f,\"overlap_pixels\":%lld,\"mask_pixels_reference\":%lld,\"mask_pixels_candidate\":%lld}\n", ref.width, ref.height, cand.width, cand.height, rb.x0, rb.y0, rw, rh, cb.x0, cb.y0, cw, ch, if sw == cw and sh == ch { "true" } else { "false" }, placement_json, full_view_json, if sw == cw and sh == ch { "model bounds" } else { "registered viewport" }, iou, mae, common, ref_mask, cand_mask)
+    free(ref.pixels); free(cand.pixels)
+    if sw != cw or sh != ch { return 1 }
+    return 0
+}

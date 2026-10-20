@@ -1,0 +1,141 @@
+import embryo.general {
+    nd, ncels, node, cels, ffu, delta, temp, itacc, movi, NUE
+}
+import embryo.genetic {
+    ng, gex, gene_expression_index, npag, whonpag, gene_effects,
+    gene_effect_index
+}
+import embryo.aleas { nvaloq, particions_esfera, partition_index }
+import embryo.neighboring { neighbor_build_node, restore_neighbors, neighbor_error }
+import embryo.energy { energia, energy_error }
+import embryo.rng { rng_real }
+
+extern {
+    function sqrt(value: f64) -> f64
+    function fabs(value: f64) -> f64
+    function pow(base: f64, exponent: f64) -> f64
+}
+
+const EPSILON_NOISE: f64 = 2.2204460492503131e-15
+
+let mut noise_error: i32 = 0
+
+# Energy based random movement. The neighbor table is refreshed only for the
+# moved node, as in the Fortran itera routine.
+function itera_energy() -> bool {
+    noise_error = 0
+    if nd <= 0 or nvaloq <= 0 or particions_esfera == null { noise_error = 1; return false }
+    movi = 0
+    let mut moved_node: i32 = 0
+    let mut tries: i32 = 0
+    while true {
+        moved_node = (rng_real() * nd as f64) as i32 + 1
+        tries = tries + 1
+        if tries > nd * 2 { return true }
+        if node[moved_node].fix != 2 { break }
+        moved_node = 0
+    }
+
+    if ffu[15] == 1 {
+        if energia(moved_node) == false { noise_error = 10 + energy_error; return false }
+    }
+    let old_energy: f64 = node[moved_node].e
+    let old_x: f64 = node[moved_node].x
+    let old_y: f64 = node[moved_node].y
+    let old_z: f64 = node[moved_node].z
+    let cell_id: i32 = node[moved_node].icel
+    let mut old_cx: f64 = 0.0
+    let mut old_cy: f64 = 0.0
+    let mut old_cz: f64 = 0.0
+    let mut cell_node_count: i32 = 0
+    if node[moved_node].tipus < 4 {
+        if cell_id < 1 or cell_id > ncels { noise_error = 2; return false }
+        cell_node_count = cels[cell_id].nunodes
+        old_cx = cels[cell_id].cex
+        old_cy = cels[cell_id].cey
+        old_cz = cels[cell_id].cez
+    }
+
+    let step_random: f64 = rng_real()
+    let displacement: f64 = if ffu[9] == 1 { step_random * node[moved_node].dmo } else { step_random * node[moved_node].dmo * delta }
+    if displacement < EPSILON_NOISE { return true }
+
+    let mut direction_x: f64 = 0.0
+    let mut direction_y: f64 = 0.0
+    let mut direction_z: f64 = 0.0
+    if npag[51] > 0 and node[moved_node].tipus < 4 {
+        let mut bias: f64 = 0.0
+        let mut slot: i32 = 1
+        while slot <= npag[51] {
+            let gene_id: i32 = whonpag[51 * (ng + 1) + slot]
+            let expression: f64 = gex[gene_expression_index(moved_node, gene_id)]
+            if expression > 0.0 { bias = bias + expression * gene_effects[gene_effect_index(gene_id, 51)] }
+            slot = slot + 1
+        }
+        let direction_random: f64 = rng_real()
+        let direction_index: i32 = (direction_random * nvaloq as f64) as i32 + 1
+        direction_x = particions_esfera[partition_index(direction_index, 1)] + bias * cels[cell_id].polx
+        direction_y = particions_esfera[partition_index(direction_index, 2)] + bias * cels[cell_id].poly
+        direction_z = particions_esfera[partition_index(direction_index, 3)] + bias * cels[cell_id].polz
+        let inverse_length: f64 = 1.0 / sqrt((direction_x * direction_x) + (direction_y * direction_y) + (direction_z * direction_z))
+        direction_x = direction_x * inverse_length
+        direction_y = direction_y * inverse_length
+        direction_z = direction_z * inverse_length
+    } else {
+        let direction_random: f64 = rng_real()
+        let direction_index: i32 = (direction_random * nvaloq as f64) as i32 + 1
+        direction_x = particions_esfera[partition_index(direction_index, 1)]
+        direction_y = particions_esfera[partition_index(direction_index, 2)]
+        direction_z = particions_esfera[partition_index(direction_index, 3)]
+    }
+
+    node[moved_node].x = old_x + direction_x * displacement
+    node[moved_node].y = old_y + direction_y * displacement
+    node[moved_node].z = old_z + direction_z * displacement
+    if node[moved_node].tipus == 1 {
+        let weight: f64 = 2.0 / cell_node_count as f64
+        cels[cell_id].cex = cels[cell_id].cex + (node[moved_node].x - old_x) * weight
+        cels[cell_id].cey = cels[cell_id].cey + (node[moved_node].y - old_y) * weight
+        cels[cell_id].cez = cels[cell_id].cez + (node[moved_node].z - old_z) * weight
+    } elif node[moved_node].tipus == 3 {
+        let weight: f64 = 1.0 / cell_node_count as f64
+        cels[cell_id].cex = cels[cell_id].cex + (node[moved_node].x - old_x) * weight
+        cels[cell_id].cey = cels[cell_id].cey + (node[moved_node].y - old_y) * weight
+        cels[cell_id].cez = cels[cell_id].cez + (node[moved_node].z - old_z) * weight
+    }
+
+    if ffu[15] == 0 and ffu[16] == 0 { return true }
+    if neighbor_build_node(moved_node) == false { noise_error = 20 + neighbor_error; return false }
+    if ffu[24] == 0 and restore_neighbors() == false { noise_error = 40 + neighbor_error; return false }
+    if energia(moved_node) == false { noise_error = 60 + energy_error; return false }
+    let energy_change: f64 = node[moved_node].e - old_energy
+    let mut accepted: bool = false
+    if movi != 1 and energy_change < -EPSILON_NOISE {
+        accepted = true
+        itacc = itacc + 1
+    } elif movi != 1 {
+        let accept_random: f64 = rng_real()
+        let mut temperature: f64 = temp + node[moved_node].mov
+        if temperature < 0.0 { temperature = EPSILON_NOISE }
+        if accept_random < pow(NUE, -energy_change / temperature) {
+            accepted = true
+            itacc = itacc + 1
+        }
+    }
+    if accepted == false {
+        node[moved_node].x = old_x
+        node[moved_node].y = old_y
+        node[moved_node].z = old_z
+        node[moved_node].e = old_energy
+        if node[moved_node].tipus < 4 {
+            cels[cell_id].cex = old_cx
+            cels[cell_id].cey = old_cy
+            cels[cell_id].cez = old_cz
+        }
+        if neighbor_build_node(moved_node) == false { noise_error = 80 + neighbor_error; return false }
+        if ffu[24] == 0 and restore_neighbors() == false { noise_error = 100 + neighbor_error; return false }
+    }
+    return true
+}
+
+export noise_error, itera_energy

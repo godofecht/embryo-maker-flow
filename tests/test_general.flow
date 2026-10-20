@@ -1,0 +1,32 @@
+import embryo.general {
+    Nod, Cel, NPARAM, nd, mnn, nod_zero, cel_zero, iniarrays,
+    resize_node_buffers, node_capacity, node, nodeo, cels, neigh,
+    px, fmeanl, matrix_index
+}
+
+function main() -> i32 {
+    let n: Nod = nod_zero()
+    let c: Cel = cel_zero()
+    if n.ndiv != 0 { return 1 }
+    if n.kvol != 0.0 { return 2 }
+    if c.minsize_for_div != 10000.0 { return 3 }
+    if NPARAM != 35 { return 4 }
+    nd = 17
+    if nd != 17 { return 5 }
+    mnn = 4
+    iniarrays(3, 2)
+    node[1].tipus = 4
+    cels[2].nunodes = 3
+    if node[1].tipus != 4 { return 6 }
+    if cels[2].nunodes != 3 { return 7 }
+    neigh[matrix_index(2, 3, mnn + 1)] = 8
+    if neigh[matrix_index(2, 3, mnn + 1)] != 8 { return 8 }
+    nodeo[1].x = 2.5
+    px[2] = -3.0
+    fmeanl[3] = 0.75
+    if resize_node_buffers(8) == false { return 9 }
+    if node_capacity != 8 or node[1].tipus != 4 or nodeo[1].x != 2.5 { return 10 }
+    if neigh[matrix_index(2, 3, mnn + 1)] != 8 or px[2] != -3.0 or fmeanl[3] != 0.75 { return 11 }
+    if node[8].tipus != 0 or px[8] != 0.0 { return 12 }
+    return 0
+}

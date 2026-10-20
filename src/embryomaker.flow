@@ -1,0 +1,177 @@
+import embryo.io { read_snapshot_parameters, snapshot_error, write_snapshot }
+import embryo.aleas { inialea3d }
+import embryo.general { nparti, getot, aut, eva }
+import embryo.model { advance_model_iteration, model_error }
+import std.string { str_parse_i64_at, str_format_i64 }
+
+@cEmbed("#include <stdint.h>
+#if defined(__APPLE__)
+#include <crt_externs.h>
+static int32_t embryo_flow_argc(void) { return *_NSGetArgc(); }
+static const char *embryo_flow_argv(int32_t i) {
+    int32_t n = *_NSGetArgc();
+    char **v = *_NSGetArgv();
+    return i >= 0 && i < n && v != 0 ? v[i] : 0;
+}
+#elif defined(__GLIBC__)
+static int32_t embryo_flow_argc_value;
+static char **embryo_flow_argv_value;
+__attribute__((constructor)) static void embryo_flow_args_init(int argc, char **argv, char **envp) {
+    (void)envp;
+    embryo_flow_argc_value = argc;
+    embryo_flow_argv_value = argv;
+}
+static int32_t embryo_flow_argc(void) { return embryo_flow_argc_value; }
+static const char *embryo_flow_argv(int32_t i) {
+    return i >= 0 && i < embryo_flow_argc_value && embryo_flow_argv_value != 0 ? embryo_flow_argv_value[i] : 0;
+}
+#else
+extern int __argc;
+extern char **__argv;
+static int32_t embryo_flow_argc(void) { return __argc; }
+static const char *embryo_flow_argv(int32_t i) {
+    return i >= 0 && i < __argc && __argv != 0 ? __argv[i] : 0;
+}
+#endif")
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function getchar() -> i32
+    function fflush(stream: ptr<void>) -> i32
+    function embryo_flow_argc() -> i32
+    function embryo_flow_argv(index: i32) -> string
+}
+
+function worker_flush() -> void { fflush(null) }
+
+function run_worker(output_path: string) -> i32 {
+    if write_snapshot(output_path) == false { println("ERR snapshot"); worker_flush(); return 5 }
+    println("READY")
+    worker_flush()
+    let command: ptr<u8> = malloc(64) as ptr<u8>
+    if command == null { println("ERR memory"); worker_flush(); return 6 }
+    while true {
+        let mut length: i32 = 0
+        let mut byte: i32 = getchar()
+        if byte == -1 { return 0 }
+        while byte != -1 and byte != 10 {
+            if length < 63 { command[length] = byte as u8; length = length + 1 }
+            byte = getchar()
+        }
+        command[length] = 0
+        let requested = str_parse_i64_at(command as string, 0)
+        if requested.ok == false or requested.value < 0 or requested.value > 100000 {
+            println("ERR command")
+            worker_flush()
+            continue
+        }
+        let mut completed: i64 = 0
+        while completed < requested.value {
+            if advance_model_iteration() == false {
+                let error_text: ptr<u8> = malloc(32) as ptr<u8>
+                str_format_i64(error_text, 32, model_error as i64)
+                println("ERR model " + error_text as string)
+                worker_flush()
+                return 4
+            }
+            completed = completed + 1
+        }
+        if write_snapshot(output_path) == false {
+            println("ERR snapshot")
+            worker_flush()
+            return 5
+        }
+        let iteration_text: ptr<u8> = malloc(32) as ptr<u8>
+        str_format_i64(iteration_text, 32, getot as i64)
+        println("OK " + iteration_text as string)
+        worker_flush()
+    }
+    return 0
+}
+
+function main() -> i32 {
+    let argc: i32 = embryo_flow_argc()
+    if argc < 2 {
+        println("usage: embryomaker <input.txt> [iterations] [output.dat]")
+        println("       embryomaker <input.txt> <aut> <iterations_per_snapshot> <snapshots> [output_prefix]")
+        println("       embryomaker <input.txt> --worker <snapshot.dat>")
+        return 2
+    }
+    let input_path: string = embryo_flow_argv(1)
+    let input_status: i32 = read_snapshot_parameters(input_path)
+    if input_status != 0 {
+        let error_text: ptr<u8> = malloc(32) as ptr<u8>
+        str_format_i64(error_text, 32, snapshot_error as i64)
+        println("could not read EmbryoMaker input, error " + error_text as string + ": " + input_path)
+        return 3
+    }
+    if argc >= 4 and embryo_flow_argv(2) == "--worker" {
+        inialea3d(nparti)
+        return run_worker(embryo_flow_argv(3))
+    }
+
+    if argc >= 5 {
+        let aut_value = str_parse_i64_at(embryo_flow_argv(2), 0)
+        let interval_value = str_parse_i64_at(embryo_flow_argv(3), 0)
+        let count_value = str_parse_i64_at(embryo_flow_argv(4), 0)
+        if aut_value.ok == false or interval_value.ok == false or count_value.ok == false or aut_value.value < -2147483648 or aut_value.value > 2147483647 or interval_value.value < 0 or count_value.value < 0 or interval_value.value > 2147483647 or count_value.value > 2147483647 {
+            println("snapshot arguments are outside supported integer ranges")
+            return 2
+        }
+        aut = aut_value.value as i32
+        eva = if aut == 5 { 1 } else { 0 }
+        inialea3d(nparti)
+        let interval: i32 = interval_value.value as i32
+        let snapshot_count: i32 = count_value.value as i32
+        let output_prefix: string = if argc >= 6 { embryo_flow_argv(5) } else { "flow_snapshot" }
+        let mut snapshot: i32 = 0
+        while snapshot < snapshot_count {
+            let mut iteration: i32 = 0
+            while iteration < interval {
+                if advance_model_iteration() == false {
+                    let error_text: ptr<u8> = malloc(32) as ptr<u8>
+                    str_format_i64(error_text, 32, model_error as i64)
+                    println("simulation stopped during model iteration, error " + error_text as string)
+                    return 4
+                }
+                iteration = iteration + 1
+            }
+            let number: ptr<u8> = malloc(32) as ptr<u8>
+            str_format_i64(number, 32, getot as i64)
+            let output_path: string = output_prefix + "_" + (number as string) + ".dat"
+            if write_snapshot(output_path) == false {
+                println("could not write snapshot: " + output_path)
+                return 5
+            }
+            snapshot = snapshot + 1
+        }
+        return 0
+    }
+
+    inialea3d(nparti)
+    let mut iterations: i32 = 1
+    if argc >= 3 {
+        let parsed = str_parse_i64_at(embryo_flow_argv(2), 0)
+        if parsed.ok == false or parsed.value < 0 or parsed.value > 2147483647 {
+            println("iterations must be a nonnegative integer")
+            return 2
+        }
+        iterations = parsed.value as i32
+    }
+    let output_path: string = if argc >= 4 { embryo_flow_argv(3) } else { "flow_snapshot.dat" }
+    let mut iteration: i32 = 0
+    while iteration < iterations {
+        if advance_model_iteration() == false {
+            let error_text: ptr<u8> = malloc(32) as ptr<u8>
+            str_format_i64(error_text, 32, model_error as i64)
+            println("simulation stopped during model iteration, error " + error_text as string)
+            return 4
+        }
+        iteration = iteration + 1
+    }
+    if write_snapshot(output_path) == false {
+        println("could not write snapshot: " + output_path)
+        return 5
+    }
+    return 0
+}

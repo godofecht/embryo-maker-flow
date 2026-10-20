@@ -38,7 +38,7 @@ private
                 reset_to_init,colorswitch,view_from_front,left_button_func,CURPAN,CURPANZ,middle_button_func, & !Tommi 13.8.2013
                 ROTATE, ZOOM, SELNO, SELCEL, middle_press, COLORMAX , COLORMIN ,& !>>Miquel27-10-14
                 ARROWMAX , ARROWMIN , SPHEREMAX, SPHEREMIN, ARROWSCALE, SPHERESCALE,&  !>>Miquel27-10-14
-                NOPAN, NOPANZ, CEPAN, CEPANZ !>>Miquel31-10-14
+                NOPAN, NOPANZ, CEPAN, CEPANZ, set_projection !>>Miquel31-10-14
 
 private :: PAN, SCALEX, SCALEY, SCALEZ, RESET, ABOVE, QUIT, PI, &
            init_lookat, init_lookfrom, &
@@ -139,6 +139,18 @@ real*8,public ::amax_scale,smax_scale  !>>>Miquel30-10-14
 ! -------- end of Initial configuration ------
 
 contains
+subroutine set_projection(width,height)
+integer(glcint), intent(in) :: width,height
+real(gldouble) :: ratio
+windW=width
+windH=height
+ratio=width*1.0/height
+call glMatrixMode(GL_PROJECTION)
+call glLoadIdentity()
+call glViewport(0,0,windW,windH)
+call gluPerspective(coolperspec,ratio,0.1_gldouble,1000.0_gldouble)
+call glMatrixMode(GL_MODELVIEW)
+end subroutine set_projection
 !*******************************************SUBROUTINE********************************************************
 !          -------------
 subroutine reset_to_init
@@ -1058,7 +1070,7 @@ case(pers)
    print*,"actual perspective value = ",coolperspec
    print*,"enter new perspective value"
    read(*,*)coolperspec
-   call Reshape(windW,windH)
+   call set_projection(windW,windH)
    call reset_to_init
 case(QUIT)
    call exit(1)
@@ -1525,34 +1537,7 @@ end subroutine
 
 subroutine Reshape(width, height) bind(c)    !>>>>>Miquel26-11-13
 integer(glcint), value :: width, height
-real(gldouble):: ratio
-  windW = width
-  windH = height
-
-
-  ratio =  width * 1.0 / height;
-
-  !Use the Projection Matrix
-  call glMatrixMode(GL_PROJECTION);
-
-  !Reset Matrix
-  call glLoadIdentity();
-
-  !Set the viewport to be the entire window
-  call glViewport(0, 0, windW, windH);
-
-  !Set the correct perspective.
-  call gluPerspective(coolperspec, ratio, 0.1_gldouble, 1000.0_gldouble);
-
-  !Get Back to the Modelview
-  call glMatrixMode(GL_MODELVIEW);
-
-!alternate (doesn't work)
-!  call glViewport(0_GLint, 0_GLint, windW, windH)
-!  call glMatrixMode(GL_PROJECTION)
-!  call glLoadIdentity()
-!  call gluOrtho2D(-0.5_gldouble, windW + 0.5_gldouble, -0.5_gldouble, windH + 0.5_gldouble)
-!  call glMatrixMode(GL_MODELVIEW)
+call set_projection(width,height)
 return
 end subroutine Reshape
 
@@ -1628,7 +1613,10 @@ subroutine display
       end if
     end if
   else
-    if (fmovie==1) call iteracio(freqsnap)
+    if (fmovie==1) then
+      call iteracio(freqsnap)
+      call glutPostRedisplay
+    end if
   end if
 !>>> Is 24-10-14
 end subroutine
@@ -1636,14 +1624,13 @@ end subroutine
 subroutine the_plotting
   call reset_view ; call glClear(ior(GL_COLOR_BUFFER_BIT,GL_DEPTH_BUFFER_BIT)) ;  
   call glCallList(1)
-  call draw_func;
+  call draw_func(.false.)
   !if (fgif==1) then
 !print *,"ki"
   !  call savegif
   !  stop
   !end if
-  call glutSwapBuffers ;  
-  call glutPostRedisplay
+  call glutSwapBuffers
 end subroutine
 
 !*******************************************SUBROUTINE********************************************************
@@ -1676,7 +1663,9 @@ subroutine takeimage
 end subroutine
 
 !*******************************************SUBROUTINE********************************************************
-subroutine draw_func
+subroutine draw_func(request_redisplay)
+logical, optional :: request_redisplay
+logical :: queue_redisplay
 integer primer
 real(GLDOUBLE) :: a,b,c,vamax,vamin,maxh,r,coo,cooc,aa,bb,cc,aaa,bbb,ccc
 real(GLDOUBLE) :: ux,uy,uz,dx,dy,dz,tx,ty,tz,cu,cd,ct
@@ -1702,6 +1691,9 @@ real(GLDOUBLE):: cpolx,cpoly,cpolz,myfactor,umyfactor
 real(GLFLOAT)  :: anglech,  rvecx,rvecy,rvecz
 real*8 :: mpol
 integer :: eloch, ich, jch
+
+queue_redisplay=.true.
+if (present(request_redisplay)) queue_redisplay=request_redisplay
 
 esca=0.1d0
 call reset_view
@@ -2807,7 +2799,7 @@ call glNewList(1_gluint,gl_compile_and_execute)
   end if								    ! miguel 30-5-13
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  
 call glEndList
-call glutPostRedisplay
+if (queue_redisplay) call glutPostRedisplay
 
 end subroutine draw_func
 !*******************************************
@@ -5698,7 +5690,7 @@ end subroutine surface_color_handler
 
 subroutine make_menu(submenuid)
 integer, intent(in) :: submenuid
-integer submenuidd,menuu,menuu2,menud,menut,menuq,menus,menuse, menueditor, planemenu,nodemenu,cellmenu,nodecopymenu,cellcopymenu, &
+integer submenuidd,menuu,menuu2,menud,menuq,menus, menueditor, planemenu,nodemenu,cellmenu,nodecopymenu,cellcopymenu, &
           & nodepastemenu,pastemenu,sel_menu,cursor_menu,color_menu,menuplot,& !Tommi 27.9.2013 !>>Miquel29-10-14
           cmenuu,cmenuu2,amenuu,amenuu2,smenuu,smenuu2,palette_menu,arrow_menu,sphere_menu,move_menu
 integer :: menuid, param_id, contour_color_menu, surface_color_menu
@@ -6070,9 +6062,7 @@ call glutAddSubMenu("Basic View Modifier"//char(0),submenuid)
 call glutAddSubMenu("show node mechanical properties"//char(0),menuu)
 call glutAddSubMenu("show other node properties"//char(0),menuu2)
 call glutAddSubMenu("what to draw"//char(0),menud)
-call glutAddSubMenu("sections"//char(0),menut)
 call glutAddSubMenu("input output"//char(0),menus)
-call glutAddSubMenu("2D plots"//char(0),menuse)
 call glutAddSubMenu("Editor"//char(0),menueditor) !Tommi 5.8.2013
 call glutAddSubMenu("selection menu"//char(0),sel_menu)  !>>Miquel24-10-14
 call glutAddSubMenu("cursor menu"//char(0),cursor_menu)  !>>Miquel24-10-14

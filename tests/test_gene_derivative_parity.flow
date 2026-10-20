@@ -1,0 +1,128 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.general { nd, ng, nneigh, neigh, dneigh, neigh_ld, node, dmax, rdiffmax }
+import embryo.genetic { dgex, gene_expression_index, genestep }
+import std.io { FileRead, io_read_file }
+import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function fabs(x: f64) -> f64
+    function sqrt(x: f64) -> f64
+}
+
+function line_end(data: string, length: i32, start: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = start
+    while cursor < length and bytes[cursor] != 10 and bytes[cursor] != 13 { cursor = cursor + 1 }
+    return cursor
+}
+
+function line_next(data: string, length: i32, end: i32) -> i32 {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let mut cursor: i32 = end
+    if cursor < length and bytes[cursor] == 13 { cursor = cursor + 1 }
+    if cursor < length and bytes[cursor] == 10 { cursor = cursor + 1 }
+    return cursor
+}
+
+function copy_line(data: string, start: i32, end: i32) -> string {
+    let bytes: ptr<u8> = data as ptr<u8>
+    let line: ptr<u8> = malloc((end - start + 1) as i64) as ptr<u8>
+    let mut source: i32 = start
+    let mut target: i32 = 0
+    while source < end { line[target] = bytes[source]; source = source + 1; target = target + 1 }
+    line[target] = 0
+    return line as string
+}
+
+function load_neighbors(path: string) -> bool {
+    let reference: FileRead = io_read_file(path)
+    if reference.ok == false { return false }
+    let mut cursor: i32 = 0
+    let mut node_id: i32 = 1
+    while node_id <= nd {
+        let count_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let count_line: string = copy_line(reference.data, cursor, count_end)
+        let count_value: ParseI64 = str_parse_i64_at(count_line, 0)
+        if count_value.ok == false or count_value.value < 0 or count_value.value >= neigh_ld as i64 { return false }
+        let count: i32 = count_value.value as i32
+        cursor = line_next(reference.data, reference.len as i32, count_end)
+        let ids_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let ids_line: string = copy_line(reference.data, cursor, ids_end)
+        cursor = line_next(reference.data, reference.len as i32, ids_end)
+        let distances_end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let distances_line: string = copy_line(reference.data, cursor, distances_end)
+        let mut ids_position: i32 = 0
+        let mut distances_position: i32 = 0
+        let mut slot: i32 = 1
+        nneigh[node_id] = count
+        while slot <= count {
+            let neighbor_id: ParseI64 = str_parse_i64_at(ids_line, ids_position)
+            let distance: ParseF64 = str_parse_f64_at(distances_line, distances_position)
+            if neighbor_id.ok == false or distance.ok == false { return false }
+            let index: i32 = node_id * neigh_ld + slot
+            neigh[index] = neighbor_id.value as i32
+            dneigh[index] = distance.value
+            ids_position = neighbor_id.end
+            distances_position = distance.end
+            slot = slot + 1
+        }
+        cursor = line_next(reference.data, reference.len as i32, distances_end)
+        node_id = node_id + 1
+    }
+    return true
+}
+
+function check_gene_parity(input_path: string, neighbor_path: string, fixture_path: string) -> i32 {
+    if read_snapshot_parameters(input_path) != 0 { return 1 }
+    if load_neighbors(neighbor_path) == false { return 2 }
+    let mut maximum_radius: f64 = 0.0
+    let mut i: i32 = 1
+    while i <= nd {
+        if node[i].add > maximum_radius { maximum_radius = node[i].add }
+        i = i + 1
+    }
+    rdiffmax = 2.0 * maximum_radius * dmax
+    if genestep() == false { return 3 }
+    let reference: FileRead = io_read_file(fixture_path)
+    if reference.ok == false { return 4 }
+    let mut cursor: i32 = 0
+    let mut row: i32 = 0
+    while row < nd * ng {
+        let end: i32 = line_end(reference.data, reference.len as i32, cursor)
+        let line: string = copy_line(reference.data, cursor, end)
+        let node_id: ParseI64 = str_parse_i64_at(line, 0)
+        let gene_start: i32 = node_id.end
+        let gene_id: ParseI64 = str_parse_i64_at(line, gene_start)
+        let expected: ParseF64 = str_parse_f64_at(line, gene_id.end)
+        if node_id.ok == false or gene_id.ok == false or expected.ok == false { return 5 }
+        let index: i32 = gene_expression_index(node_id.value as i32, gene_id.value as i32)
+        let actual: f64 = dgex[index]
+        let scale: f64 = if fabs(expected.value) > 1.0 { fabs(expected.value) } else { 1.0 }
+        if fabs(actual - expected.value) > 1.0e-9 * scale {
+            println(node_id.value, gene_id.value, actual, expected.value)
+            return 10
+        }
+        cursor = line_next(reference.data, reference.len as i32, end)
+        row = row + 1
+    }
+    return 0
+}
+
+function main() -> i32 {
+    let migration: i32 = check_gene_parity("../reference/examples/migration/migration.txt", "fixtures/migration_neighbors.ref", "fixtures/migration_gene_derivatives.ref")
+    if migration != 0 { return migration }
+    let apoptosis: i32 = check_gene_parity("../reference/examples/apoptosis/apoptosis.txt", "fixtures/apoptosis_neighbors.ref", "fixtures/apoptosis_gene_derivatives.ref")
+    if apoptosis != 0 { return apoptosis }
+    let adhesion: i32 = check_gene_parity("../reference/examples/differential_adhesion/differential_adhesion.txt", "fixtures/differential_adhesion_neighbors.ref", "fixtures/differential_adhesion_gene_derivatives.ref")
+    if adhesion != 0 { return adhesion }
+    let polar_growth: i32 = check_gene_parity("../reference/examples/polar_growth/polar_growth.txt", "fixtures/polar_growth_neighbors.ref", "fixtures/polar_growth_gene_derivatives.ref")
+    if polar_growth != 0 { return polar_growth }
+    let apical: i32 = check_gene_parity("../reference/examples/apical_contraction/apical_contraction.txt", "fixtures/apical_contraction_neighbors.ref", "fixtures/apical_contraction_gene_derivatives.ref")
+    if apical != 0 { return apical }
+    let ecm: i32 = check_gene_parity("../reference/examples/ecm_secretion/ecm_secretion.txt", "fixtures/ecm_secretion_neighbors.ref", "fixtures/ecm_secretion_gene_derivatives.ref")
+    if ecm != 0 { return ecm }
+    let figure_six: i32 = check_gene_parity("../reference/examples/figure_6/gastrula.txt", "fixtures/figure_6_neighbors.ref", "fixtures/figure_6_gene_derivatives.ref")
+    if figure_six != 0 { return figure_six }
+    return check_gene_parity("../reference/examples/sea_urchin_gastrulation/sea_urchin.txt", "fixtures/sea_urchin_neighbors.ref", "fixtures/sea_urchin_gene_derivatives.ref")
+}

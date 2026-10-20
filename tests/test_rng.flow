@@ -1,0 +1,30 @@
+import embryo.rng { rng_seed, rng_real, rng_get }
+
+function main() -> i32 {
+    let mut seed: array<i32, 8> = [1, 2, 3, 4, 5, 6, 7, 8]
+    rng_seed(&seed[0], 8)
+    let x0: f64 = rng_real()
+    let x1: f64 = rng_real()
+    let x2: f64 = rng_real()
+    let x3: f64 = rng_real()
+    let x4: f64 = rng_real()
+    if x0 != 0.47107089936082125 { return 1 }
+    if x1 != 0.11734479025488309 { return 2 }
+    if x2 != 0.35754797210216693 { return 3 }
+    if x3 != 0.31813480208419698 { return 4 }
+    if x4 != 0.69675380000569165 { return 5 }
+    let mut saved: array<i32, 8> = [0, 0, 0, 0, 0, 0, 0, 0]
+    rng_get(&saved[0], 8)
+    if saved[0] != -159671239 { return 7 }
+    if saved[1] != -450880304 { return 8 }
+    if saved[2] != -431290970 { return 9 }
+    if saved[3] != 630396222 { return 10 }
+    if saved[4] != -725784985 { return 11 }
+    if saved[5] != -10493970 { return 12 }
+    if saved[6] != 1358261573 { return 13 }
+    if saved[7] != 283296611 { return 14 }
+    let after_save: f64 = rng_real()
+    rng_seed(&saved[0], 8)
+    if rng_real() != after_save { return 6 }
+    return 0
+}

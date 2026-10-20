@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1119">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>EmbryoMaker Studio</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b1119;--panel:#111a25;--panel2:#151f2b;--line:#24313f;--muted:#8292a3;--text:#e8edf2;--mint:#a8f0d0;--lime:#d6fb91;--coral:#ff9c83;--blue:#8bc9ff;--lav:#c5b1ff}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+    button,select,input{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+    .shell{max-width:1680px;margin:auto;padding:22px 28px 28px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.mark{width:38px;height:38px;border:1px solid #315344;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,#1c382f,#14231f);color:var(--mint);font-size:20px}.brand-name{font-size:15px;font-weight:650;letter-spacing:.01em}.brand-sub{font-size:11px;color:var(--muted);margin-top:2px}.top-right{display:flex;align-items:center;gap:10px}.live-pill{display:flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid var(--line);border-radius:99px;color:#b7c4d0;font-size:12px}.dot{width:7px;height:7px;background:var(--mint);border-radius:50%;box-shadow:0 0 12px #91ffca77}.quiet-button,.icon-button,.primary,.secondary{border:1px solid var(--line);background:#17212d;border-radius:10px;padding:9px 13px}.quiet-button{color:#bdc8d2;font-size:12px}.quiet-button:hover,.secondary:hover,.icon-button:hover{background:#202d3a}.page-title{margin:0 0 4px;font-size:24px;font-weight:570;letter-spacing:-.035em}.page-intro{color:var(--muted);margin:0 0 20px;font-size:13px}.workspace{display:grid;grid-template-columns:258px minmax(400px,1fr) 276px;gap:14px;align-items:stretch}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}.left-panel,.right-panel{padding:17px}.section-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8192a4;font-weight:700}.field-label{display:flex;justify-content:space-between;align-items:center;color:#b4c0ca;font-size:12px;margin:17px 0 7px}.field-label small{color:var(--muted);font-size:11px}.select-wrap{position:relative}.select-wrap:after{content:"⌄";position:absolute;right:12px;top:9px;color:#9babb9;pointer-events:none}.select-wrap select{appearance:none;width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:10px 32px 10px 11px}.file-input{display:none}.upload{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:9px;padding:9px;border:1px dashed #344556;background:transparent;color:#a9b8c5;border-radius:9px;font-size:12px}.upload:hover{border-color:#84bea5;color:var(--mint)}.divider{height:1px;background:var(--line);margin:18px 0}.transport{display:grid;grid-template-columns:1fr 1fr;gap:8px}.primary{background:var(--mint);color:#12251d;border-color:var(--mint);font-weight:680}.primary:hover{background:#c5f8df}.secondary{font-size:12px;color:#d8e0e8}.wide{grid-column:1/-1}.range-row{display:flex;gap:11px;align-items:center}.range-row input[type=range]{flex:1;accent-color:var(--mint)}.range-number{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:#d3ddd8}.speed-select{width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:9px}.hint{font-size:11px;color:#718295;line-height:1.55;margin-top:12px}.view-panel{position:relative;min-height:570px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}.view-head{position:absolute;z-index:2;left:18px;right:18px;top:17px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}.view-head>*{pointer-events:auto}.view-title{font-size:13px;font-weight:600}.view-caption{font-size:11px;color:var(--muted);margin-top:2px}.view-actions{display:flex;gap:7px}.icon-button{width:34px;height:34px;padding:0;color:#bac6d0}.icon-button svg{width:15px;height:15px;vertical-align:middle}.stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none}.overlay-bottom{position:absolute;left:18px;right:18px;bottom:16px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.overlay-bottom>*{pointer-events:auto}.legend{display:flex;gap:12px;color:#9eacb8;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.swatch{width:7px;height:7px;border-radius:50%;display:inline-block}.view-controls{display:flex;gap:6px}.view-controls button{font-size:10px;padding:6px 9px;background:#101a25c9;border:1px solid #344556;color:#aebbc6;border-radius:8px}.view-controls button.active{color:var(--mint);border-color:#517a67}.empty-state{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}.empty-symbol{font-size:42px;color:#587268;margin-bottom:7px}.empty-state strong{font-size:14px;font-weight:570}.empty-state span{font-size:12px;color:var(--muted);margin-top:5px}.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.stat{background:#0d151e;border:1px solid #202d3a;border-radius:10px;padding:11px 10px}.stat-value{font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.04em}.stat-label{font-size:10px;color:var(--muted);margin-top:2px}.inspector-section{border-top:1px solid var(--line);margin-top:16px;padding-top:15px}.inspector-title{font-size:12px;color:#c9d2db;font-weight:560}.inspector-copy{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}.node-list{margin-top:10px;max-height:155px;overflow:auto;scrollbar-color:#3a4b5a transparent;scrollbar-width:thin}.node-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1d2935;color:#aebbc6;font-size:10px}.node-row b{font-weight:500;color:#e0e7ed}.statusline{height:24px;margin-top:10px;color:#788a9a;font-size:11px;display:flex;justify-content:space-between}.statusline .message{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.statusline.error{color:#ffad9d}.footer{display:flex;justify-content:space-between;color:#667789;font-size:10px;margin-top:14px}.badge{padding:4px 7px;border-radius:6px;background:#1c2b25;color:#b6edcd;font-size:10px}
+    .color-scale{display:inline-block;height:7px;min-width:70px;flex:1;border-radius:5px}
+    @media(max-width:1150px){.workspace{grid-template-columns:230px minmax(360px,1fr)}.right-panel{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:15px}.right-panel>.section-label{grid-column:1/-1}.inspector-section{margin-top:0}.view-panel{min-height:540px}}
+    @media(max-width:760px){.shell{padding:15px}.topbar{margin-bottom:16px}.top-right .quiet-button{display:none}.workspace{grid-template-columns:1fr}.left-panel{order:2}.view-panel{order:1;min-height:60vh}.right-panel{order:3;grid-template-columns:1fr 1fr}.page-title{font-size:21px}.footer{gap:14px;flex-wrap:wrap}.statusline{margin-bottom:5px}}
+    :root{--bg:#090b0d;--panel:#111417;--panel2:#171b1f;--line:#2a3035;--muted:#89939a}
+    .view-panel{background:#000}.stat{background:#0d1114;border-color:#292e32;border-radius:8px}.select-wrap select,.speed-select,.settings-select{background:#0d1114;border-color:#353c41;border-radius:7px}.view-controls button{background:#101214;border-color:#41474b;border-radius:6px}.view-caption{color:#8a9499}.compact-label{display:block;margin:10px 0 6px;color:#aab4ba;font-size:11px}.settings-select{width:100%;padding:8px;color:#d1d9de}.small-range{display:flex;align-items:center;gap:8px}.small-range input{min-width:0;flex:1;accent-color:var(--mint)}.small-range output{width:34px;text-align:right;color:#b9c3c8;font-size:10px;font-variant-numeric:tabular-nums}.view-divider{height:1px;background:#252a2d;margin:13px 0}
+    .stage-gl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}.stage{z-index:1}
+    .classic-marker{color:#d2d9dc}.section-summary{display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:#859198;font-size:10px}
+    .classic-menu{position:absolute;z-index:4;top:51px;left:14px;right:14px;display:flex;gap:2px;padding:4px;background:#101214;border:1px solid #383d40;border-radius:5px;color:#d2d9dc;font:12px/1.3 Arial,sans-serif}
+    .classic-menu summary::after{content:'▶';float:right;margin-left:15px;color:#aeb4b7;font-size:9px}
+    .classic-menu details{position:relative}.classic-menu summary{list-style:none;cursor:pointer;padding:6px 10px;border-radius:3px}.classic-menu summary::-webkit-details-marker{display:none}.classic-menu details[open] summary,.classic-menu summary:hover{background:#303538}.classic-menu .menu-items{position:absolute;top:100%;left:0;min-width:220px;padding:5px;background:#171a1c;border:1px solid #454b4f;box-shadow:0 8px 24px #000a;border-radius:4px;display:grid;gap:2px}.classic-menu button{border:0;text-align:left;padding:7px 9px;background:transparent;color:#d2d9dc;font:12px Arial,sans-serif;border-radius:3px}.classic-menu button:hover{background:#35413c;color:#fff}.view-head{top:94px}.menu-separator{height:1px;background:#383d40;margin:3px 4px}
+    .classic-menu[hidden]{display:none}.classic-menu.context-popup{top:0;left:0;right:auto;width:205px;min-width:205px;max-height:calc(100vh - 80px);overflow-y:auto;display:flex;flex-direction:column;gap:0;padding:4px}.classic-menu.context-popup details{position:relative}.classic-menu.context-popup summary{padding:7px 10px}.classic-menu.context-popup .menu-items{position:fixed;top:0;left:100%;min-width:235px;max-height:calc(100vh - 80px);overflow-y:auto;z-index:5}.classic-menu.context-popup button{white-space:nowrap}.classic-menu.context-popup.pinned{top:54px;left:auto;right:14px}.view-actions #openMenuBtn{width:34px;height:34px;padding:0;font:16px Arial,sans-serif}
+    @media(max-width:540px){.classic-menu.context-popup{width:185px;min-width:185px}.view-head{align-items:center}.view-caption{display:none}.overlay-bottom{flex-direction:column;align-items:flex-start;gap:8px}.view-controls{align-self:flex-end}}
+    .workspace{align-items:start}.view-panel{width:min(802px,100%);height:auto;min-height:0;aspect-ratio:1/1;justify-self:center;overflow:hidden}
+    @media(max-width:760px){.view-panel{width:100%;height:auto;min-height:0;aspect-ratio:1/1}}
+    .classic-menu .menu-items label{display:grid;gap:4px;padding:5px 8px;color:#aeb9be;font:11px Arial,sans-serif}.classic-menu .menu-items label select{font:11px Arial,sans-serif;padding:6px}
+    .view-head{inset:12px 12px auto auto;left:auto;right:12px}.view-head>div:first-child,#cameraPreset,#homeView,#openMenuBtn,.overlay-bottom{display:none}
+    .gene-plot{position:absolute;z-index:3;left:18px;right:18px;bottom:18px;padding:10px 12px;background:#111416ed;border:1px solid #4b5357;border-radius:4px;box-shadow:0 8px 26px #000a}.gene-plot[hidden]{display:none}.gene-plot-head{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#d6dddf;font:12px Arial,sans-serif;margin-bottom:8px}.gene-plot-head select{max-width:140px;background:#202527;border:1px solid #535b5f;color:#d6dddf;border-radius:3px;padding:3px 6px}.gene-plot-head button{border:1px solid #535b5f;background:#202527;color:#d6dddf;border-radius:3px;padding:3px 8px}.gene-plot canvas{display:block;width:100%;height:190px}.gene-plot-legend{display:flex;flex-wrap:wrap;gap:4px 12px;max-height:34px;overflow:auto;color:#c3cbce;font:10px Arial,sans-serif}.gene-plot-legend span{display:flex;align-items:center;gap:4px;white-space:nowrap}.gene-plot-legend i{width:9px;height:2px;display:inline-block}
+    html,body{width:100%;height:100%;overflow:hidden;background:#000}.shell{width:100%;height:100dvh;max-width:none;margin:0;padding:0;display:grid;place-items:center}.topbar,.page-title,.page-intro,.left-panel,.right-panel,.footer,#openMenuBtn{display:none}.workspace{display:grid;width:100%;height:100%;grid-template-columns:1fr;place-items:center;gap:0}.view-panel{width:min(800px,100vw,100dvh);height:min(800px,100vw,100dvh);min-height:0;aspect-ratio:1/1;margin:auto;border:0;border-radius:0;justify-self:center;background:#000}.view-head{top:8px;right:8px}.classic-menu.context-popup.pinned{top:8px;right:8px}.statusline{position:absolute;z-index:3;left:8px;right:48px;bottom:7px;height:auto;margin:0;color:#929292;font:11px Arial,sans-serif;text-shadow:0 1px 2px #000}.classic-menu .menu-items label select#experimentMenu{width:100%;min-width:210px}
+    .classic-menu.context-popup{max-height:calc(100% - 16px);overflow-y:auto;overscroll-behavior:contain}.classic-menu.context-popup.opens-left .menu-items{left:auto;right:100%}
+    .classic-menu .menu-items details>.menu-items{top:0;left:100%;right:auto;min-width:235px}.classic-menu .menu-items details[open]>summary{background:#303538}
+    @media(max-width:540px){.classic-menu.context-popup .menu-items,.classic-menu.context-popup.opens-left .menu-items,.classic-menu.context-popup .menu-items details>.menu-items,.classic-menu.context-popup.opens-left .menu-items details>.menu-items{position:fixed;top:8px;left:8px;right:8px;width:auto;min-width:0;max-width:none;max-height:calc(100dvh - 16px);overflow-y:auto;z-index:5}}
+    @media(max-width:760px){.shell{padding:0}.view-panel{width:min(100vw,100dvh);height:min(100vw,100dvh);min-height:0;aspect-ratio:1/1}.right-panel{display:none}}
+    .classic-menu.context-popup[hidden]{display:none}.statusline{opacity:0;pointer-events:none;transition:opacity 150ms ease}.statusline.visible{opacity:1;pointer-events:auto}
+  </style>
+  <style>
+    #viewPanel:fullscreen{width:100vw;height:100vh;min-height:0;aspect-ratio:auto;border:0;border-radius:0;background:#000}
+    #viewPanel:fullscreen .view-head{top:16px;left:16px;right:16px}
+    #viewPanel:fullscreen .overlay-bottom{left:16px;right:16px;bottom:16px}
+    .view-actions #fullscreenBtn{width:34px;height:34px;padding:0;font:18px Arial,sans-serif}
+    .workspace-toggle{border:1px solid #454b4f;background:#171a1c;color:#d2d9dc;border-radius:4px;padding:7px 10px;font:12px Arial,sans-serif;white-space:nowrap}
+    html.studio-open,body.studio-open{width:100%;height:100dvh;min-height:0;overflow:hidden;background:var(--bg)}
+    body.studio-open .shell{width:100%;height:100dvh;max-width:none;margin:0;padding:10px 16px 12px;display:grid;grid-template-rows:38px 24px minmax(0,1fr);gap:6px}
+    body.studio-open .topbar{display:flex;min-height:0;margin:0}
+    body.studio-open .page-title{display:block;margin:0;font-size:18px;line-height:24px}
+    body.studio-open .page-intro,body.studio-open .footer{display:none}
+    body.studio-open .left-panel,body.studio-open .right-panel{display:block;min-width:0;min-height:0;height:100%;padding:11px;overflow:hidden}
+    body.studio-open .left-panel{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-content:start}
+    body.studio-open .control-stack{min-width:0}
+    body.studio-open .workspace{width:100%;height:100%;min-width:0;min-height:0;grid-template-columns:310px minmax(0,1fr) 240px;place-items:stretch;gap:10px;align-items:stretch}
+    body.studio-open .view-panel{width:auto;height:min(100%,800px);min-width:0;min-height:0;aspect-ratio:1/1;align-self:center;justify-self:center;margin:0;border:1px solid var(--line);border-radius:15px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}
+    body.studio-open .left-panel .divider{margin:9px 0}
+    body.studio-open .left-panel .field-label{margin:9px 0 5px;font-size:11px}
+    body.studio-open .left-panel .section-label{font-size:9px}
+    body.studio-open .left-panel .transport{gap:5px;margin-top:8px!important}
+    body.studio-open .left-panel .transport button{padding:7px 4px;font-size:10px;white-space:nowrap}
+    body.studio-open .left-panel .select-wrap select,body.studio-open .left-panel .speed-select,body.studio-open .left-panel .settings-select{padding:7px 6px;font-size:11px}
+    body.studio-open .left-panel .compact-label{font-size:10px;margin:7px 0 4px}
+    body.studio-open .left-panel .upload{font-size:10px;padding:7px 3px}
+    body.studio-open .left-panel .hint{font-size:9px;line-height:1.35;margin-top:7px}
+    body.studio-open .left-panel .range-row{gap:5px}
+    body.studio-open .left-panel .range-number{width:27px;font-size:10px}
+    body.studio-open .view-head{inset:17px 18px auto;left:18px;right:18px}
+    body.studio-open .view-head>div:first-child,body.studio-open #cameraPreset,body.studio-open #homeView,body.studio-open #openMenuBtn,body.studio-open .overlay-bottom{display:flex}
+    body.studio-open .view-head>div:first-child{display:block}
+    body.studio-open .statusline{position:absolute;left:18px;right:60px;bottom:48px;height:24px;margin:0;color:#788a9a;font:11px Arial,sans-serif;text-shadow:none}
+    @media(max-width:1150px){body.studio-open .workspace{grid-template-columns:290px minmax(0,1fr) 220px;gap:8px}body.studio-open .left-panel{gap:0 7px;padding:9px}body.studio-open .right-panel{padding:9px}body.studio-open .view-panel{max-height:100%}}
+    @media(max-width:900px){body.studio-open .workspace{grid-template-columns:260px minmax(0,1fr)}body.studio-open .right-panel{display:none}body.studio-open .left-panel{grid-template-columns:1fr 1fr}}
+    @media(max-width:680px){html.studio-open,body.studio-open{overflow:auto;height:auto;min-height:100dvh}body.studio-open .shell{height:auto;min-height:100dvh;padding:10px}body.studio-open .workspace{height:auto;grid-template-columns:1fr;grid-template-rows:minmax(48vh,1fr) auto}body.studio-open .view-panel{width:min(100%,70vh);height:auto;min-height:0;aspect-ratio:1}body.studio-open .left-panel{height:auto;grid-template-columns:1fr 1fr;overflow:visible}body.studio-open .right-panel{display:block}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><div class="mark" aria-hidden="true">◌</div><div><div class="brand-name">EmbryoMaker <span style="color:var(--mint)">Studio</span></div><div class="brand-sub">Cellular development workbench</div></div></div>
+      <div class="top-right"><div class="live-pill"><i class="dot"></i><span>Flow engine ready</span></div><button class="quiet-button" id="exportBtn" disabled>Export snapshot</button></div>
+    </header>
+    <h1 class="page-title">Simulation workspace</h1>
+    <p class="page-intro">Explore cell behavior, inspect node state, and run documented EmbryoMaker experiments.</p>
+    <section class="workspace">
+      <aside class="panel left-panel" aria-label="Experiment controls">
+        <div class="control-stack">
+        <div class="section-label">Experiment</div>
+        <label class="field-label" for="experiment">Starting model</label>
+        <div class="select-wrap"><select id="experiment" aria-label="Starting model"></select></div>
+        <input id="filePicker" class="file-input" type="file" accept=".txt,.dat,text/plain">
+        <button id="uploadBtn" class="upload"><span>＋</span><span id="uploadLabel">Load input file</span></button>
+        <div class="divider"></div>
+        <div class="section-label">Run controls</div>
+        <div class="transport" style="margin-top:12px">
+          <button class="primary" id="runBtn">▶ &nbsp; Run</button>
+          <button class="secondary" id="pauseBtn" disabled>Ⅱ &nbsp; Pause</button>
+          <button class="secondary" id="stepBtn">Step once</button>
+          <button class="secondary" id="resetBtn">Reset</button>
+        </div>
+        <label class="field-label" for="iterationRange"><span>Iteration</span><small id="iterationReadout">0 / 120</small></label>
+        <div class="range-row"><input id="iterationRange" type="range" min="0" max="120" value="0" aria-label="Iteration"><span id="iterationValue" class="range-number">0</span></div>
+        <label class="field-label" for="speed">Playback speed</label>
+        <select id="speed" class="speed-select" aria-label="Playback speed"><option value="300">Slow</option><option value="140" selected>Normal</option><option value="45">Fast</option></select>
+        <div class="divider"></div>
+        </div>
+        <div class="control-stack">
+        <div class="section-label">Display</div>
+        <label class="compact-label" for="colorMode">Color as</label>
+        <select id="colorMode" class="settings-select"><option value="cells">Cells</option><option value="type">Node type</option><option value="radius">Node radius</option><option value="index">Node index</option>
+      <optgroup label="EmbryoMaker node parameters">
+            <option value="scalar:x">x position</option><option value="scalar:y">y position</option><option value="scalar:z">z position</option><option value="scalar:energy">U (Energy)</option><option value="scalar:eqd">p^EQD</option><option value="scalar:radius">p^ADD</option><option value="scalar:you">p^YOU</option><option value="scalar:adh">p^ADH</option><option value="scalar:rep">p^REP</option><option value="scalar:rec">p^REC</option><option value="scalar:erp">p^ERP</option><option value="scalar:est">p^EST</option><option value="scalar:eqs">p^EQS</option><option value="scalar:hoo">p^HOO</option><option value="scalar:mov">p^MOV</option><option value="scalar:dmo">p^DMO</option><option value="scalar:x0">x(0)</option><option value="scalar:y0">y(0)</option><option value="scalar:z0">z(0)</option><option value="scalar:ecm">p^ECM</option><option value="scalar:cod">p^COD</option><option value="scalar:grd">p^GRD</option><option value="scalar:pld">p^PLD</option><option value="scalar:vod">p^VOD</option><option value="scalar:dif">p^DIF</option><option value="scalar:kfi">p^KFI</option><option value="scalar:pla">p^PLA</option><option value="scalar:kvol">p^VOC</option><option value="scalar:other">Epithelial counterpart</option><option value="scalar:marge">Cell nucleus</option><option value="scalar:talone">Cell border</option><option value="scalar:fixed">Fixed node</option><option value="scalar:ndiv">Number of divisions</option>
+          </optgroup>
+          <optgroup label="Derived node values"><option value="scalar:dx">Displacement x</option><option value="scalar:dy">Displacement y</option><option value="scalar:dz">Displacement z</option><option value="scalar:dtotal">Total displacement</option><option value="scalar:phase">Cell cycle progression</option><option value="scalar:box">Box index</option><option value="scalar:index">Node index</option><option value="scalar:lineage">Cell lineage</option></optgroup>
+          <optgroup label="Regulatory molecules" id="geneColorOptions"></optgroup>
+        </select>
+        <label class="compact-label" for="paletteMode">Color palette</label>
+        <select id="paletteMode" class="settings-select"><option value="multi">Multicolor</option><option value="warm">Yellow to red</option><option value="blue">Blue</option><option value="green">Green</option></select><div id="colorRangeControls" hidden><label class="compact-label" for="colorMinimum">Color minimum</label><input id="colorMinimum" class="settings-select" type="number" step="any"><label class="compact-label" for="colorMaximum">Color maximum</label><input id="colorMaximum" class="settings-select" type="number" step="any"></div>
+        <label class="compact-label" for="pointScale">Point size</label>
+        <div class="small-range"><input id="pointScale" type="range" min="30" max="180" value="100"><output id="pointScaleReadout">100%</output></div>
+        <label class="compact-label" style="display:flex;align-items:center;gap:8px"><input id="showNodes" type="checkbox" checked> Show nodes</label>
+        <div class="hint">Choose Pan, Rotate, or Zoom, then drag the model. Choose a section plane to clip the view.</div>
+        </div>
+      </aside>
+      <section class="panel view-panel" id="viewPanel" aria-label="3D model view">
+        <div class="view-head"><div><div id="viewTitle" class="view-title">Cell model</div><div id="viewCaption" class="view-caption">Drag to rotate · Scroll to zoom</div></div><div class="view-actions"><button id="workspaceToggle" class="workspace-toggle" type="button" aria-expanded="false">Controls</button><select id="cameraPreset" class="settings-select" aria-label="Camera view" style="width:auto;padding:7px 9px"><option value="oblique">Oblique view</option><option value="above">View from above</option><option value="front">View from front</option></select><button id="homeView" class="icon-button" aria-label="Reset view" title="Reset view">⌂</button><button id="fullscreenBtn" class="icon-button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button><button id="openMenuBtn" class="icon-button" aria-label="Open EmbryoMaker menu" title="Right-click the view for the original menu">☰</button></div></div>
+        <nav class="classic-menu" aria-label="EmbryoMaker view menus" hidden>
+          <details><summary>Basic View Modifier</summary><div class="menu-items"><details><summary>left mouse button</summary><div class="menu-items"><button data-menu="drag-rotate">rotate</button><button data-menu="drag-zoom">zoom</button><button data-menu="drag-pan">pan</button><button data-menu="section-minx">Section from minimal x plane</button><button data-menu="section-maxx">Section from maximal x plane</button><button data-menu="section-miny">Section from minimal y plane</button><button data-menu="section-maxy">Section from maximal y plane</button><button data-menu="section-minz">Section from minimal z plane</button><button data-menu="section-maxz">Section from maximal z plane</button></div></details><button data-menu="camera-reset">reset to initial view</button><button data-menu="camera-above">view from above</button><button data-menu="camera-front">view from front</button><button data-menu="section-off">Undo sections</button><button data-menu="fixed-sections-toggle">Toggle Fixed sections when running iterations</button></div></details>
+          <details><summary>show node mechanical properties</summary><div class="menu-items"><details><summary>with colors</summary><div class="menu-items"><label>property<select id="ogMechanicalColor" class="settings-select"></select></label><label>color minimum<input id="ogMechanicalColorMinimum" class="settings-select" type="number" step="any"></label><label>color maximum<input id="ogMechanicalColorMaximum" class="settings-select" type="number" step="any"></label></div></details><details><summary>with arrows (only epithelia)</summary><div class="menu-items"><label>property<select id="ogMechanicalArrow" class="settings-select"></select></label></div></details><details><summary>with semitransparent spheres</summary><div class="menu-items"><label>property<select id="ogMechanicalSphere" class="settings-select"></select></label></div></details><details><summary>color options</summary><div class="menu-items"><details><summary>change color palette</summary><div class="menu-items"><button data-menu="palette-multi">multicolor palette</button><button data-menu="palette-warm">yellow-red palette</button><button data-menu="palette-blue">blue palette</button><button data-menu="palette-green">green palette</button></div></details><button data-menu="color-range-terminal">select color max. and min. from terminal</button><button data-menu="color-min-left">select color min. with left mouse button</button><button data-menu="color-max-left">select color max. with left mouse button</button><button data-menu="color-min-middle">select color min. with middle mouse button</button><button data-menu="color-max-middle">select color max. with middle mouse button</button></div></details><details><summary>arrow options</summary><div class="menu-items"><label>arrow minimum<input id="ogMechanicalArrowMinimum" class="settings-select" type="number" step="any"></label><label>arrow maximum<input id="ogMechanicalArrowMaximum" class="settings-select" type="number" step="any"></label><label>arrow scale<input id="ogMechanicalArrowScale" class="settings-select" type="number" step="any"></label><button data-menu="arrow-scale-left">change arrow scale with left mouse button</button><button data-menu="arrow-range-terminal">select arrow max. and min. from terminal</button><button data-menu="arrow-min-left">select arrow min. with left mouse button</button><button data-menu="arrow-max-left">select arrow max. with left mouse button</button><button data-menu="arrow-min-middle">select arrow min. with middle mouse button</button><button data-menu="arrow-max-middle">select arrow max. with middle mouse button</button><button data-menu="arrow-disable">disable arrows</button></div></details><details><summary>sphere options</summary><div class="menu-items"><label>sphere minimum<input id="ogMechanicalSphereMinimum" class="settings-select" type="number" step="any"></label><label>sphere maximum<input id="ogMechanicalSphereMaximum" class="settings-select" type="number" step="any"></label><label>sphere scale<input id="ogMechanicalSphereScale" class="settings-select" type="number" step="any"></label><button data-menu="sphere-scale-left">change sphere scale with left mouse button</button><button data-menu="sphere-range-terminal">select sphere max. and min. from terminal</button><button data-menu="sphere-min-left">select sphere min. with left mouse button</button><button data-menu="sphere-max-left">select sphere max. with left mouse button</button><button data-menu="sphere-min-middle">select sphere min. with middle mouse button</button><button data-menu="sphere-max-middle">select sphere max. with middle mouse button</button><button data-menu="sphere-disable">disable spheres</button></div></details></div></details>
+          <details><summary>show other node properties</summary><div class="menu-items"><details><summary>with colors</summary><div class="menu-items"><label>property<select id="ogOtherColor" class="settings-select"></select></label><label>color minimum<input id="ogOtherColorMinimum" class="settings-select" type="number" step="any"></label><label>color maximum<input id="ogOtherColorMaximum" class="settings-select" type="number" step="any"></label></div></details><details><summary>with arrows (only epithelia)</summary><div class="menu-items"><label>property<select id="ogOtherArrow" class="settings-select"></select></label></div></details><details><summary>with semitransparent spheres</summary><div class="menu-items"><label>property<select id="ogOtherSphere" class="settings-select"></select></label></div></details><details><summary>color options</summary><div class="menu-items"><details><summary>change color palette</summary><div class="menu-items"><button data-menu="palette-multi">multicolor palette</button><button data-menu="palette-warm">yellow-red palette</button><button data-menu="palette-blue">blue palette</button><button data-menu="palette-green">green palette</button></div></details><button data-menu="color-range-terminal">select color max. and min. from terminal</button><button data-menu="color-min-left">select color min. with left mouse button</button><button data-menu="color-max-left">select color max. with left mouse button</button><button data-menu="color-min-middle">select color min. with middle mouse button</button><button data-menu="color-max-middle">select color max. with middle mouse button</button></div></details><details><summary>arrow options</summary><div class="menu-items"><label>arrow minimum<input id="ogOtherArrowMinimum" class="settings-select" type="number" step="any"></label><label>arrow maximum<input id="ogOtherArrowMaximum" class="settings-select" type="number" step="any"></label><label>arrow scale<input id="ogOtherArrowScale" class="settings-select" type="number" step="any"></label><button data-menu="arrow-scale-left">change arrow scale with left mouse button</button><button data-menu="arrow-range-terminal">select arrow max. and min. from terminal</button><button data-menu="arrow-min-left">select arrow min. with left mouse button</button><button data-menu="arrow-max-left">select arrow max. with left mouse button</button><button data-menu="arrow-min-middle">select arrow min. with middle mouse button</button><button data-menu="arrow-max-middle">select arrow max. with middle mouse button</button><button data-menu="arrow-disable">disable arrows</button></div></details><details><summary>sphere options</summary><div class="menu-items"><label>sphere minimum<input id="ogOtherSphereMinimum" class="settings-select" type="number" step="any"></label><label>sphere maximum<input id="ogOtherSphereMaximum" class="settings-select" type="number" step="any"></label><label>sphere scale<input id="ogOtherSphereScale" class="settings-select" type="number" step="any"></label><button data-menu="sphere-scale-left">change sphere scale with left mouse button</button><button data-menu="sphere-range-terminal">select sphere max. and min. from terminal</button><button data-menu="sphere-min-left">select sphere min. with left mouse button</button><button data-menu="sphere-max-left">select sphere max. with left mouse button</button><button data-menu="sphere-min-middle">select sphere min. with middle mouse button</button><button data-menu="sphere-max-middle">select sphere max. with middle mouse button</button><button data-menu="sphere-disable">disable spheres</button></div></details></div></details>
+          <details><summary>what to draw</summary><div class="menu-items"><button data-menu="spring-toggle">epithelial springs</button><button data-menu="grid-toggle">box grid</button><button data-menu="inter-connections-toggle">connexions between cells</button><button data-menu="intra-connections-toggle">connexions between nodes</button><button data-menu="cell-contour-disabled">draw cell contour</button><button data-menu="intercellular-contour-disabled">draw intercellular contour</button><button data-menu="radius-eqd">balls as radius=EQD</button><button data-menu="radius-add">balls as radius=ADD</button><button data-menu="balls-small">small balls</button><button data-menu="balls-none">no balls</button><button data-menu="balls-cylinders">cylinders</button><button data-menu="apical-toggle">only upper balls</button><button data-menu="basal-toggle">only lower balls</button><button data-menu="box-toggle">display box boundaries</button><button data-menu="polarization-toggle">polarization vectors</button><button data-menu="centroids-toggle">centroids</button><button data-menu="fixed-toggle">fixed nodes</button><button data-menu="displacement-toggle">show displacement of nodes from origin</button><button data-menu="unit-movement-toggle">movement unitary vectors</button><button data-menu="repulsion-toggle">force component: repulson-adhesion</button><button data-menu="lateral-force-toggle">force component: epi. surface tension lateral</button><button data-menu="axial-force-toggle">force component: epi. surface tension apical/basal</button><button data-menu="movement-vectors-toggle">movement module vectors</button><button data-menu="epithelium-toggle">do not show/show epithelium</button><button data-menu="mesenchyme-toggle">do not show/show mesenchyme</button><button data-menu="ecm-toggle">do not show/show extracellular matrix</button><button data-menu="ellipses-toggle">Ellongated cells as ellipses</button></div></details>
+          <details><summary>input output</summary><div class="menu-items"><label>Choose model<select id="experimentMenu" class="settings-select" aria-label="Choose model"></select></label><button data-menu="reset-model">Reset current model</button><button data-menu="export">Save present time snapshot</button><button data-menu="periodic-toggle">Save snaps periodically: OFF</button><label>Snapshot frequency<input id="snapshotFrequency" class="settings-select" type="number" min="1" step="1" value="1000"></label><label>Output file label<input id="outputLabel" class="settings-select" type="text" maxlength="64" autocomplete="off"></label><button data-menu="read-file">Read from file</button><button data-menu="images-toggle">Save images automatically: OFF</button><button data-menu="movie-toggle">Save movie</button></div></details>
+          <details><summary>Editor</summary><div class="menu-items"><button data-menu="editor-add-basic-epithelial">Add basic epithelial cell</button><button data-menu="editor-add-basic-mesenchymal">Add basic mesenchymal cell</button><button data-menu="editor-add-node">Add node to a selected cell</button><button data-menu="editor-add-ecm">Add extracellular node</button><button data-menu="editor-paste-node">Paste a node from selection</button><button data-menu="editor-paste-cell">Paste a cell from selection</button><button data-menu="editor-delete-node">Delete the selected node</button><button data-menu="editor-delete-cell">Delete the selected cell</button><button data-menu="editor-copy-node-property">Copy selected node property</button><button data-menu="editor-paste-node-property">Paste copied node property</button><button data-menu="editor-copy-cell-property">Copy selected cell property</button><button data-menu="editor-paste-cell-property">Paste copied cell property</button><button data-menu="editor-change-gene">Change gene expression in the selected node</button><div class="inspector-title">Selected node</div><div id="selectionInfo" class="inspector-copy">Click a node in the model to inspect its position, type, and cell.</div><div id="nodeDetails" class="node-list"></div><div id="nodeEditControls" class="node-editor" hidden><label class="compact-label" for="nodeProperty">Edit node property</label><select id="nodeProperty" class="settings-select"></select><div class="small-range"><input id="nodeValue" type="number" step="any" aria-label="Node property value"></div><button id="applyNodeEdit" class="secondary wide">Apply node change</button></div><div id="cellEditControls" class="node-editor" hidden><label class="compact-label" for="cellProperty">Edit cell property</label><select id="cellProperty" class="settings-select"></select><div class="small-range"><input id="cellValue" type="number" step="any" aria-label="Cell property value"></div><button id="applyCellEdit" class="secondary wide">Apply cell change</button></div></div></details>
+          <details><summary>selection menu</summary><div class="menu-items"><button data-menu="select-node-index">select node by index</button><button data-menu="select-node-cursor">select node with cursor</button><button data-menu="select-cell-index">select cell by index</button><button data-menu="select-cell-cursor">select cell with cursor</button><button data-menu="undo-selections">undo selections</button></div></details>
+          <details><summary>cursor menu</summary><div class="menu-items"><button data-menu="cursor-toggle">cursor ON/OFF</button><button data-menu="cursor-xy">set left mouse-button for x-y move</button><button data-menu="cursor-z">set left mouse-button for z move</button><button data-menu="cursor-middle-z">set middle mouse-button for z move</button></div></details>
+          <details><summary>gene plotting options</summary><div class="menu-items"><button data-menu="plot-gene">plot [gen] vs time in a node</button><button data-menu="temporal-plots-toggle">Temporal plots: ON/OFF</button></div></details>
+          <details><summary>move menu</summary><div class="menu-items"><button data-menu="move-node-terminal">move node from terminal</button><button data-menu="move-node-mouse">move node with left mouse button</button><button data-menu="move-cell-terminal">move cell from terminal</button><button data-menu="move-cell-mouse">move cell with left mouse button</button><button data-menu="stop-movement">Stop movement (for cursor movement)</button></div></details>
+          <div class="menu-separator"></div><button data-menu="iterate-1">1 iteration</button><button data-menu="iterate-100">100 iterations</button><button data-menu="iterate-1000">1000 iterations</button><button data-menu="iterate-50000">50000 iterations</button><button data-menu="iterate-custom">x iterations</button><button data-menu="fitness">fitness</button><button data-menu="quit">quit</button>
+        </nav>
+        <canvas id="stageGL" class="stage-gl" aria-hidden="true"></canvas>
+        <canvas id="stage" class="stage" aria-label="Interactive cell visualization"></canvas>
+        <div id="genePlotPanel" class="gene-plot" hidden><div class="gene-plot-head"><span id="genePlotTitle">Gene expression over time</span><select id="genePlotGene" aria-label="Gene plotted"></select><button id="genePlotClose" type="button" aria-label="Close gene plot">Close</button></div><canvas id="genePlotCanvas" aria-label="Gene expression plot"></canvas><div id="genePlotLegend" class="gene-plot-legend" aria-label="Plotted node and gene series"></div></div>
+        <div id="status" class="statusline" aria-live="polite"><span class="message">Ready to load an experiment.</span><span class="elapsed"></span></div>
+        <div id="emptyState" class="empty-state"><div class="empty-symbol">◌</div><strong>Choose an experiment to begin</strong><span>The model will appear here after its first run.</span></div>
+        <div class="overlay-bottom"><div id="legend" class="legend"></div><div class="view-controls"><button id="panMode">Pan</button><button id="rotateMode" class="active">Rotate</button><button id="zoomMode">Zoom</button></div></div>
+      </section>
+      <aside class="panel right-panel" aria-label="Model inspector">
+        <div class="section-label">Model inspector</div>
+        <div><div class="stats-grid"><div class="stat"><div id="nodeCount" class="stat-value">...</div><div class="stat-label">Nodes</div></div><div class="stat"><div id="cellCount" class="stat-value">...</div><div class="stat-label">Cells</div></div><div class="stat"><div id="modelStep" class="stat-value">0</div><div class="stat-label">Iteration</div></div><div class="stat"><div id="typeCount" class="stat-value">...</div><div class="stat-label">Node types</div></div></div></div>
+
+        <div class="inspector-section"><div class="inspector-title">Model readout</div><div id="modelReadout" class="inspector-copy">Load a model to view a concise summary of its current state.</div></div>
+        <div class="inspector-section"><div class="inspector-title">Section plane</div><label class="compact-label" for="sectionPlane">Clip from</label><select id="sectionPlane" class="settings-select"><option value="off">No section</option><option value="minx">Minimum x</option><option value="maxx">Maximum x</option><option value="miny">Minimum y</option><option value="maxy">Maximum y</option><option value="minz">Minimum z</option><option value="maxz">Maximum z</option></select><label class="compact-label" for="sectionPosition">Plane position</label><div class="small-range"><input id="sectionPosition" type="range" min="0" max="100" value="0" disabled><output id="sectionPositionReadout">0%</output></div><button id="undoSections" class="secondary wide" style="margin-top:9px">Undo sections</button></div>
+      </aside>
+    </section>
+    <footer class="footer"><span>EmbryoMaker Flow · Headless simulation core</span><span><span class="badge">Local session</span></span></footer>
+  </main>
+  <script src="/renderer.js"></script>
+  <script>
+  (() => {
+    const $ = id => document.getElementById(id);
+    let ogCameraDistance = 5;
+    let ogInitialCamera = { yaw: 0, pitch: 60*Math.PI/180 };
+    const canvas = $('stage'), ctx = canvas.getContext('2d');
+    const state = { nodes: [], cells: [], edges: [], slicePlots: [], sliceSurface: false, boxGrid: {spacing:0,count:0}, iteration: 0, simulatedTime: 0, max: 120, keyboardIterationBatch:1, yaw: 0, pitch: 60*Math.PI/180, cameraDistance: 5, cameraShiftX: 0, cameraShiftY: 0, zoom: 1, panX: 0, panY: 0, playing: false, busy: false, colorMode: 'type', paletteMode: 'multi', pointScale: 1, radiusMode: 'add', ballMode: 'cylinders', nodeFilter: 'all', fixedOnly: false, showNodes: true, showApical: true, showBasal: true, showFixed: true, showBox: true, showGrid: false, showEggshell: false, showEllipses: false, showTransparentSpheres: false, showArrows: false, arrowField: 'type', sphereField: 'type', arrowScale: 1, sphereScale: 1, mechanicalArrowField:'scalar:x', otherArrowField:'type', mechanicalSphereField:'scalar:x', otherSphereField:'type', mechanicalColorField:'scalar:x', otherColorField:'type', showEpithelium: true, showMesenchyme: true, showECM: true, showCentroids: false, showPolarization: false, showDisplacement: false, showUnitMovement: false, showMovementVectors: false, showRepulsion: false, showLateralForce: false, showAxialForce: false, selected: null, selectionHistory: [], copiedNodeProperty: null, copiedCellProperty: null, cursor: null, cursorInitialized: false, cursorEnabled: false, dragDelta: null, temporalPlotsEnabled: true, geneSamples: [], plottedNodeIds: [], plottedGenes: [], inputText: null, fileName: null, lastSnapshot: null, timer: null, statusTimer: null, frame: [], bounds: null, colorLimits: {}, customColorLimits: {}, customArrowLimits: {}, customSphereLimits: {}, section: 'off', sectionFraction: 0, fixedSections: false, sectionBounds: null, dragMode: 'rotate', drawQueued: false, depthDirty: true };
+    Object.assign(state,{periodicSnapshots:false,snapshotFrequency:1000,outputLabel:'',saveImages:false,movieRecorder:null,movieChunks:[],movieEnd:0,lastOutputIteration:-1,leftMouseAdjustment:null,middleMouseAdjustment:null,activeMouseAdjustment:null});
+    state.showSprings = false;state.showCylinders=true;state.smallBalls=false;state.noBalls=false;
+    const cellPalettes = {
+      multi: ['#f2f2f2','#e5484d','#16b9d3','#40b64a','#c13ce0','#e7c629','#743fe3','#f07e2f'],
+      warm: ['#fff2a8','#ffd34d','#ff9f32','#f15c36','#bb2938','#681c3a'],
+      blue: ['#d7f4ff','#9ed9ff','#58a8ee','#4771ca','#5848a4','#302c66'],
+      green: ['#e0f6c6','#b6db75','#72ba55','#39a46c','#238278','#164b52']
+    };
+    function applyOgDisplayConfig(source){
+      const numberPattern=/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eEdD][+-]?\d+)?$/;
+      const values=[];
+      for(const line of source.split(/\r?\n/)){for(const token of line.split('#',1)[0].trim().split(/\s+/)){if(!token)continue;if(!numberPattern.test(token))break;values.push(Number(token.replace(/[dD]/,'e')));}}
+      if(values.length<62)return null;
+      const flags=values.slice(21,62),flag=index=>flags[index-1]===1;
+      const property=(code,channel='color')=>{
+        const mechanical=['','x','y','z','energy','eqd','radius','you','adh','rep','rec','erp','est','eqs','hoo','mov','dmo','x0','y0','z0','ecm','cod','grd','pld','vod','dif','kfi','pla','kvol'];
+        if(code>=1&&code<=28)return mechanical[code];
+        if(code===29)return 'type';if(code===30)return 'cell';if(code===31)return 'other';if(code===32)return 'marge';if(code===33)return 'talone';if(code===34)return 'fixed';if(code===35)return 'ndiv';if(code===36)return 'phase';if(code===37)return 'dx';if(code===38)return 'dy';if(code===39)return 'dz';if(code===40)return 'dtotal';if(code===41)return 'box';if(code===42)return 'index';
+        if(channel==='color'&&code===43)return 'lineage';
+        if(channel==='color'&&code>43)return `gene_${code-43}`;
+        if(channel!=='color'&&code>42)return `gene_${code-42}`;
+        return 'type';
+      };
+      const mode=(code,channel='color')=>{const field=property(code,channel);return field==='type'?'type':field==='cell'?'cells':`scalar:${field}`;};
+      const initial={yaw:values[4]*Math.PI/180,pitch:values[5]*Math.PI/180};
+      ogInitialCamera=initial;ogCameraDistance=Math.abs(values[3]);
+      Object.assign(state,{
+        yaw:initial.yaw,pitch:initial.pitch,cameraDistance:ogCameraDistance,cameraShiftX:values[1],cameraShiftY:values[2],
+        colorMode:mode(values[6],'color'),paletteMode:({1:'multi',2:'warm',3:'blue',4:'green'})[values[7]]||'multi',
+        radiusMode:flag(5)?'eqd':'add',showGrid:flag(2),noBalls:flag(8),showApical:flag(9),showBasal:flag(10),
+        smallBalls:flag(11),showInterConnections:flag(12),showIntraConnections:flag(13),showBox:flag(18),
+        showPolarization:flag(19),showCentroids:flag(21),showCylinders:flag(22),showSprings:flag(1),showEggshell:flag(35),sliceSurface:flag(17),
+        showEllipses:flag(33),showEpithelium:flag(30),showMesenchyme:flag(31),showECM:flag(32),showFixed:flag(36),showDisplacement:flag(39),
+        arrowField:mode(values[11],'arrow'),arrowScale:values[12],showArrows:values[11]>0,
+        sphereField:mode(values[16],'sphere'),sphereScale:values[17],showTransparentSpheres:values[16]>0,
+        mechanicalColorField:values[6]>=1&&values[6]<=28?`scalar:${property(values[6])}`:'scalar:x',
+        otherColorField:values[6]>28?property(values[6]):'type',
+        mechanicalArrowField:values[11]>=1&&values[11]<=28?`scalar:${property(values[11],'arrow')}`:'scalar:x',
+        otherArrowField:values[11]>28?property(values[11],'arrow'):'type',
+        mechanicalSphereField:values[16]>=1&&values[16]<=28?`scalar:${property(values[16],'sphere')}`:'scalar:x',
+        otherSphereField:values[16]>28?property(values[16],'sphere'):'type'
+      });
+      state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};
+      if(values[8]===values[6]&&values[8]!==0)state.customColorLimits[property(values[6],'color')]=[values[10],values[9]];
+      if(values[13]===values[11]&&values[13]!==0)state.customArrowLimits[property(values[11],'arrow')]=[values[15],values[14]];
+      if(values[18]===values[16]&&values[18]!==0)state.customSphereLimits[property(values[16],'sphere')]=[values[20],values[19]];
+      state.showNodes=true;state.ballMode=state.showCylinders?'cylinders':'spheres';
+      window.embryomakerDisplayConfig={values,flags,source,propertyForCode:property};
+      return window.embryomakerDisplayConfig;
+    }
+    const setStatus = (message, error=false, elapsed='') => { const el=$('status'); clearTimeout(state.statusTimer); el.classList.add('visible'); el.classList.toggle('error',error); el.querySelector('.message').textContent=message; el.querySelector('.elapsed').textContent=elapsed; if(!error)state.statusTimer=setTimeout(()=>el.classList.remove('visible'),1800); };
+    const fitCanvas = () => { const rect=canvas.getBoundingClientRect(), dpr=Math.min(devicePixelRatio||1,2); canvas.width=Math.max(1,Math.round(rect.width*dpr)); canvas.height=Math.max(1,Math.round(rect.height*dpr)); ctx.setTransform(dpr,0,0,dpr,0,0); draw(); };
+    const projectPosition = (n, bounds, w, h) => {
+      const yaw=state.yaw,pitch=state.pitch,cz=Math.cos(yaw),sz=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),ax=Math.cos(yaw),ay=-Math.sin(yaw),dot=ax*n.x+ay*n.y;
+      const axisX=n.x*cp+ay*n.z*sp+ax*dot*(1-cp),axisY=n.y*cp-ax*n.z*sp+ay*dot*(1-cp),rz=n.z*cp+(ax*n.y-ay*n.x)*sp;
+      const rx=axisX*cz-axisY*sz,ry=axisX*sz+axisY*cz;
+      const worldScale=.1,depth=state.cameraDistance/state.zoom-rz*worldScale,f=1/Math.tan(5*Math.PI/180),perspective=1/depth,panScale=.01*f*h*.5*perspective;
+      return {x:w/2+(state.cameraShiftX+state.panX*.01)*f*h*.5*perspective+rx*worldScale*f*h*.5*perspective,y:h/2-(state.cameraShiftY+state.panY*.01)*f*h*.5*perspective-ry*worldScale*f*h*.5*perspective,z:rz,perspective};
+    };
+    const project = (n, bounds, w, h, camera) => {
+      const position=projectPosition(n,bounds,w,h,camera),perspective=position.perspective;
+      const radius=state.smallBalls&&(!state.showCylinders||n.type>=3)?n.radius*.1:state.radiusMode==='eqd'?n.eqd:n.radius;
+      const size=1;
+      return {...position,r:Math.max(.1,Math.min(80,radius*.1*size*perspective*(1/Math.tan(5*Math.PI/180))*canvas.clientHeight*.5*state.pointScale))};
+    };
+    function shadeColor(hex,factor){const n=Number.parseInt(hex.slice(1),16),r=Math.round((n>>16&255)*factor),g=Math.round((n>>8&255)*factor),b=Math.round((n&255)*factor);return `rgb(${r},${g},${b})`;}
+    function colorRampRgb(value, mode=state.paletteMode){
+      const f=Math.max(0,Math.min(1,value));let rgb;
+      if(mode==='warm')rgb=[1,f,0];
+      else if(mode==='blue')rgb=[0,f,1];
+      else if(mode==='green')rgb=[0,1,f];
+      else if(f<.5)rgb=[f*2,0,1-f*2];
+      else rgb=[1,2*f-.5,0];
+      return rgb.map(channel=>Math.max(0,Math.min(1,channel)));
+    }
+    function colorRamp(value, mode=state.paletteMode){return '#'+colorRampRgb(value,mode).map(channel=>Math.round(channel*255).toString(16).padStart(2,'0')).join('');}
+    function nodeColorRgb(n){
+      if(state.selected===n.id)return [1,1,0];
+      if(state.selectionHistory.includes(n.id))return [1,1,1];
+      if(state.colorMode.startsWith('scalar:')){const field=state.colorMode.slice(7),range=state.customColorLimits[field]||state.colorLimits[field]||[0,0],value=nodeScalar(n,field);return colorRampRgb(range[1]===range[0] ? .5 : (value-range[0])/(range[1]-range[0]));}
+      if(state.colorMode==='type'){const range=state.customColorLimits.type||[1,7];return colorRampRgb(range[1]===range[0] ? .5 : (n.type-range[0])/(range[1]-range[0]));}
+      if(state.colorMode==='cells'){const range=state.customColorLimits.cell||state.colorLimits.cell||[0,0];return colorRampRgb(range[1]===range[0] ? .5 : (n.cell-range[0])/(range[1]-range[0]));}
+      if(state.colorMode==='radius'||state.colorMode==='index'){const field=state.colorMode,range=visualizationRange(field),value=state.colorMode==='radius'?n.radius:n.id;return colorRampRgb(range[1]===range[0] ? .5 : (value-range[0])/(range[1]-range[0]));}
+      const colors=cellPalettes[state.paletteMode]||cellPalettes.multi;
+      const packed=Number.parseInt(colors[Math.abs(n.cell-1)%colors.length].slice(1),16);return [(packed>>16&255)/255,(packed>>8&255)/255,(packed&255)/255];
+    }
+    function nodeColor(n){return '#'+nodeColorRgb(n).map(channel=>Math.round(channel*255).toString(16).padStart(2,'0')).join('');}
+    function visualizationField(mode){return mode==='type'?'type':mode==='cells'?'cell':mode.startsWith('scalar:')?mode.slice(7):mode;}
+    function visualizationRange(mode,channel='color'){const field=visualizationField(mode),rangeField=mode==='cells'?'cell':field,custom=channel==='arrow'?state.customArrowLimits:channel==='sphere'?state.customSphereLimits:state.customColorLimits;return custom[rangeField]||(rangeField==='type'?[1,7]:state.colorLimits[rangeField]||[0,0]);}
+    const ogMechanicalFields=new Set(['scalar:x','scalar:y','scalar:z','scalar:eqd','scalar:radius','scalar:you','scalar:adh','scalar:rep','scalar:rec','scalar:erp','scalar:est','scalar:eqs','scalar:hoo','scalar:mov','scalar:dmo','scalar:z0','scalar:ecm','scalar:cod','scalar:grd','scalar:pld','scalar:vod','scalar:dif','scalar:kfi','scalar:pla','scalar:kvol']);
+    const ogMechanicalProperties=[['scalar:x','x'],['scalar:y','y'],['scalar:z','z'],['scalar:eqd','p^EQD'],['scalar:radius','p^ADD'],['scalar:you','p^YOU'],['scalar:adh','p^ADH'],['scalar:rep','p^REP'],['scalar:rec','p^REC'],['scalar:erp','p^ERP'],['scalar:est','p^EST'],['scalar:eqs','p^EQS'],['scalar:hoo','p^HOO'],['scalar:mov','p^MOV'],['scalar:dmo','p^DMO'],['scalar:z0','z(0)'],['scalar:ecm','p^ECM'],['scalar:cod','p^COD'],['scalar:grd','p^GRD'],['scalar:pld','p^PLD'],['scalar:vod','p^VOD'],['scalar:dif','p^DIF'],['scalar:kfi','p^KFI'],['scalar:pla','p^PLA'],['scalar:kvol','p^VOC']];
+    const ogOtherColorProperties=[['type','node type'],['cells','cells'],['scalar:marge','cell nucleus as blue'],['scalar:fixed','nodes fixed as yellow'],['scalar:ndiv','Number of divisions'],['scalar:phase','as cell cycle'],['scalar:dx','as dx'],['scalar:dy','as dy'],['scalar:dz','as dz'],['scalar:dtotal','as dtotal'],['scalar:box','as boxes'],['scalar:index','as node index'],['scalar:lineage','cell lineage']];
+    const ogOtherVectorProperties=ogOtherColorProperties.filter(([value])=>!['scalar:ndiv','scalar:lineage'].includes(value));
+    function populateOgPropertyMenus(){const genes=Array.from($('geneColorOptions').children,option=>[option.value,option.textContent]);const selectedById={ogMechanicalColor:state.mechanicalColorField,ogOtherColor:state.otherColorField,ogMechanicalArrow:state.mechanicalArrowField,ogOtherArrow:state.otherArrowField,ogMechanicalSphere:state.mechanicalSphereField,ogOtherSphere:state.otherSphereField};const properties={ogMechanicalColor:ogMechanicalProperties,ogMechanicalArrow:ogMechanicalProperties,ogMechanicalSphere:ogMechanicalProperties,ogOtherColor:[...ogOtherColorProperties,...genes],ogOtherArrow:[...ogOtherVectorProperties,...genes],ogOtherSphere:[...ogOtherVectorProperties,...genes]};for(const id of Object.keys(properties)){const select=$(id);select.textContent='';for(const [value,label] of properties[id]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.value=selectedById[id];}}
+    function nodeScalar(n,field){if(field.startsWith('gene_'))return n.genes[Number(field.slice(5))-1]||0;if(field==='index')return n.id;if(field==='dx')return n.x-n.x0;if(field==='dy')return n.y-n.y0;if(field==='dz')return n.z-n.z0;if(field==='dtotal')return Math.hypot(n.x-n.x0,n.y-n.y0,n.z-n.z0);return n[field]||0;}
+    function sectionDisplayBounds(bounds=state.bounds){
+      if(!bounds)return null;
+      const result={...bounds};
+      if(state.section==='off')return result;
+      const axis=state.section.slice(-1),side=state.section.slice(0,3),min=bounds['min'+axis],max=bounds['max'+axis],threshold=side==='min'?min+(max-min)*state.sectionFraction:max-(max-min)*state.sectionFraction;
+      result[(side==='min'?'min':'max')+axis]=threshold;
+      return result;
+    }
+    function passesSection(n,bounds=state.bounds){
+      if(state.section==='off'||!bounds)return true;
+      const axis=state.section.slice(-1),side=state.section.slice(0,3),min=bounds['min'+axis],max=bounds['max'+axis],threshold=side==='min'?min+(max-min)*state.sectionFraction:max-(max-min)*state.sectionFraction;
+      return side==='min'?n[axis]>=threshold:n[axis]<=threshold;
+    }
+    function passesNodeFilter(n){if(n.type>4)return false;if(!state.showFixed&&n.fixed)return false;if(n.type===1&&!state.showApical)return false;if(n.type===2&&!state.showBasal)return false;if(n.type<=2&&!state.showEpithelium)return false;if(n.type===3&&!state.showMesenchyme)return false;if(n.type===4&&!state.showECM)return false;return true;}
+    function ogEggshellMesh(){
+      if(!state.nodes.length)return null;
+      const count=20,maxEqd=Math.max(...state.nodes.map(node=>node.eqd||0));
+      const initialRadius=Math.cbrt(state.nodes.length)*maxEqd,exc=1/.75;
+      const volume=(4/3)*Math.PI*initialRadius**3;
+      const r2=Math.cbrt((3*volume*exc**2)/(4*Math.PI)),r1=r2/exc;
+      const points=[];
+      for(let i=1;i<=count;i++){
+        const z=-r2+((2*r2)/count)*i-(2*r2)/(2*count);
+        const radial=Math.sqrt(Math.max(0,r1*r1*(1-(z*z)/(r2*r2))));
+        for(let j=1;j<=count;j++){const angle=(2*Math.PI/count)*j;points.push([Math.sin(angle)*radial,Math.cos(angle)*radial,z]);}
+      }
+      points.push([0,0,-r2],[0,0,r2]);
+      const triangles=[];
+      for(let j=1;j<=count;j++){triangles.push([count*count+1,j,j===count?1:j+1]);}
+      for(let ring=0;ring<count-1;ring++)for(let j=0;j<count;j++){
+        const first=ring*count+j+1,next=ring*count+(j+1)%count+1,lower=(ring+1)*count+j+1,lowerNext=(ring+1)*count+(j+1)%count+1;
+        triangles.push([first,next,lower],[next,lowerNext,lower]);
+      }
+      for(let j=0;j<count;j++){const last=(count-1)*count+j+1,prev=(count-1)*count+(j+count-1)%count+1;triangles.push([count*count+2,last,prev]);}
+      return {points,triangles,colorMaximum:state.cells.length};
+    }
+    window.embryomakerOgEggshell=ogEggshellMesh;
+    function drawVectorLayer(xField,yField,zField,color,unitLength=false){
+      let maxMagnitude=0;for(const p of state.frame){if(!p.visible||!passesNodeFilter(p.n))continue;maxMagnitude=Math.max(maxMagnitude,Math.hypot(p.n[xField],p.n[yField],p.n[zField]));}if(maxMagnitude===0)return;
+      const targetLength=state.bounds.spread*.18;ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=1;ctx.globalAlpha=.9;
+      for(const p of state.frame){if(!p.visible||!passesNodeFilter(p.n))continue;const vx=p.n[xField],vy=p.n[yField],vz=p.n[zField],magnitude=Math.hypot(vx,vy,vz);if(magnitude===0)continue;const scale=targetLength/(unitLength?magnitude:maxMagnitude),end=projectPosition({x:p.n.x+vx*scale,y:p.n.y+vy*scale,z:p.n.z+vz*scale},state.bounds,canvas.clientWidth,canvas.clientHeight,{cy:Math.cos(state.yaw),sy:Math.sin(state.yaw),cp:Math.cos(state.pitch),sp:Math.sin(state.pitch)});ctx.moveTo(p.x,p.y);ctx.lineTo(end.x,end.y);}ctx.stroke();ctx.globalAlpha=1;
+    }
+    function renderFrame(){
+      const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;ctx.clearRect(0,0,w,h);
+      if(!state.nodes.length)return;
+      const bounds=state.bounds;bounds.scale=1;const displayBounds=sectionDisplayBounds(bounds);
+      const camera={cy:Math.cos(state.yaw),sy:Math.sin(state.yaw),cp:Math.cos(state.pitch),sp:Math.sin(state.pitch)};
+      for(const p of state.frame){const q=project(p.n,bounds,w,h,camera);p.x=q.x;p.y=q.y;p.z=q.z;p.r=q.r;p.perspective=q.perspective;p.visible=passesSection(p.n);}
+      if(window.embryomakerRenderer?.active){
+        const cellById=new Map(state.cells.map(cell=>[cell.id,cell]));
+        const firstNodeByCell=new Map();for(const item of state.nodes)if(!firstNodeByCell.has(item.cell))firstNodeByCell.set(item.cell,item);
+        const visualCells=state.cells.map(cell=>({...cell,visible:passesSection(cell),display:firstNodeByCell.has(cell.id)&&passesNodeFilter(firstNodeByCell.get(cell.id))}));
+        window.embryomakerRenderer.render(state.frame.map(p=>{const cell=cellById.get(p.n.cell);return {id:p.n.id,other:p.n.other,x:p.n.x,y:p.n.y,z:p.n.z,x0:p.n.x0,y0:p.n.y0,z0:p.n.z0,cell:p.n.cell,fixed:p.n.fixed,moveX:p.n.moveX,moveY:p.n.moveY,moveZ:p.n.moveZ,moveMagnitude:Math.hypot(p.n.moveX,p.n.moveY,p.n.moveZ),repX:p.n.repX,repY:p.n.repY,repZ:p.n.repZ,lateralX:p.n.lateralX,lateralY:p.n.lateralY,lateralZ:p.n.lateralZ,axialX:p.n.axialX,axialY:p.n.axialY,axialZ:p.n.axialZ,type:p.n.type,radius:state.radiusMode==='eqd'?p.n.eqd:p.n.radius,addRadius:p.n.radius,color:nodeColor(p.n),colorRGB:nodeColorRgb(p.n),visible:p.visible,display:passesNodeFilter(p.n),polx:cell?.polx||0,poly:cell?.poly||0,polz:cell?.polz||0,elongationFactor:p.n.elongationFactor||1,arrowValue:nodeScalar(p.n,visualizationField(state.arrowField)),transparentValue:nodeScalar(p.n,visualizationField(state.sphereField)),transparentRadius:p.n.radius};}),{yaw:state.yaw,pitch:state.pitch,cameraDistance:state.cameraDistance,cameraShiftX:state.cameraShiftX,cameraShiftY:state.cameraShiftY,zoom:state.zoom,panX:state.panX,panY:state.panY,pointScale:state.pointScale,colorField:visualizationField(state.colorMode),colorRangeField:state.colorMode==='cells'?'cell':visualizationField(state.colorMode),colorRange:visualizationRange(state.colorMode),fixedSections:state.fixedSections,showCylinders:state.showCylinders,smallBalls:state.smallBalls,noBalls:state.noBalls,showNodes:state.showNodes,showEllipses:state.showEllipses,showEggshell:state.showEggshell,eggshell:state.showEggshell?ogEggshellMesh():null,showTransparentSpheres:state.showTransparentSpheres,transparentRange:visualizationRange(state.sphereField,'sphere'),transparentScale:state.sphereScale,showArrows:state.showArrows,arrowField:state.arrowField,arrowRange:visualizationRange(state.arrowField,'arrow'),arrowScale:state.arrowScale,sphereField:state.sphereField,showBox:state.showBox,showCentroids:state.showCentroids,showPolarization:state.showPolarization,showSprings:state.showSprings,showInterConnections:state.showInterConnections,showIntraConnections:state.showIntraConnections,showDisplacement:state.showDisplacement,showUnitMovement:state.showUnitMovement,showMovementVectors:state.showMovementVectors,showRepulsion:state.showRepulsion,showLateralForce:state.showLateralForce,showAxialForce:state.showAxialForce,cells:visualCells,edges:state.edges,radiusMode:state.radiusMode,bounds:state.bounds,sectionBounds:displayBounds,showGrid:state.showGrid,gridSpacing:state.boxGrid.spacing,gridCount:state.boxGrid.count,slicePlots:state.slicePlots,cursor:state.cursorEnabled?{enabled:true,...state.cursor}:null});
+      }
+      if(state.depthDirty){state.frame.sort((a,b)=>a.z-b.z);state.depthDirty=false;}
+      const frameById=new Map(state.frame.map(p=>[p.n.id,p]));
+      if(!window.embryomakerRenderer?.active){
+        if(state.showUnitMovement)drawVectorLayer('moveX','moveY','moveZ','#ff554d',true);if(state.showMovementVectors)drawVectorLayer('moveX','moveY','moveZ','#ff554d');if(state.showRepulsion)drawVectorLayer('repX','repY','repZ','#ffd84f');if(state.showLateralForce)drawVectorLayer('lateralX','lateralY','lateralZ','#6be5d0');if(state.showAxialForce)drawVectorLayer('axialX','axialY','axialZ','#f2aa55');
+      }
+      if(!window.embryomakerRenderer?.active){
+        if(state.showInterConnections||state.showIntraConnections){ctx.lineWidth=1;for(const edge of state.edges){if(edge.inter?!state.showInterConnections:!state.showIntraConnections)continue;const a=frameById.get(edge.a),b=frameById.get(edge.b);if(!a||!b||!a.visible||!b.visible||!passesNodeFilter(a.n)||!passesNodeFilter(b.n))continue;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle=edge.inter?(a.n.type===1?'#ff0000':'#00ff00'):(a.n.type===b.n.type?'#00bf00':'#bf0000');ctx.stroke();}}
+      }
+      if(!window.embryomakerRenderer?.active){
+        if(state.showCentroids||state.showPolarization){for(const cell of state.cells){const center=projectPosition(cell,bounds,w,h,camera);if(state.showCentroids){ctx.beginPath();ctx.arc(center.x,center.y,Math.max(.1,.001*center.perspective*(1/Math.tan(5*Math.PI/180))*h*.5),0,Math.PI*2);ctx.fillStyle='#ffffff';ctx.fill();}if(state.showPolarization){const tip=projectPosition({x:cell.x+cell.polx,y:cell.y+cell.poly,z:cell.z+cell.polz},bounds,w,h,camera);ctx.beginPath();ctx.moveTo(center.x,center.y);ctx.lineTo(tip.x,tip.y);ctx.strokeStyle='#ff0000';ctx.lineWidth=1;ctx.stroke();}}}
+      }
+      if(!window.embryomakerRenderer?.active){
+        if(state.showDisplacement){ctx.beginPath();ctx.strokeStyle='#00ff00';ctx.lineWidth=1;for(const p of state.frame){if(!p.visible||p.n.fixed||!passesNodeFilter(p.n))continue;const origin=projectPosition({x:p.n.x0,y:p.n.y0,z:p.n.z0},bounds,w,h,camera);ctx.moveTo(p.x,p.y);ctx.lineTo(origin.x,origin.y);}ctx.stroke();}
+      }
+      if(!window.embryomakerRenderer?.active){
+        if(state.showSprings){ctx.beginPath();ctx.strokeStyle='#00ff00';ctx.lineWidth=1;for(const p of state.frame){const q=frameById.get(p.n.other||0);if(!q||p.n.type>2||!p.visible||!q.visible||!passesNodeFilter(p.n)||!passesNodeFilter(q.n))continue;ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);}ctx.stroke();}
+      }
+      if(!window.embryomakerRenderer?.active&&state.showNodes&&state.showCylinders){const seen=new Set();for(const p of state.frame){const partnerId=p.n.other||0;if(!partnerId||p.n.type>2||seen.has(p.n.id))continue;const q=frameById.get(partnerId);if(!q||q.n.type>2||!p.visible||!q.visible||!passesNodeFilter(p.n)||!passesNodeFilter(q.n))continue;seen.add(p.n.id);seen.add(q.n.id);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle=nodeColor(p.n);ctx.lineWidth=Math.max(1,Math.min(p.r,q.r)*1.35);ctx.globalAlpha=.82;ctx.stroke();}}
+      if(!window.embryomakerRenderer?.active&&state.showNodes&&!state.noBalls){
+        for(const p of state.frame){
+          if(!p.visible||!passesNodeFilter(p.n))continue;
+          if(state.showCylinders&&p.n.type<3)continue;
+          const base=nodeColor(p.n),radius=state.smallBalls&&(!state.showCylinders||p.n.type>=3)?p.n.radius*.1*state.bounds.scale*p.perspective*(1/Math.tan(5*Math.PI/180))*canvas.clientHeight*.5*state.pointScale:p.r;
+          ctx.globalAlpha=Math.max(.56,Math.min(1,.78+p.perspective*.2));
+          const surface=ctx.createRadialGradient(p.x-radius*.36,p.y-radius*.42,radius*.08,p.x,p.y,radius*1.08);
+          surface.addColorStop(0,'rgba(255,255,255,.86)');surface.addColorStop(.2,base);surface.addColorStop(.72,shadeColor(base,.72));surface.addColorStop(1,shadeColor(base,.3));ctx.fillStyle=surface;ctx.beginPath();
+          ctx.arc(p.x,p.y,radius,0,Math.PI*2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha=1;
+    }
+    function draw(){if(state.drawQueued)return;state.drawQueued=true;requestAnimationFrame(()=>{state.drawQueued=false;renderFrame();});}
+    function updateModel(data, elapsed='') {
+      const selectedNodeId=state.selected,selectedNodeField=$('nodeProperty')?.value||'x',selectedCellField=$('cellProperty')?.value||'phase';
+      state.nodes=data.nodes; state.cells=data.cells||[]; state.edges=data.edges||[]; state.boxGrid=data.boxGrid||state.boxGrid; state.iteration=data.iterations; state.simulatedTime=data.simulatedTime??state.simulatedTime; state.session=data.session||state.session;
+      const geneOptions=$('geneColorOptions');geneOptions.textContent='';for(let gene=1;gene<=data.geneCount;gene++){const option=document.createElement('option');option.value=`scalar:gene_${gene}`;option.textContent=`Amount of regulatory molecule ${gene}`;geneOptions.append(option);}if(state.colorMode.startsWith('scalar:gene_')&&Number(state.colorMode.slice(12))>data.geneCount)state.colorMode='type';$('colorMode').value=state.colorMode;populateOgPropertyMenus();
+      state.lastSnapshot=data; state.selected=null;
+      let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity,minRadius=Infinity,maxRadius=-Infinity;const cells=new Set(),types=new Set();
+      for(const n of state.nodes){minX=Math.min(minX,n.x);minY=Math.min(minY,n.y);minZ=Math.min(minZ,n.z);maxX=Math.max(maxX,n.x);maxY=Math.max(maxY,n.y);maxZ=Math.max(maxZ,n.z);minRadius=Math.min(minRadius,n.radius);maxRadius=Math.max(maxRadius,n.radius);cells.add(n.cell);types.add(n.type);}
+      const cx=(minX+maxX)/2,cy=(minY+maxY)/2,cz=(minZ+maxZ)/2;
+      const modelBounds={cx,cy,cz,minx:minX,maxx:maxX,miny:minY,maxy:maxY,minz:minZ,maxz:maxZ,minRadius,maxRadius,spread:Math.max(Math.abs(minX-cx),Math.abs(maxX-cx),Math.abs(minY-cy),Math.abs(maxY-cy),Math.abs(minZ-cz),Math.abs(maxZ-cz)),perspective:.035,scale:1};
+      if(state.fixedSections){if(!state.sectionBounds)state.sectionBounds={...modelBounds};state.bounds={...modelBounds,...state.sectionBounds,minRadius,maxRadius};}else state.bounds=modelBounds;
+      if(!state.cursorInitialized){state.cursor={x:maxX+.1,y:maxY+.1,z:minZ+.1};state.cursorInitialized=true;}
+      const scalarFields=['type','x','y','z','energy','eqd','radius','you','adh','rep','rec','erp','est','eqs','hoo','mov','dmo','x0','y0','z0','ecm','cod','grd','pld','vod','dif','kfi','pla','kvol','other','marge','talone','ndiv','dx','dy','dz','dtotal','phase','box','index','lineage',...Array.from({length:data.geneCount},(_,i)=>`gene_${i+1}`)];state.colorLimits={};for(const field of scalarFields){let lo=Infinity,hi=-Infinity;for(const n of state.nodes){const value=nodeScalar(n,field);lo=Math.min(lo,value);hi=Math.max(hi,value);}state.colorLimits[field]=[lo,hi];}state.colorLimits.lineage=[1,Math.max(1,...state.nodes.map(n=>n.lineage))];state.colorLimits.box=[1,Math.max(1,state.nodes.length)];
+      let minCell=Infinity,maxCell=-Infinity;for(const n of state.nodes){minCell=Math.min(minCell,n.cell);maxCell=Math.max(maxCell,n.cell);}state.colorLimits.cell=[minCell,maxCell];state.colorLimits.fixed=[0,1];
+      state.frame=state.nodes.map(n=>({n,x:0,y:0,z:0,r:0,perspective:1,visible:true}));
+      refreshColorRange();updateLegend();
+      state.depthDirty=true;
+      $('emptyState').style.display='none'; $('viewTitle').textContent=data.experiment;
+      $('viewCaption').textContent=`Iteration ${data.iterations.toLocaleString()} · ${data.count.toLocaleString()} nodes · drag to ${state.dragMode}`;
+      $('iterationRange').max=state.max; $('iterationRange').value=Math.min(state.iteration,state.max);
+      $('iterationReadout').textContent=`${state.iteration} / ${state.max}`;
+      $('iterationValue').textContent=state.iteration;
+      $('nodeCount').textContent=data.count.toLocaleString();
+      $('cellCount').textContent=cells.size.toLocaleString(); $('modelStep').textContent=data.iterations.toLocaleString(); $('typeCount').textContent=types.size.toLocaleString();
+      $('modelReadout').textContent=`${data.experiment} has ${data.count.toLocaleString()} nodes across ${cells.size.toLocaleString()} cells.`;
+      $('sectionPosition').disabled=state.section==='off';
+      $('exportBtn').disabled=false;const selectedNode=selectedNodeId?state.nodes.find(n=>n.id===selectedNodeId):null;if(selectedNode)showSelectedNode(selectedNode,selectedNodeField,selectedCellField);else{$('nodeEditControls').hidden=true;$('cellEditControls').hidden=true;}captureGeneSample();draw();const warning=data.triangulationWarning?`Iteration ${data.iterations} used distance-based neighbors after Delaunay status ${data.triangulationWarning}.`:`Model ready at iteration ${data.iterations}.`;setStatus(warning,false,elapsed);
+    }
+    let restartQueued=false;
+    function requestModelRestart(){
+      state.playing=false;clearTimeout(state.timer);
+      if(state.busy){restartQueued=true;return;}
+      void runAt(0,true);
+    }
+    function flushQueuedRestart(){
+      if(!restartQueued)return;
+      restartQueued=false;
+      queueMicrotask(()=>{if(state.busy)restartQueued=true;else void runAt(0,true);});
+    }
+    async function sendSession(body, endpoint='/api/session') {
+      const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const data=await response.json(); if(!response.ok)throw Error(data.error||'Simulation failed'); return data;
+    }
+    window.embryomakerPlotSlice=async function(axis='z',side='min',field=0,resolution=450,surface=state.sliceSurface,decoy=(state.nodes.slice().reverse().find(node=>node.type<4)?.id||state.nodes.length)){
+      const axisIndex=typeof axis==='number'?axis:({x:0,y:1,z:2})[axis];
+      if(!Number.isInteger(axisIndex)||axisIndex<0||axisIndex>2||!state.bounds)throw Error('Choose an x, y, or z slice in a loaded model.');
+      const bounds=state.sectionBounds||state.bounds,axisName=['x','y','z'][axisIndex];
+      const plane=typeof side==='number'?side:bounds[`${side==='max'?'max':'min'}${axisName}`];
+      const ranges=axisIndex===0?[[bounds.miny,bounds.maxy],[bounds.minz,bounds.maxz]]:axisIndex===1?[[bounds.minx,bounds.maxx],[bounds.minz,bounds.maxz]]:[[bounds.minx,bounds.maxx],[bounds.miny,bounds.maxy]];
+      const body={axis:axisIndex,field,plane,resolution,decoy,minx:bounds.minx,maxx:bounds.maxx,miny:bounds.miny,maxy:bounds.maxy,minz:bounds.minz,maxz:bounds.maxz};
+      const endpoint=`/api/session/${state.session}/slice-plot`,result=await sendSession(body,endpoint),samples=[];
+      for(let i=0;i<=result.resolution;i++)for(let j=0;j<=result.resolution;j++){
+        const u=i/result.resolution,v=j/result.resolution;
+        const first=ranges[0][0]+u*(ranges[0][1]-ranges[0][0]),second=ranges[1][0]+v*(ranges[1][1]-ranges[1][0]);
+        const position=axisIndex===0?[plane,first,second]:axisIndex===1?[first,plane,second]:[first,second,plane];
+        samples.push({position,value:result.values[i*(result.resolution+1)+j]});
+      }
+      state.slicePlots=state.slicePlots.filter(slice=>slice.axis!==axisName);
+      state.slicePlots.push({axis:axisName,plane,surface,minimum:result.minimum,maximum:result.maximum,samples});
+      draw();
+      return {axis:axisName,plane,field:result.field,decoy:result.decoy,resolution:result.resolution,samples:samples.length,minimum:result.minimum,maximum:result.maximum};
+    };
+    window.embryomakerClearSlicePlots=function(){state.slicePlots=[];draw();};
+    function downloadBlob(blob,name){const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);}
+    async function saveSnapshotToOutput(){const data=await sendSession({label:state.outputLabel},`/api/session/${state.session}/save`);setStatus(`Saved iteration ${data.iteration} to ${data.path}.`);}
+    async function outputImage(iteration){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));const gl=$('stageGL'),overlay=$('stage'),capture=document.createElement('canvas');capture.width=gl.width;capture.height=gl.height;const context=capture.getContext('2d');context.drawImage(gl,0,0);context.drawImage(overlay,0,0);const blob=await new Promise(resolve=>capture.toBlob(resolve,'image/png'));if(!blob)throw Error('Could not capture the current view as a PNG');const image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the captured PNG'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.outputLabel,image},`/api/session/${state.session}/save-image`);setStatus(`Saved image for iteration ${iteration} to ${result.path}.`);}
+    function toggleMovie(){if(state.movieRecorder){const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();return;}const end=Number(window.prompt('Save movie until which iteration?',String(Math.max(state.iteration+1,state.iteration+state.snapshotFrequency*10))));if(!Number.isInteger(end)||end<=state.iteration){setStatus('Enter an iteration after the current time.',true);return;}if(typeof $('stageGL').captureStream!=='function'||typeof MediaRecorder==='undefined'){setStatus('Movie recording is unavailable in this browser.',true);return;}try{const stream=$('stageGL').captureStream(20),track=stream.getVideoTracks()[0];state.movieChunks=[];state.movieEnd=end;state.movieLabel=`${state.outputLabel||'embryomaker'}_${Date.now()}`;state.max=Math.max(state.max,end);$('iterationRange').max=state.max;$('iterationReadout').textContent=`${state.iteration} / ${state.max}`;state.movieTrack=track;const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';state.movieRecorder=new MediaRecorder(stream,{mimeType});state.movieRecorder.ondataavailable=event=>{if(event.data.size)state.movieChunks.push(event.data);};state.movieRecorder.onstop=async()=>{const blob=new Blob(state.movieChunks,{type:mimeType});stream.getTracks().forEach(item=>item.stop());state.movieTrack=null;state.movieChunks=[];try{const movie=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the movie recording'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.movieLabel,movie},`/api/session/${state.session}/save-movie`);setStatus(`Saved movie to ${result.path}.`);}catch(error){downloadBlob(blob,`${state.movieLabel}.webm`);setStatus(`GIF conversion failed. Saved WebM movie instead: ${error.message}`,true);}};state.movieRecorder.start();setStatus(`Movie recording through iteration ${end}.`);}catch(error){state.movieRecorder=null;setStatus(`Could not start movie recording: ${error.message}`,true);}}
+    async function handleOutputIteration(iteration){const frequency=Math.max(1,state.snapshotFrequency),atFrequency=iteration%frequency===0;if(atFrequency&&state.periodicSnapshots)await saveSnapshotToOutput();if(atFrequency&&state.saveImages)await outputImage(iteration);if(state.movieRecorder){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));await new Promise(resolve=>setTimeout(resolve,60));if(iteration>=state.movieEnd){await new Promise(resolve=>setTimeout(resolve,100));const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();}}}
+    async function runAt(iteration,restart=false) {
+      if(state.busy)return false; state.busy=true; clearTimeout(state.timer);
+      $('pauseBtn').disabled=true; $('runBtn').disabled=true; $('stepBtn').disabled=true; $('exportBtn').disabled=true;
+      setStatus('Running Flow simulation…'); const started=performance.now(); let succeeded=true;
+      try {
+        const rewinding=!restart&&Boolean(state.session)&&iteration<state.iteration;
+        if(restart||!state.session||rewinding) {
+          const body={}; if(state.inputText!==null){body.inputText=state.inputText;body.fileName=state.fileName;}else body.example=$('experiment').value;
+          const initial=await sendSession(body);
+          if(!rewinding){state.selected=null;state.selectionHistory=[];state.selectionMode=null;state.cursorEnabled=false;state.cursorInitialized=false;state.cursor=null;state.temporalPlotsEnabled=true;state.geneSamples=[];state.plottedNodeIds=[];state.plottedGenes=[];state.slicePlots=[];state.sliceSurface=false;state.fixedSections=false;state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};state.sectionBounds=null;state.section='off';state.sectionFraction=0;state.max=Math.max(120,initial.iterations+120);$('genePlotPanel').hidden=true;$('sectionPlane').value='off';$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';resetCamera();setDragMode('rotate');}
+          updateModel(initial,`${((performance.now()-started)/1000).toFixed(1)} s`);
+        }
+        while(state.iteration<iteration){let next=iteration;const outputActive=state.periodicSnapshots||state.saveImages||state.movieRecorder;const frequency=Math.max(1,state.snapshotFrequency);if(outputActive){const boundary=(Math.floor(state.iteration/frequency)+1)*frequency;if(boundary<next)next=boundary;}const includeSnapshot=state.periodicSnapshots&&next%frequency===0;const data=await sendSession({steps:next-state.iteration,includeSnapshot},`/api/session/${state.session}/advance`);updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);if(next%frequency===0)await handleOutputIteration(next);}
+      } catch(e) { succeeded=false; setStatus(e.message,true); }
+      finally { state.busy=false; $('runBtn').disabled=false; $('stepBtn').disabled=false; $('pauseBtn').disabled=!state.playing; $('exportBtn').disabled=!state.lastSnapshot; flushQueuedRestart(); }
+      return succeeded;
+    }
+    async function runMenuIterations(count){
+      if(state.busy||!state.session)return;state.playing=false;state.busy=true;clearTimeout(state.timer);$('pauseBtn').disabled=true;$('runBtn').disabled=true;$('stepBtn').disabled=true;$('exportBtn').disabled=true;
+      setStatus('Running Flow simulation…');const started=performance.now();let succeeded=true;
+      try {
+        let remaining=count,data=state.lastSnapshot;
+        while(remaining>0){
+          const outputEachStep=state.saveImages||state.movieRecorder;
+          const frequency=Math.max(1,state.snapshotFrequency);
+          const nextSnapshot=(Math.floor(state.iteration/frequency)+1)*frequency;
+          const toSnapshot=state.periodicSnapshots?Math.max(1,nextSnapshot-state.iteration):remaining;
+          const steps=Math.min(remaining,outputEachStep?1:Math.min(1000,toSnapshot));
+          const next=state.iteration+steps,includeSnapshot=state.periodicSnapshots&&next%frequency===0;
+          data=await sendSession({steps,includeSnapshot},`/api/session/${state.session}/advance`);
+          remaining-=steps;
+          updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);
+          if(outputEachStep||includeSnapshot)await handleOutputIteration(state.iteration);
+        }
+      } catch(error){succeeded=false;setStatus(error.message,true);}
+      finally {state.busy=false;$('runBtn').disabled=false;$('stepBtn').disabled=false;$('pauseBtn').disabled=!state.playing;$('exportBtn').disabled=!state.lastSnapshot;flushQueuedRestart();}
+      return succeeded;
+    }
+    function selectByIndex(kind){const raw=window.prompt(kind==='node'?'Node index':'Cell index');if(raw===null)return;const index=Number(raw);if(!Number.isInteger(index)||index<1){setStatus(`Enter a positive ${kind} index.`,true);return;}const node=kind==='node'?state.nodes.find(item=>item.id===index):state.nodes.find(item=>item.cell===index);if(!node){setStatus(`${kind==='node'?'Node':'Cell'} ${index} is not in the current model.`,true);return;}state.selectionMode=null;showSelectedNode(node);draw();setStatus(`Selected ${kind} ${index}.`);}
+    function promptedCoordinate(axis,current){const raw=window.prompt(`New ${axis} coordinate. Enter -1 to keep the current value.`,String(current));if(raw===null)return null;const value=Number(raw);if(!Number.isFinite(value))throw Error(`The ${axis} coordinate must be numeric`);return value===-1?current:value;}
+    async function moveNodeTo(node,x,y,z){try{const data=await sendSession({nodeId:node.id,x,y,z},`/api/session/${state.session}/node-move`);updateModel(data);setStatus(`Moved node ${node.id}.`);}catch(error){setStatus(error.message,true);}}
+    async function moveCellTo(cell,x,y,z){try{const data=await sendSession({cellId:cell.id,x,y,z},`/api/session/${state.session}/cell-move`);updateModel(data);setStatus(`Moved cell ${cell.id}.`);}catch(error){setStatus(error.message,true);}}
+    async function moveFromTerminal(kind){let selected=state.nodes.find(item=>item.id===state.selected),index;if(kind==='node'){if(!selected){const raw=window.prompt('Node index');if(raw===null)return;index=Number(raw);selected=state.nodes.find(item=>item.id===index);}if(!selected){setStatus('Choose a node in the current model.',true);return;}try{const x=promptedCoordinate('x',selected.x),y=x===null?null:promptedCoordinate('y',selected.y),z=y===null?null:promptedCoordinate('z',selected.z);if(z===null)return;await moveNodeTo(selected,x,y,z);}catch(error){setStatus(error.message,true);}return;}if(!selected){const raw=window.prompt('Cell index');if(raw===null)return;index=Number(raw);}else index=selected.cell;const cell=state.cells.find(item=>item.id===index);if(!cell){setStatus('Choose a cell in the current model.',true);return;}try{const x=promptedCoordinate('x',cell.x),y=x===null?null:promptedCoordinate('y',cell.y),z=y===null?null:promptedCoordinate('z',cell.z);if(z===null)return;await moveCellTo(cell,x,y,z);}catch(error){setStatus(error.message,true);}}
+    function applyMouseMove(){const delta=state.dragDelta,target=state.nodes.find(item=>item.id===state.selected);if(!delta)return;if(state.dragMode==='move-node'&&target)moveNodeTo(target,target.x+delta.x,target.y+delta.y,target.z+delta.z);else if(state.dragMode==='move-cell'&&target){const cell=state.cells.find(item=>item.id===target.cell);if(cell)moveCellTo(cell,cell.x+delta.x,cell.y+delta.y,cell.z+delta.z);}state.dragDelta=null;}
+    function stop(){state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;setStatus(`Paused at iteration ${state.iteration}.`);}
+    async function advance(){if(!state.playing||state.busy)return;if(state.iteration>=state.max){stop();return;}const succeeded=await runAt(state.iteration+1);if(!succeeded){state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;return;}if(state.playing&&state.iteration<state.max)state.timer=setTimeout(advance,Number($('speed').value));else stop();}
+    $('runBtn').addEventListener('click',()=>{if(state.iteration===0||!state.nodes.length){state.playing=true;$('pauseBtn').disabled=false;advance();}else{state.playing=true;$('pauseBtn').disabled=false;advance();}});
+    $('pauseBtn').addEventListener('click',stop);
+    $('workspaceToggle').addEventListener('click',()=>{const open=!document.body.classList.contains('studio-open');document.body.classList.toggle('studio-open',open);document.documentElement.classList.toggle('studio-open',open);$('workspaceToggle').textContent=open?'Hide controls':'Controls';$('workspaceToggle').setAttribute('aria-expanded',String(open));draw();});
+    $('stepBtn').addEventListener('click',()=>{state.playing=false;runAt(Math.min(state.max,state.iteration+1));});
+    $('resetBtn').addEventListener('click',()=>{state.playing=false;runAt(0,true);});
+    $('iterationRange').addEventListener('change',e=>{state.playing=false;runAt(Number(e.target.value));});
+    $('experiment').addEventListener('change',()=>{if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;state.inputText=null;state.fileName=null;$('uploadLabel').textContent='Load input file';requestModelRestart();});$('experimentMenu').addEventListener('change',()=>{classicMenu.hidden=true;if($('experiment').value!==$('experimentMenu').value){$('experiment').value=$('experimentMenu').value;$('experiment').dispatchEvent(new Event('change'));}});
+    $('uploadBtn').addEventListener('click',()=>$('filePicker').click());
+    $('filePicker').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;e.target.value='';const inputText=await file.text(),previousInput=state.inputText,previousName=state.fileName;state.inputText=inputText;state.fileName=file.name;$('uploadLabel').textContent=file.name;state.playing=false;if(!await runAt(0,true)){state.inputText=previousInput;state.fileName=previousName;$('uploadLabel').textContent=previousName||'Load input file';}});
+    const nodeProperties=[['x','x'],['y','y'],['z','z'],['Energy','energy'],['p^EQD','eqd'],['p^ADD','radius'],['p^YOU','you'],['p^ADH','adh'],['p^REP','rep'],['p^REC','rec'],['p^ERP','erp'],['p^EST','est'],['p^EQS','eqs'],['p^HOO','hoo'],['p^MOV','mov'],['p^DMO','dmo'],['x(0)','x0'],['y(0)','y0'],['z(0)','z0'],['p^ECM','ecm'],['p^COD','cod'],['p^GRD','grd'],['p^PLD','pld'],['p^VOD','vod'],['p^DIF','dif'],['p^KFI','kfi'],['p^PLA','pla'],['p^VOC','kvol'],['type','type'],['cell','cell'],['other','other'],['marge','marge'],['talone','talone'],['p^FIX','fixed'],['divisions','ndiv']];
+    function showSelectedNode(n,preferredNodeField='',preferredCellField=''){if(!n)return;if(state.selected&&state.selected!==n.id)state.selectionHistory.push(state.selected);state.selected=n.id;$('selectionInfo').textContent=`Node ${n.id} · ${n.type===1||n.type===2?'epithelial':n.type===3?'mesenchymal':'ECM'} cell`;$('nodeDetails').innerHTML=`<div class="node-row"><span>Position</span><b>${n.x.toFixed(3)}, ${n.y.toFixed(3)}, ${n.z.toFixed(3)}</b></div><div class="node-row"><span>Cell / type</span><b>${n.cell} / ${n.type}</b></div><div class="node-row"><span>Radius</span><b>${n.radius.toFixed(4)}</b></div>`;const select=$('nodeProperty');if(!select.options.length){for(const [label,value] of nodeProperties){const option=document.createElement('option');option.textContent=label;option.value=value;select.append(option);}}select.value=[...select.options].some(o=>o.value===preferredNodeField)?preferredNodeField:'x';$('nodeValue').value=n[select.value];$('nodeEditControls').hidden=false;const cell=state.cells.find(c=>c.id===n.cell),cellSelect=$('cellProperty');if(cell){if(!cellSelect.options.length){for(const [label,value] of [['fase','phase'],['temt','time'],['cex','x'],['cey','y'],['cez','z'],['polx','polx'],['poly','poly'],['polz','polz'],['minsize_for_div','minsize_for_div'],['maxsize_for_div','maxsize_for_div'],['nodela','nodela'],['ctipus','type']]){const option=document.createElement('option');option.textContent=label;option.value=value;cellSelect.append(option);}}cellSelect.value=[...cellSelect.options].some(o=>o.value===preferredCellField)?preferredCellField:'phase';$('cellValue').value=cell[cellSelect.value];$('cellEditControls').hidden=false;}else{$('cellEditControls').hidden=true;}captureGeneSample();}
+    $('nodeProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected);if(node)$('nodeValue').value=node[$('nodeProperty').value]??0;});$('cellProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected),cell=state.cells.find(item=>item.id===node?.cell);if(cell)$('cellValue').value=cell[$('cellProperty').value]??0;});
+    $('applyCellEdit').addEventListener('click',async()=>{const selected=state.nodes.find(n=>n.id===state.selected),cellId=selected?.cell,field=$('cellProperty').value,value=Number($('cellValue').value);if(!cellId||!Number.isFinite(value))return;try{const data=await sendSession({cellId,field,value},`/api/session/${state.session}/cell-edit`);updateModel(data);setStatus(`Updated cell ${cellId}.`);draw();}catch(e){setStatus(e.message,true);}});
+    $('applyNodeEdit').addEventListener('click',async()=>{const nodeId=state.selected,field=$('nodeProperty').value,value=Number($('nodeValue').value);if(!nodeId||!Number.isFinite(value))return;try{const data=await sendSession({nodeId,field,value},`/api/session/${state.session}/edit`);updateModel(data);setStatus(`Updated node ${nodeId}.`);draw();}catch(e){setStatus(e.message,true);}});
+    function setDragMode(mode){state.dragMode=mode;state.leftMouseAdjustment=null;for(const name of ['pan','rotate','zoom'])$(`${name}Mode`).classList.toggle('active',name===mode);$('viewCaption').textContent=`Iteration ${state.iteration.toLocaleString()} · ${state.nodes.length.toLocaleString()} nodes · drag to ${mode}`;draw();}
+    function setOgMouseAdjustment(channel,kind,button){const property=channel==='color'?state.colorMode:channel==='arrow'?state.arrowField:state.sphereField;const adjustment={channel,kind,property};if(button==='left')state.leftMouseAdjustment=adjustment;else state.middleMouseAdjustment=adjustment;setStatus(`Drag the ${button} mouse button vertically to adjust ${channel} ${kind==='scale'?'scale':kind} for ${property}.`);}
+    function setOgMouseRange(channel){const property=channel==='color'?state.colorMode:channel==='arrow'?state.arrowField:state.sphereField;const range=visualizationRange(property,channel);const minimum=window.prompt(`Minimum ${channel} value for ${property}`,String(range[0]));if(minimum===null)return;const maximum=window.prompt(`Maximum ${channel} value for ${property}`,String(range[1]));if(maximum===null)return;const lo=Number(minimum),hi=Number(maximum);if(!Number.isFinite(lo)||!Number.isFinite(hi)||hi<=lo){setStatus('Enter a finite minimum below the maximum.',true);return;}const store=channel==='arrow'?state.customArrowLimits:channel==='sphere'?state.customSphereLimits:state.customColorLimits;const rangeKey=property==='cells'?'cell':visualizationField(property);store[rangeKey]=[lo,hi];syncOgColorRanges();if(channel==='color')updateLegend();draw();setStatus(`Set ${channel} range to ${lo} through ${hi}.`);}
+    function applyOgMouseAdjustment(dy,adjustment){const {channel,kind,property}=adjustment;if(kind==='scale'){const value=adjustment.initialScale-.1*adjustment.initialScale*dy;if(channel==='arrow')state.arrowScale=value;else state.sphereScale=value;}else{const store=channel==='arrow'?state.customArrowLimits:channel==='sphere'?state.customSphereLimits:state.customColorLimits,rangeKey=property==='cells'?'cell':visualizationField(property),range=adjustment.initialRange.slice(),index=kind==='min'?0:1;let value=range[index];if(kind==='min'&&value<1.2e-6)value=1e-4;range[index]=value-.1*value*dy;store[rangeKey]=range;}syncOgColorRanges();if(channel==='color')updateLegend();draw();}
+    function setCamera(preset){$('cameraPreset').value=preset;if(preset==='above'){state.yaw=0;state.pitch=0;}else if(preset==='front'){state.yaw=0;state.pitch=Math.PI/2;}else{state.yaw=ogInitialCamera.yaw;state.pitch=ogInitialCamera.pitch;}state.depthDirty=true;draw();}
+    function resetCamera(){state.zoom=1;state.panX=0;state.panY=0;setCamera('oblique');}
+    function updateLegend(){
+      if(state.colorMode.startsWith('scalar:')||['type','cells','radius','index'].includes(state.colorMode)){const field=visualizationField(state.colorMode),range=visualizationRange(state.colorMode),name=$('colorMode').selectedOptions[0]?.textContent||field;$('legend').innerHTML=`<span>${name}</span><span>${range[0].toPrecision(3)}</span><i class="color-scale" style="background:linear-gradient(90deg,${Array.from({length:21},(_,i)=>`${colorRamp(i/20)} ${(i/20)*100}%`).join(',')})"></i><span>${range[1].toPrecision(3)}</span>`;return;}
+      const colors=cellPalettes[state.paletteMode]||cellPalettes.multi;
+      const labels=Array.from({length:Math.min(4,colors.length)},(_,i)=>`Cell ${i+1}`);
+      $('legend').innerHTML=labels.map((label,i)=>`<span><i class="swatch" style="background:${colors[i]}"></i>${label}</span>`).join('');
+    }
+    function refreshColorRange(){const range=visualizationRange(state.colorMode);$('colorRangeControls').hidden=false;$('colorMinimum').value=range[0];$('colorMaximum').value=range[1];}
+    function applyColorRange(){const field=state.colorMode==='cells'?'cell':visualizationField(state.colorMode),minimum=Number($('colorMinimum').value),maximum=Number($('colorMaximum').value);if(!field||!Number.isFinite(minimum)||!Number.isFinite(maximum)||maximum<minimum)return;state.customColorLimits[field]=[minimum,maximum];updateLegend();draw();}
+    function syncOgColorRanges(){for(const [prefix,mode,channel] of [['ogMechanicalColor',state.mechanicalColorField,'color'],['ogOtherColor',state.otherColorField,'color'],['ogMechanicalArrow',state.mechanicalArrowField,'arrow'],['ogOtherArrow',state.otherArrowField,'arrow'],['ogMechanicalSphere',state.mechanicalSphereField,'sphere'],['ogOtherSphere',state.otherSphereField,'sphere']]){const range=visualizationRange(mode,channel);$(`${prefix}Minimum`).value=range[0];$(`${prefix}Maximum`).value=range[1];if(channel==='arrow')$(`${prefix}Scale`).value=state.arrowScale;if(channel==='sphere')$(`${prefix}Scale`).value=state.sphereScale;}}
+    function applyOgColorRange(prefix){const mode=prefix==='ogMechanicalColor'?state.mechanicalColorField:state.otherColorField;if(state.colorMode!==mode){$('colorMode').value=mode;$('colorMode').dispatchEvent(new Event('change'));}const minimum=$(`${prefix}Minimum`).value,maximum=$(`${prefix}Maximum`).value;$('colorMinimum').value=minimum;$('colorMaximum').value=maximum;applyColorRange();syncOgColorRanges();}
+    function captureGeneSample(){
+      if(!state.temporalPlotsEnabled||!state.nodes.length)return;
+      const geneCount=state.lastSnapshot?.geneCount||0;
+      const values=new Float64Array(state.nodes.length*geneCount);
+      for(let nodeIndex=0;nodeIndex<state.nodes.length;nodeIndex++){
+        const genes=state.nodes[nodeIndex].genes||[];
+        for(let geneIndex=0;geneIndex<geneCount;geneIndex++)values[nodeIndex*geneCount+geneIndex]=Number(genes[geneIndex]??0);
+      }
+      const sample={iteration:state.iteration,nodeCount:state.nodes.length,geneCount,values};
+      const last=state.geneSamples.at(-1);
+      if(last?.iteration===sample.iteration)state.geneSamples[state.geneSamples.length-1]=sample;
+      else state.geneSamples.push(sample);
+      if(!$('genePlotPanel').hidden)drawGenePlot();
+    }
+    function drawGenePlot(){
+      const panel=$('genePlotPanel'),plot=$('genePlotCanvas');
+      if(panel.hidden||!plot||!state.plottedNodeIds.length||!state.plottedGenes.length)return;
+      const ratio=Math.min(devicePixelRatio||1,2),width=Math.max(1,plot.clientWidth),height=Math.max(1,plot.clientHeight);
+      plot.width=Math.round(width*ratio);plot.height=Math.round(height*ratio);
+      const c=plot.getContext('2d');c.setTransform(ratio,0,0,ratio,0,0);c.clearRect(0,0,width,height);
+      const selector=$('genePlotGene'),selectedGene=Number(selector.value)||state.plottedGenes[0];
+      const allNodes=state.plottedNodeIds.length===1,allGenes=state.plottedGenes.length===1;
+      const series=allNodes&&!allGenes
+        ?state.plottedGenes.map(gene=>({node:state.plottedNodeIds[0],gene}))
+        :allGenes||!allNodes
+          ?state.plottedNodeIds.map(node=>({node,gene:selectedGene}))
+          :[{node:state.plottedNodeIds[0],gene:state.plottedGenes[0]}];
+      const lines=series.map((item,index)=>({
+        ...item,
+        color:['#f0443e','#55b7ff','#f4bd50','#8dd18d','#c48af5','#55d2c1','#fa85b2','#c2cf63','#ee9254','#8fa9ff'][index%10],
+        points:state.geneSamples.map(sample=>({
+          iteration:sample.iteration,
+          value:sample.nodeCount>=item.node&&sample.gene<=sample.geneCount?sample.values[(item.node-1)*sample.geneCount+item.gene-1]:NaN
+        })).filter(point=>Number.isFinite(point.value))
+      }));
+      const values=lines.flatMap(line=>line.points.map(point=>point.value));
+      const left=42,right=12,top=14,bottom=27,chartW=width-left-right,chartH=height-top-bottom;
+      let minY=values.length?Math.min(...values):0,maxY=values.length?Math.max(...values):1;
+      if(maxY===minY){const pad=Math.max(Math.abs(maxY)*.05,.01);minY-=pad;maxY+=pad;}
+      const samples=state.geneSamples,minX=samples[0]?.iteration||0,maxX=samples.at(-1)?.iteration||1;
+      c.strokeStyle='#727b80';c.lineWidth=1;c.beginPath();c.moveTo(left,top);c.lineTo(left,top+chartH);c.lineTo(left+chartW,top+chartH);c.stroke();
+      c.fillStyle='#aeb7bb';c.font='10px Arial,sans-serif';c.textAlign='right';c.fillText(maxY.toPrecision(3),left-6,top+4);c.fillText(minY.toPrecision(3),left-6,top+chartH);
+      c.textAlign='left';c.fillText(`Iteration ${minX}`,left,top+chartH+17);c.textAlign='right';c.fillText(`${maxX}`,left+chartW,top+chartH+17);
+      for(const line of lines){
+        c.strokeStyle=line.color;c.lineWidth=1.6;c.beginPath();
+        for(let index=0;index<line.points.length;index++){
+          const point=line.points[index],x=left+(point.iteration-minX)/Math.max(1,maxX-minX)*chartW,y=top+(maxY-point.value)/(maxY-minY)*chartH;
+          if(index===0)c.moveTo(x,y);else c.lineTo(x,y);
+        }
+        c.stroke();
+      }
+      $('genePlotLegend').replaceChildren(...lines.map(line=>{const label=document.createElement('span'),swatch=document.createElement('i');swatch.style.backgroundColor=line.color;label.append(swatch,document.createTextNode(`Node ${line.node}, gene ${line.gene}`));return label;}));
+      panel.dataset.samples=String(samples.length);panel.dataset.series=String(lines.length);
+    }
+    function openGenePlot(){
+      if(!state.selected){setStatus('Select a node before plotting a gene.',true);return;}
+      const rawNodes=window.prompt('Node indices, comma-separated (up to 10)',state.plottedNodeIds.length?state.plottedNodeIds.join(','):String(state.selected));
+      if(rawNodes===null)return;
+      const nodeIds=rawNodes.split(',').map(value=>Number(value.trim()));
+      if(!nodeIds.length||nodeIds.length>10||nodeIds.some(id=>!Number.isInteger(id)||id<1||id>state.nodes.length)){setStatus(`Choose up to 10 node indices from 1 to ${state.nodes.length}.`,true);return;}
+      const rawGenes=window.prompt('Gene indices, comma-separated (up to 10)',state.plottedGenes.length?state.plottedGenes.join(','):'1');
+      if(rawGenes===null)return;
+      const geneIds=rawGenes.split(',').map(value=>Number(value.trim())),geneCount=state.lastSnapshot?.geneCount||0;
+      if(!geneIds.length||geneIds.length>10||geneIds.some(id=>!Number.isInteger(id)||id<1||id>geneCount)){setStatus(`Choose up to 10 gene indices from 1 to ${geneCount}.`,true);return;}
+      state.plottedNodeIds=nodeIds;state.plottedGenes=geneIds;
+      const selector=$('genePlotGene');selector.replaceChildren();
+      for(const gene of geneIds){const option=document.createElement('option');option.value=String(gene);option.textContent=`Gene ${gene}`;selector.append(option);}
+      selector.hidden=nodeIds.length<=1||geneIds.length<=1;
+      $('genePlotTitle').textContent=`Nodes ${nodeIds.join(', ')}. Genes ${geneIds.join(', ')} versus time`;
+      $('genePlotPanel').hidden=false;drawGenePlot();
+      if(!state.geneSamples.length)setStatus('Temporal plotting is paused. Resume it and advance the model to collect gene values.');
+    }
+    $('genePlotGene').addEventListener('change',drawGenePlot);
+    $('genePlotClose').addEventListener('click',()=>{$('genePlotPanel').hidden=true;});
+    function setCursorMode(mode){if((mode==='move-node'||mode==='move-cell')&&!state.selected){setStatus(`Select a node before starting ${mode==='move-node'?'node':'cell'} movement.`,true);return;}state.cursorEnabled=true;state.dragMode=mode;state.dragDelta=null;draw();const label=mode==='cursor-xy'?'x-y plane':mode==='cursor-z'||mode==='cursor-middle-z'?'z axis':mode==='move-node'?'node movement':'cell movement';setStatus(`Cursor mode: ${label}. Drag in the model view.`);}
+    $('colorMinimum').addEventListener('change',applyColorRange);$('colorMaximum').addEventListener('change',applyColorRange);
+    $('colorMode').addEventListener('change',e=>{state.colorMode=e.target.value;if(ogMechanicalFields.has(state.colorMode))state.mechanicalColorField=state.colorMode;else state.otherColorField=state.colorMode;populateOgPropertyMenus();refreshColorRange();syncOgColorRanges();updateLegend();draw();});
+    $('ogMechanicalColorMinimum').addEventListener('change',()=>applyOgColorRange('ogMechanicalColor'));$('ogMechanicalColorMaximum').addEventListener('change',()=>applyOgColorRange('ogMechanicalColor'));$('ogOtherColorMinimum').addEventListener('change',()=>applyOgColorRange('ogOtherColor'));$('ogOtherColorMaximum').addEventListener('change',()=>applyOgColorRange('ogOtherColor'));
+    $('ogMechanicalColor').addEventListener('change',e=>{state.mechanicalColorField=e.target.value;$('colorMode').value=e.target.value;$('colorMode').dispatchEvent(new Event('change'));});$('ogOtherColor').addEventListener('change',e=>{state.otherColorField=e.target.value;$('colorMode').value=e.target.value;$('colorMode').dispatchEvent(new Event('change'));});
+    $('ogMechanicalArrow').addEventListener('change',e=>{state.mechanicalArrowField=e.target.value;state.arrowField=e.target.value;state.showArrows=true;syncOgColorRanges();draw();});$('ogOtherArrow').addEventListener('change',e=>{state.otherArrowField=e.target.value;state.arrowField=e.target.value;state.showArrows=true;syncOgColorRanges();draw();});
+    $('ogMechanicalSphere').addEventListener('change',e=>{state.mechanicalSphereField=e.target.value;state.sphereField=e.target.value;state.showTransparentSpheres=true;syncOgColorRanges();draw();});$('ogOtherSphere').addEventListener('change',e=>{state.otherSphereField=e.target.value;state.sphereField=e.target.value;state.showTransparentSpheres=true;syncOgColorRanges();draw();});
+    for(const [prefix,field,channel] of [['ogMechanicalColor',()=>state.mechanicalColorField,'color'],['ogOtherColor',()=>state.otherColorField,'color'],['ogMechanicalArrow',()=>state.mechanicalArrowField,'arrow'],['ogOtherArrow',()=>state.otherArrowField,'arrow'],['ogMechanicalSphere',()=>state.mechanicalSphereField,'sphere'],['ogOtherSphere',()=>state.otherSphereField,'sphere']]){const saveRange=()=>{const minimum=Number($(`${prefix}Minimum`).value),maximum=Number($(`${prefix}Maximum`).value);if(!Number.isFinite(minimum)||!Number.isFinite(maximum)||maximum<=minimum)return;const store=channel==='arrow'?state.customArrowLimits:channel==='sphere'?state.customSphereLimits:state.customColorLimits;store[visualizationField(field())]=[minimum,maximum];if(channel==='color')updateLegend();draw();};$(`${prefix}Minimum`).addEventListener('input',saveRange);$(`${prefix}Minimum`).addEventListener('change',saveRange);$(`${prefix}Maximum`).addEventListener('input',saveRange);$(`${prefix}Maximum`).addEventListener('change',saveRange);if(channel!=='color'){const saveScale=e=>{const scale=Number(e.target.value);if(!Number.isFinite(scale)||scale<0)return;if(channel==='arrow')state.arrowScale=scale;else state.sphereScale=scale;draw();};$(`${prefix}Scale`).addEventListener('input',saveScale);$(`${prefix}Scale`).addEventListener('change',saveScale);}}
+    $('paletteMode').addEventListener('change',e=>{state.paletteMode=e.target.value;updateLegend();draw();});
+    $('pointScale').addEventListener('input',e=>{state.pointScale=Number(e.target.value)/100;$('pointScaleReadout').value=`${e.target.value}%`;draw();});
+    $('showNodes').addEventListener('change',e=>{state.showNodes=e.target.checked;draw();});
+    function setRadiusMode(mode){state.radiusMode=mode;state.bounds.minRadius=Infinity;state.bounds.maxRadius=-Infinity;for(const n of state.nodes){const r=mode==='eqd'?n.eqd:n.radius;state.bounds.minRadius=Math.min(state.bounds.minRadius,r);state.bounds.maxRadius=Math.max(state.bounds.maxRadius,r);}draw();}
+    document.querySelector('.classic-menu').addEventListener('click',async e=>{const button=e.target.closest('button[data-menu]');if(!button)return;const action=button.dataset.menu;document.querySelectorAll('.classic-menu details').forEach(menu=>menu.open=false);
+      if(action==='color-range-terminal')setOgMouseRange('color');
+      else if(action==='color-min-left')setOgMouseAdjustment('color','min','left');else if(action==='color-max-left')setOgMouseAdjustment('color','max','left');else if(action==='color-min-middle')setOgMouseAdjustment('color','min','middle');else if(action==='color-max-middle')setOgMouseAdjustment('color','max','middle');
+      else if(action.startsWith('color-')){$('colorMode').value=action.slice(6);$('colorMode').dispatchEvent(new Event('change'));}
+      else if(action.startsWith('palette-')){$('paletteMode').value=action.slice(8);$('paletteMode').dispatchEvent(new Event('change'));}
+      else if(action==='arrow-range-terminal')setOgMouseRange('arrow');
+      else if(action==='sphere-range-terminal')setOgMouseRange('sphere');
+      else if(action==='arrow-scale-left')setOgMouseAdjustment('arrow','scale','left');else if(action==='arrow-min-left')setOgMouseAdjustment('arrow','min','left');else if(action==='arrow-max-left')setOgMouseAdjustment('arrow','max','left');else if(action==='arrow-min-middle')setOgMouseAdjustment('arrow','min','middle');else if(action==='arrow-max-middle')setOgMouseAdjustment('arrow','max','middle');
+      else if(action==='sphere-scale-left')setOgMouseAdjustment('sphere','scale','left');else if(action==='sphere-min-left')setOgMouseAdjustment('sphere','min','left');else if(action==='sphere-max-left')setOgMouseAdjustment('sphere','max','left');else if(action==='sphere-min-middle')setOgMouseAdjustment('sphere','min','middle');else if(action==='sphere-max-middle')setOgMouseAdjustment('sphere','max','middle');
+      else if(action==='radius-eqd')setRadiusMode('eqd');else if(action==='radius-add')setRadiusMode('add');
+      else if(action==='balls-small'){state.smallBalls=!state.smallBalls;draw();}
+      else if(action==='balls-none'){state.noBalls=!state.noBalls;draw();}
+      else if(action==='balls-cylinders'){state.showCylinders=!state.showCylinders;draw();}
+      else if(action==='ellipses-toggle'){state.showEllipses=!state.showEllipses;draw();}else if(action==='arrow-disable'){state.showArrows=false;state.leftMouseAdjustment=null;state.middleMouseAdjustment=null;draw();}else if(action==='sphere-disable'){state.showTransparentSpheres=false;state.leftMouseAdjustment=null;state.middleMouseAdjustment=null;draw();}
+      else if(action==='cell-contour-disabled'){setStatus('Cell contours are disabled in the original renderer because of memory use.');}
+      else if(action==='intercellular-contour-disabled'){setStatus('Intercellular contours are not rendered by the original draw routine.');}
+      else if(action==='spring-toggle'){state.showSprings=!state.showSprings;draw();}
+      else if(action==='grid-toggle'){state.showGrid=!state.showGrid;draw();}
+      else if(action==='apical-toggle'){state.showApical=!state.showApical;draw();}else if(action==='basal-toggle'){state.showBasal=!state.showBasal;draw();}else if(action==='fixed-toggle'){state.showFixed=!state.showFixed;draw();}else if(action==='box-toggle'){state.showBox=!state.showBox;draw();}
+      else if(action==='epithelium-toggle'){state.showEpithelium=!state.showEpithelium;draw();}else if(action==='mesenchyme-toggle'){state.showMesenchyme=!state.showMesenchyme;draw();}else if(action==='ecm-toggle'){state.showECM=!state.showECM;draw();}else if(action==='centroids-toggle'){state.showCentroids=!state.showCentroids;draw();}else if(action==='polarization-toggle'){state.showPolarization=!state.showPolarization;draw();}else if(action==='displacement-toggle'){state.showDisplacement=!state.showDisplacement;draw();}
+      else if(action==='inter-connections-toggle'){state.showInterConnections=!state.showInterConnections;draw();}else if(action==='intra-connections-toggle'){state.showIntraConnections=!state.showIntraConnections;draw();}
+      else if(action==='editor-add-ecm'){
+        const cursor=state.cursor;if(!cursor){setStatus('The editor cursor has no position.',true);}
+        else{try{const data=await sendSession({x:cursor.x,y:cursor.y,z:cursor.z},`/api/session/${state.session}/ecm-add`);updateModel(data);setStatus(`Added an extracellular node at ${cursor.x.toFixed(3)}, ${cursor.y.toFixed(3)}, ${cursor.z.toFixed(3)}.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-add-basic-epithelial'||action==='editor-add-basic-mesenchymal'){
+        const cursor=state.cursor;if(!cursor){setStatus('The editor cursor has no position.',true);}
+        else{const cellType=action==='editor-add-basic-mesenchymal'?3:1;try{const data=await sendSession({cellType,x:cursor.x,y:cursor.y,z:cursor.z},`/api/session/${state.session}/cell-add`);updateModel(data);setStatus(`Added a basic ${cellType===3?'mesenchymal':'epithelial'} cell at ${cursor.x.toFixed(3)}, ${cursor.y.toFixed(3)}, ${cursor.z.toFixed(3)}.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-paste-node'){
+        const selected=state.nodes.find(item=>item.id===state.selected),cursor=state.cursor;
+        if(!selected){setStatus('Select a node before pasting it.',true);}
+        else if(!cursor){setStatus('The editor cursor has no position.',true);}
+        else{try{const data=await sendSession({nodeId:selected.id,x:cursor.x,y:cursor.y,z:cursor.z},`/api/session/${state.session}/node-paste`);updateModel(data);setStatus(`Pasted node ${selected.id} at the editor cursor.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-paste-cell'){
+        const selected=state.nodes.find(item=>item.id===state.selected),cursor=state.cursor;
+        if(!selected||selected.cell<1){setStatus('Select a cell before pasting it.',true);}
+        else if(!cursor){setStatus('The editor cursor has no position.',true);}
+        else{try{const data=await sendSession({cellId:selected.cell,x:cursor.x,y:cursor.y,z:cursor.z},`/api/session/${state.session}/cell-paste`);updateModel(data);setStatus(`Pasted cell ${selected.cell} at the editor cursor.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-add-node'){
+        const selected=state.nodes.find(item=>item.id===state.selected),cursor=state.cursor;
+        if(!selected||selected.cell<1){setStatus('Select a cell node before adding a node.',true);}
+        else if(!cursor){setStatus('The editor cursor has no position.',true);}
+        else{try{const data=await sendSession({cellId:selected.cell,x:cursor.x,y:cursor.y,z:cursor.z},`/api/session/${state.session}/node-add`);updateModel(data);setStatus(`Added a node to cell ${selected.cell}.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-delete-node'||action==='editor-delete-cell'){
+        const selected=state.nodes.find(item=>item.id===state.selected),cellId=selected?.cell;
+        if(!selected){setStatus('Select a node or cell before deleting it.',true);}
+        else if(action==='editor-delete-cell'&&(!cellId||cellId<1)){setStatus('Select a cell node before deleting its cell.',true);}
+        else{try{const data=await sendSession(action==='editor-delete-node'?{nodeId:selected.id}:{cellId},`/api/session/${state.session}/${action==='editor-delete-node'?'node':'cell'}-delete`);state.selectionHistory=[];state.selectionMode=null;state.selected=null;updateModel(data);setStatus(action==='editor-delete-node'?`Deleted node ${selected.id}.`:`Deleted cell ${cellId}.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-copy-node-property'||action==='editor-paste-node-property'){
+        const selected=state.nodes.find(item=>item.id===state.selected),field=$('nodeProperty').value;
+        if(!selected){setStatus('Select a node before copying or pasting its property.',true);}
+        else if(action==='editor-copy-node-property'){
+          const value=selected[field];if(!Number.isFinite(Number(value))){setStatus(`Node ${selected.id} has no numeric ${field} property.`,true);}
+          else{state.copiedNodeProperty={field,value:Number(value)};setStatus(`Copied ${field} from node ${selected.id}. Select a target node and paste the property.`);}
+        }else if(!state.copiedNodeProperty){setStatus('Copy a node property before pasting.',true);}
+        else{try{const {field:copiedField,value}=state.copiedNodeProperty;const data=await sendSession({nodeId:selected.id,field:copiedField,value},`/api/session/${state.session}/edit`);updateModel(data);setStatus(`Pasted ${copiedField} onto node ${selected.id}.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-copy-cell-property'||action==='editor-paste-cell-property'){
+        const selected=state.nodes.find(item=>item.id===state.selected),cell=state.cells.find(item=>item.id===selected?.cell),field=$('cellProperty').value;
+        if(!cell){setStatus('Select a cell before copying or pasting its property.',true);}
+        else if(action==='editor-copy-cell-property'){
+          const value=cell[field];if(!Number.isFinite(Number(value))){setStatus(`Cell ${cell.id} has no numeric ${field} property.`,true);}
+          else{state.copiedCellProperty={field,value:Number(value)};setStatus(`Copied ${field} from cell ${cell.id}. Select a target cell and paste the property.`);}
+        }else if(!state.copiedCellProperty){setStatus('Copy a cell property before pasting.',true);}
+        else{try{const {field:copiedField,value}=state.copiedCellProperty;const data=await sendSession({cellId:cell.id,field:copiedField,value},`/api/session/${state.session}/cell-edit`);updateModel(data);setStatus(`Pasted ${copiedField} onto cell ${cell.id}.`);draw();}catch(error){setStatus(error.message,true);}}
+      }
+      else if(action==='editor-change-gene'){
+        const selected=state.nodes.find(item=>item.id===state.selected);
+        if(!selected){setStatus('Select a node before changing its gene expression.',true);}
+        else{const rawGene=window.prompt(`Gene index (1-${state.lastSnapshot.geneCount})`,'1');if(rawGene!==null){const geneId=Number(rawGene),rawValue=window.prompt('New gene expression value',String(selected.genes?.[geneId-1]??0));if(rawValue!==null){const value=Number(rawValue);if(!Number.isInteger(geneId)||geneId<1||geneId>state.lastSnapshot.geneCount||!Number.isFinite(value)){setStatus('Enter a valid gene index and numeric expression value.',true);}else{try{const data=await sendSession({nodeId:selected.id,geneId,value},`/api/session/${state.session}/gene-edit`);updateModel(data);setStatus(`Changed gene ${geneId} expression in node ${selected.id}.`);draw();}catch(error){setStatus(error.message,true);}}}}}
+      }
+      else if(action==='unit-movement-toggle'){state.showUnitMovement=!state.showUnitMovement;draw();}else if(action==='movement-vectors-toggle'){state.showMovementVectors=!state.showMovementVectors;draw();}else if(action==='repulsion-toggle'){state.showRepulsion=!state.showRepulsion;draw();}else if(action==='lateral-force-toggle'){state.showLateralForce=!state.showLateralForce;draw();}else if(action==='axial-force-toggle'){state.showAxialForce=!state.showAxialForce;draw();}
+      else if(action==='fixed-sections-toggle'){state.fixedSections=!state.fixedSections;state.sectionBounds=state.fixedSections&&state.bounds?{...state.bounds}:null;setStatus(`Fixed sections ${state.fixedSections?'ON':'OFF'}.`);draw();}
+      else if(action.startsWith('section-')){const section=action.slice(8);$('sectionPlane').value=section==='off'?'off':section;$('sectionPlane').dispatchEvent(new Event('change'));}
+      else if(action==='select-node-index')selectByIndex('node');else if(action==='select-cell-index')selectByIndex('cell');else if(action==='select-node-cursor'||action==='select-cell-cursor'){state.selectionMode=action==='select-node-cursor'?'node':'cell';state.cursorEnabled=true;draw();setStatus(`Click a node to select ${state.selectionMode==='node'?'the node':'its cell'}.`);}
+      else if(action==='undo-selections'){const previous=state.selectionHistory.pop(),node=state.nodes.find(item=>item.id===previous);if(node){state.selected=null;showSelectedNode(node);draw();setStatus(`Restored selection of node ${node.id}.`);}else{state.selected=null;draw();setStatus('Selection cleared.');}}
+      else if(action==='cursor-toggle'){state.cursorEnabled=!state.cursorEnabled;if(!state.cursorEnabled&&state.dragMode.startsWith('cursor-'))setDragMode('rotate');else draw();setStatus(`Cursor ${state.cursorEnabled?'ON':'OFF'}.`);}
+      else if(action==='cursor-xy'||action==='cursor-z'||action==='cursor-middle-z')setCursorMode(action);
+      else if(action==='temporal-plots-toggle'){state.temporalPlotsEnabled=!state.temporalPlotsEnabled;if(state.temporalPlotsEnabled)captureGeneSample();setStatus(`Temporal plot collection ${state.temporalPlotsEnabled?'resumed':'paused'}.`);}
+      else if(action==='plot-gene')openGenePlot();
+      else if(action==='move-node-terminal')moveFromTerminal('node');else if(action==='move-cell-terminal')moveFromTerminal('cell');
+      else if(action==='move-node-mouse')setCursorMode('move-node');else if(action==='move-cell-mouse')setCursorMode('move-cell');
+      else if(action==='stop-movement'){setDragMode('rotate');setStatus('Movement stopped.');}
+      else if(action==='reset-model'){state.playing=false;runAt(0,true);}
+      else if(action==='periodic-toggle'){state.periodicSnapshots=!state.periodicSnapshots;button.textContent=`Save snaps periodically: ${state.periodicSnapshots?'ON':'OFF'}`;setStatus(`Periodic snapshots ${state.periodicSnapshots?'ON':'OFF'}.`);}
+      else if(action==='images-toggle'){state.saveImages=!state.saveImages;button.textContent=`Save images automatically: ${state.saveImages?'ON':'OFF'}`;setStatus(`Automatic images ${state.saveImages?'ON':'OFF'}.`);}
+      else if(action==='movie-toggle')toggleMovie();
+      else if(action==='quit'){state.playing=false;clearTimeout(state.timer);window.location.replace('about:blank');}
+      else if(action.startsWith('iterate-')){const raw=action==='iterate-custom'?window.prompt('Number of iterations','100'):action.slice(8);const count=Number(raw);if(Number.isInteger(count)&&count>0&&count<=50000)runMenuIterations(count);else if(raw!==null)setStatus('Choose between 1 and 50,000 iterations.',true);}
+      else if(action==='export'){try{await saveSnapshotToOutput();}catch(error){setStatus(error.message,true);}}
+      else if(action==='read-file'||action==='upload')$('uploadBtn').click();else if(action==='camera-reset')resetCamera();else if(action.startsWith('camera-'))setCamera(action.slice(7));else if(action.startsWith('drag-'))setDragMode(action.slice(5));
+    });
+    const classicMenu=document.querySelector('.classic-menu');
+    function closeMenuBranch(details){details.open=false;details.querySelectorAll('details').forEach(child=>child.open=false);}
+    function positionMenuSubmenu(details){const submenu=details.querySelector(':scope > .menu-items'),summary=details.querySelector(':scope > summary');if(!submenu||!summary)return;if(window.innerWidth<=540){submenu.style.top='';submenu.style.left='';submenu.style.right='';return;}const anchor=summary.getBoundingClientRect(),width=submenu.offsetWidth,height=submenu.offsetHeight,opensLeft=classicMenu.classList.contains('opens-left');let left=opensLeft?anchor.left-width:anchor.right;if(!opensLeft&&left+width>window.innerWidth-8&&anchor.left-width>=8)left=anchor.left-width;left=Math.max(8,Math.min(window.innerWidth-width-8,left));const top=Math.max(8,Math.min(window.innerHeight-height-8,anchor.top));submenu.style.top=`${top}px`;submenu.style.left=`${left}px`;submenu.style.right='auto';}
+    function positionOpenMenuSubmenus(){classicMenu.querySelectorAll('details[open]').forEach(positionMenuSubmenu);}
+    function openMenuBranch(details){for(const sibling of details.parentElement.children)if(sibling!==details&&sibling.tagName==='DETAILS')closeMenuBranch(sibling);details.open=true;positionMenuSubmenu(details);}
+    classicMenu.addEventListener('pointerover',e=>{if(!classicMenu.classList.contains('context-popup'))return;const details=e.target.closest('details');if(!details||(e.relatedTarget&&details.contains(e.relatedTarget)))return;openMenuBranch(details);});
+    classicMenu.addEventListener('pointerout',e=>{if(!classicMenu.classList.contains('context-popup'))return;const details=e.target.closest('details');if(!details||details.contains(e.relatedTarget))return;closeMenuBranch(details);});
+    classicMenu.addEventListener('click',e=>{const summary=e.target.closest('summary');if(summary){const current=summary.closest('details');if(classicMenu.classList.contains('context-popup')){e.preventDefault();openMenuBranch(current);}else{classicMenu.querySelectorAll('details').forEach(item=>{if(item!==current&&!item.contains(current))item.open=false;});}}if(e.target.closest('button[data-menu]'))classicMenu.hidden=true;});
+    classicMenu.addEventListener('scroll',positionOpenMenuSubmenus);
+    window.addEventListener('resize',positionOpenMenuSubmenus);
+    function openClassicMenu(clientX,clientY,pinned=false){const view=document.querySelector('.view-panel'),bounds=view.getBoundingClientRect();classicMenu.hidden=false;classicMenu.classList.add('context-popup');classicMenu.classList.toggle('pinned',pinned);const menu=classicMenu.getBoundingClientRect(),left=Math.max(0,Math.min(bounds.width-menu.width,clientX-bounds.left)),openLeft=pinned||(window.innerWidth>540&&left+menu.width+235>bounds.width);classicMenu.classList.toggle('opens-left',openLeft);classicMenu.scrollTop=0;if(pinned){classicMenu.style.left='';classicMenu.style.top='';}else{const top=Math.max(0,Math.min(bounds.height-menu.height,clientY-bounds.top));classicMenu.style.left=`${left}px`;classicMenu.style.top=`${top}px`;}}
+    $('openMenuBtn').addEventListener('click',()=>{if(classicMenu.hidden)openClassicMenu(0,0,true);else classicMenu.hidden=true;});
+    document.addEventListener('pointerdown',e=>{if(!classicMenu.contains(e.target)&&e.target!==$('openMenuBtn'))classicMenu.hidden=true;});
+    $('sectionPlane').addEventListener('change',e=>{state.section=e.target.value;state.sectionFraction=0;$('sectionPosition').value=0;$('sectionPosition').disabled=state.section==='off';$('sectionPositionReadout').value='0%';draw();});
+    $('sectionPosition').addEventListener('input',e=>{state.sectionFraction=Number(e.target.value)/100;$('sectionPositionReadout').value=`${e.target.value}%`;draw();});
+    $('undoSections').addEventListener('click',()=>{$('sectionPlane').value='off';state.section='off';state.sectionFraction=0;$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';draw();});
+    $('cameraPreset').addEventListener('change',e=>setCamera(e.target.value));
+    $('homeView').addEventListener('click',resetCamera);
+    function syncFullscreenControl(){
+      const active=document.fullscreenElement===$('viewPanel');
+      $('fullscreenBtn').setAttribute('aria-label',active?'Exit fullscreen':'Enter fullscreen');
+      $('fullscreenBtn').title=active?'Exit fullscreen':'Enter fullscreen';
+    }
+    $('fullscreenBtn').addEventListener('click',async()=>{
+      try {
+        if(document.fullscreenElement) await document.exitFullscreen();
+        else if($('viewPanel').requestFullscreen) await $('viewPanel').requestFullscreen();
+        else throw new Error('Fullscreen is unavailable in this browser.');
+        syncFullscreenControl();
+        fitCanvas();
+      } catch(error) { setStatus(`Could not change fullscreen mode: ${error.message}`,true); }
+    });
+    const handleFullscreenChange=()=>{
+      syncFullscreenControl();
+      fitCanvas();
+    };
+    $('viewPanel').addEventListener('fullscreenchange',handleFullscreenChange);
+    document.addEventListener('fullscreenchange',handleFullscreenChange);
+    $('panMode').addEventListener('click',()=>setDragMode('pan'));
+    $('rotateMode').addEventListener('click',()=>setDragMode('rotate'));
+    $('zoomMode').addEventListener('click',()=>setDragMode('zoom'));
+    $('snapshotFrequency').addEventListener('change',event=>{const value=Number(event.target.value);if(!Number.isInteger(value)||value<1){event.target.value=state.snapshotFrequency;setStatus('Snapshot frequency must be a positive integer.',true);return;}state.snapshotFrequency=value;setStatus(`Snapshots every ${value} iterations.`);});
+    $('outputLabel').addEventListener('input',event=>{state.outputLabel=event.target.value.replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);if(event.target.value!==state.outputLabel)event.target.value=state.outputLabel;});
+    $('exportBtn').addEventListener('click',async()=>{if(!state.session||!state.lastSnapshot)return;try{const data=await sendSession({steps:0,includeSnapshot:true},`/api/session/${state.session}/advance`);downloadBlob(new Blob([data.snapshot],{type:'text/plain'}),`${state.outputLabel||'embryomaker'}-${state.iteration}.dat`);setStatus(`Exported iteration ${state.iteration} snapshot.`);}catch(e){setStatus(e.message,true);}});
+    function worldDragDelta(dx,dy){const rho=state.cameraDistance/state.zoom,theta=state.pitch,phi=Math.PI/2-state.yaw,orientX=-rho*Math.sin(theta)*Math.cos(phi),orientY=-rho*Math.sin(theta)*Math.sin(phi),orientZ=rho*Math.cos(theta),normalX=orientY,normalY=-orientX,horizontal=Math.hypot(normalX,normalY),scale=horizontal>1e-12?1/horizontal:0,front=orientZ>=0;return{x:.01*(front?dx*normalX*scale-dy*orientX*scale:-dx*normalX*scale-dy*orientX*scale),y:.01*(-dy*orientY*scale+(front?dx:-dx)*normalY*scale),z:0};}
+    function pickNodeAt(x,y){let best=null,dist=Infinity;for(const point of state.frame){if(!point.visible||!passesNodeFilter(point.n))continue;const distance=Math.hypot(point.x-x,point.y-y);if(distance<point.r+7&&distance<dist){best=point;dist=distance;}}return best;}
+    let dragging=false,moved=false,lastX=0,lastY=0,draggingButton=0;
+    canvas.addEventListener('contextmenu',event=>{event.preventDefault();openClassicMenu(event.clientX,event.clientY);});
+    canvas.addEventListener('pointerdown',event=>{const adjustment=event.button===0?state.leftMouseAdjustment:event.button===1?state.middleMouseAdjustment:null,middleCursor=state.dragMode==='cursor-middle-z';if(adjustment){const range=visualizationRange(adjustment.property,adjustment.channel);state.activeMouseAdjustment={...adjustment,startY:event.clientY,initialRange:range.slice(),initialScale:adjustment.channel==='arrow'?state.arrowScale:state.sphereScale};}else if(middleCursor?event.button!==1:event.button!==0)return;dragging=true;moved=false;draggingButton=event.button;lastX=event.clientX;lastY=event.clientY;if(state.dragMode==='move-node'||state.dragMode==='move-cell')state.dragDelta={x:0,y:0,z:0};canvas.setPointerCapture(event.pointerId);if(event.button===1)event.preventDefault();});
+    canvas.addEventListener('pointermove',event=>{if(!dragging)return;const dx=event.clientX-lastX,dy=event.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>1)moved=true;if(state.activeMouseAdjustment){applyOgMouseAdjustment(event.clientY-state.activeMouseAdjustment.startY,state.activeMouseAdjustment);}else if(state.dragMode==='rotate'){state.yaw+=dx*Math.PI/180;state.pitch+=dy*Math.PI/180;state.depthDirty=true;}else if(state.dragMode==='pan'){state.panX+=dx;state.panY+=dy;}else if(state.dragMode==='zoom'){const factor=1+.002*Math.abs(dy);state.zoom=Math.max(.35,Math.min(4,state.zoom*(dy<0?factor:1/factor)));}else if(state.dragMode==='cursor-xy'){const delta=worldDragDelta(dx,dy);state.cursor.x+=delta.x;state.cursor.y+=delta.y;}else if(state.dragMode==='cursor-z'||state.dragMode==='cursor-middle-z'){const rho=state.cameraDistance/state.zoom,orientationZ=rho*Math.cos(state.pitch);state.cursor.z+=dy*(orientationZ>=0?-.01:.01);}else if(state.dragMode==='move-node'||state.dragMode==='move-cell'){const delta=worldDragDelta(dx,dy);state.dragDelta.x+=delta.x;state.dragDelta.y+=delta.y;}lastX=event.clientX;lastY=event.clientY;draw();});
+    canvas.addEventListener('pointerup',async event=>{if(!dragging)return;dragging=false;const adjustment=state.activeMouseAdjustment;state.activeMouseAdjustment=null;if(adjustment){setStatus(`Adjusted ${adjustment.channel} ${adjustment.kind} for ${adjustment.property}.`);return;}if(moved&&(state.dragMode==='move-node'||state.dragMode==='move-cell')){applyMouseMove();return;}if(!moved&&draggingButton===0&&state.showNodes){const rect=canvas.getBoundingClientRect(),point=pickNodeAt(event.clientX-rect.left,event.clientY-rect.top);if(point){if(state.selectionMode){state.cursor={x:point.n.x,y:point.n.y,z:point.n.z};state.cursorEnabled=true;}state.selectionMode=null;showSelectedNode(point.n);draw();}}});
+    canvas.addEventListener('wheel',event=>{event.preventDefault();state.zoom=Math.max(.35,Math.min(4,state.zoom*Math.exp(-event.deltaY*.001)));draw();},{passive:false});
+    document.addEventListener('keydown',event=>{if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft'].includes(event.key)||event.altKey||event.ctrlKey||event.metaKey)return;const target=event.target;if(target instanceof HTMLElement&&(target.isContentEditable||['INPUT','SELECT','TEXTAREA'].includes(target.tagName)))return;event.preventDefault();if(event.key==='ArrowDown'){if(state.dragMode==='cursor-xy')setCursorMode('cursor-z');else if(state.dragMode==='cursor-z')setCursorMode('cursor-xy');else if(state.dragMode==='rotate')setDragMode('zoom');else if(state.dragMode==='zoom')setDragMode('rotate');return;}if(state.busy)return;if(event.key==='ArrowUp'){state.keyboardIterationBatch=Math.min(50000,state.keyboardIterationBatch*10);void runMenuIterations(state.keyboardIterationBatch);}else if(event.key==='ArrowRight'){void runMenuIterations(state.keyboardIterationBatch);}else if(state.iteration>0){state.playing=false;void runAt(state.iteration-1);}});
+    window.addEventListener('resize',fitCanvas);new ResizeObserver(fitCanvas).observe(canvas);
+    async function boot(){try{const configResponse=await fetch('/api/display-config');if(configResponse.ok)applyOgDisplayConfig(await configResponse.text());}catch{}if(![...$('colorMode').options].some(option=>option.value===state.colorMode)){const option=document.createElement('option');option.value=state.colorMode;option.textContent=state.colorMode;$('colorMode').append(option);}$('colorMode').value=state.colorMode;$('paletteMode').value=state.paletteMode;$('showNodes').checked=state.showNodes;populateOgPropertyMenus();syncOgColorRanges();updateLegend();try{const response=await fetch('/api/examples');if(!response.ok)throw Error(`Example list request failed (${response.status})`);const data=await response.json();if(!Array.isArray(data.examples)||data.examples.length===0)throw Error('The server returned no experiments');for(const item of data.examples){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;$('experiment').append(option);$('experimentMenu').append(option.cloneNode(true));}const requestedExample=new URLSearchParams(location.search).get('example');if(requestedExample&&data.examples.some(item=>item.id===requestedExample))$('experiment').value=requestedExample;$('experimentMenu').value=$('experiment').value;fitCanvas();await runAt(0);}catch(error){setStatus(`Could not load experiment list: ${error.message}`,true);}}
+    void boot();
+    window.addEventListener('beforeunload',()=>{if(state.session)navigator.sendBeacon(`/api/session/${state.session}/close`,new Blob(['{}'],{type:'application/json'}));});
+  })();
+  </script>
+</body>
+</html>

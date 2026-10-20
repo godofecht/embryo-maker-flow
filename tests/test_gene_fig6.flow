@@ -1,0 +1,15 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.genetic { matrix_error, nwpre, nwpost, wpre, wpost, nwpre_index, nwpost_index, wpre_index, wpost_index, kind_count, kind_genes, gene_kind_ld, npag, whonpag, nw, w }
+function main() -> i32 {
+    if read_snapshot_parameters("../reference/examples/figure_6/gastrula.txt") != 0 { return 1 }
+    if kind_count[4] != 2 or kind_genes[4 * gene_kind_ld + 1] != 5 { return 7 }
+    if nw[2] != 2 { return 80 + nw[2] }
+    if w[2 * 15 + 1] != 1 or w[2 * 15 + 2] != 14 { return 90 }
+    if npag[1] != 2 or whonpag[15 + 1] != 1 or whonpag[15 + 2] != 3 { return 9 }
+    if nwpre[nwpre_index(5, 2)] != 1 { return 2 }
+    if wpre[wpre_index(5, 2, 1, 1)] != 9.0 { return 3 }
+    if wpre[wpre_index(5, 2, 1, 2)] != 1.0 { return 4 }
+    if nwpost[nwpost_index(5, 1)] != 1 { return 5 }
+    if wpost[wpost_index(5, 1, 1, 1)] != 9.0 { return 6 }
+    return 0
+}

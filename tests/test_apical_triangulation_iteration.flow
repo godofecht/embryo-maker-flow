@@ -1,0 +1,21 @@
+import embryo.io { read_snapshot_parameters }
+import embryo.aleas { inialea3d }
+import embryo.general { nparti, nd }
+import embryo.model { advance_model_iteration, model_error }
+
+function check_iteration(path: string, expected_nodes: i32) -> i32 {
+    if read_snapshot_parameters(path) != 0 { return 1 }
+    if nd != expected_nodes { return 2 }
+    inialea3d(nparti)
+    let mut iteration: i32 = 1
+    while iteration <= 25 {
+        if advance_model_iteration() == false { println("model status", model_error, "iteration", iteration); return 10 + model_error }
+        if model_error != 0 { println("unexpected model status", model_error, "iteration", iteration); return 20 }
+        iteration = iteration + 1
+    }
+    return 0
+}
+
+function main() -> i32 {
+    return check_iteration("../reference/examples/apical_contraction/apical_contraction.txt", 1274)
+}

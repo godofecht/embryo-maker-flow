@@ -1,0 +1,556 @@
+import embryo.general {
+    nd, ncels, ncals, cell_capacity, cels, node, resize_cell_buffers, delta
+}
+import embryo.genetic { ng, npag, whonpag, gex, gene_effects, gene_expression_index, gene_effect_index }
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(value: ptr<void>)
+    function sqrt(value: f64) -> f64
+    function atan(value: f64) -> f64
+    function acos(value: f64) -> f64
+    function cos(value: f64) -> f64
+    function sin(value: f64) -> f64
+    function pow(base: f64, exponent: f64) -> f64
+}
+
+const PROP_DIVISION_POLARIZATION: i32 = 46
+const PROP_ASYMMETRIC_DIVISION: i32 = 47
+const MITOSIS_EPSILOD: f64 = 0.0000011920928955078125
+
+let mut mitosis_error: i32 = 0
+
+struct DivisionVector { x: f64, y: f64, z: f64 }
+
+function physical_polarization(cell_id: i32) -> DivisionVector {
+    let epithelial: bool = node[cels[cell_id].node[1]].tipus < 3
+    let mut point_count: i32 = 0
+    let mut slot: i32 = 1
+    while slot <= cels[cell_id].nunodes {
+        let node_id: i32 = cels[cell_id].node[slot]
+        if epithelial {
+            if node[node_id].tipus == 1 { point_count = point_count + 1 }
+        } else {
+            point_count = point_count + 1
+        }
+        slot = slot + 1
+    }
+    if point_count <= 0 { return DivisionVector { x: 0.0, y: 0.0, z: 0.0 } }
+    let xs: ptr<f64> = calloc(point_count as i64, sizeof<f64>()) as ptr<f64>
+    let ys: ptr<f64> = calloc(point_count as i64, sizeof<f64>()) as ptr<f64>
+    let zs: ptr<f64> = calloc(point_count as i64, sizeof<f64>()) as ptr<f64>
+    if xs == null or ys == null or zs == null { mitosis_error = 1; return DivisionVector { x: 0.0, y: 0.0, z: 0.0 } }
+    slot = 1
+    let mut point: i32 = 0
+    while slot <= cels[cell_id].nunodes {
+        let node_id: i32 = cels[cell_id].node[slot]
+        if (epithelial and node[node_id].tipus == 1) or epithelial == false {
+            xs[point] = node[node_id].x
+            ys[point] = node[node_id].y
+            zs[point] = node[node_id].z
+            point = point + 1
+        }
+        slot = slot + 1
+    }
+    let inverse_count: f64 = 1.0 / point_count as f64
+    let mut mean_x: f64 = 0.0
+    let mut mean_y: f64 = 0.0
+    let mut mean_z: f64 = 0.0
+    point = 0
+    while point < point_count {
+        mean_x = mean_x + xs[point]
+        mean_y = mean_y + ys[point]
+        mean_z = mean_z + zs[point]
+        point = point + 1
+    }
+    mean_x = mean_x * inverse_count
+    mean_y = mean_y * inverse_count
+    mean_z = mean_z * inverse_count
+
+    let mut sxx: f64 = 0.0
+    let mut sxy: f64 = 0.0
+    let mut syy: f64 = 0.0
+    let mut sxz: f64 = 0.0
+    let mut szz: f64 = 0.0
+    let mut syz: f64 = 0.0
+    point = 0
+    while point < point_count {
+        sxx = sxx + xs[point] * xs[point]
+        sxy = sxy + xs[point] * ys[point]
+        syy = syy + ys[point] * ys[point]
+        sxz = sxz + xs[point] * zs[point]
+        szz = szz + zs[point] * zs[point]
+        syz = syz + ys[point] * zs[point]
+        point = point + 1
+    }
+    sxx = sxx * inverse_count - (mean_x * mean_x)
+    sxy = sxy * inverse_count - mean_x * mean_y
+    syy = syy * inverse_count - (mean_y * mean_y)
+    sxz = sxz * inverse_count - mean_x * mean_z
+    szz = szz * inverse_count - (mean_z * mean_z)
+    syz = syz * inverse_count - mean_y * mean_z
+    if sxx <= MITOSIS_EPSILOD { sxx = 1.0e-5 }
+    if sxy <= MITOSIS_EPSILOD { sxy = 1.0e-5 }
+    if syy <= MITOSIS_EPSILOD { syy = 1.0e-5 }
+    if sxz <= MITOSIS_EPSILOD { sxz = 1.0e-5 }
+    if syz <= MITOSIS_EPSILOD { syz = 1.0e-5 }
+    if szz <= MITOSIS_EPSILOD { szz = 1.0e-5 }
+
+    let theta: f64 = 0.5 * atan((2.0 * sxy) / (sxx - syy))
+    let cosine: f64 = cos(theta)
+    let sine: f64 = sin(theta)
+    let k11: f64 = (syy + szz) * (cosine * cosine) + (sxx + szz) * (sine * sine) - 2.0 * sxy * cosine * sine
+    let k22: f64 = (syy + szz) * (sine * sine) + (sxx + szz) * (cosine * cosine) + 2.0 * sxy * cosine * sine
+    let k12: f64 = -sxy * ((cosine * cosine) - (sine * sine)) + (sxx - syy) * cosine * sine
+    let k10: f64 = sxz * cosine + syz * sine
+    let k01: f64 = -sxz * sine + syz * cosine
+    let k00: f64 = sxx + syy
+    let c2: f64 = -k00 - k11 - k22
+    let c1: f64 = k00 * k11 + k00 * k22 + k11 * k22 - k01 * k01 - k10 * k10
+    let c0: f64 = k01 * k01 * k11 + k10 * k10 * k22 - k00 * k11 * k22
+    let p: f64 = c1 - (c2 * c2) / 3.0
+    let q: f64 = 2.0 * (c2 * c2 * c2) / 27.0 - (c1 * c2) / 3.0 + c0
+    let discriminant: f64 = (q * q) / 4.0 + (p * p * p) / 27.0
+    let mut eigenvalue: f64 = 0.0
+    if discriminant > 0.0 {
+        let a: f64 = -c2 / 3.0
+        let mut b: f64 = -0.5 * q + sqrt(discriminant)
+        let mut c: f64 = -0.5 * q - sqrt(discriminant)
+        if b < 0.0 { b = -pow(-b, 1.0 / 3.0) }
+        if c < 0.0 { c = -pow(-c, 1.0 / 3.0) }
+        eigenvalue = a + b + c
+    } else {
+        let rho: f64 = sqrt(-(p * p * p) / 27.0)
+        let phi: f64 = acos(-q / (2.0 * rho))
+        let root_rho: f64 = pow(rho, 1.0 / 3.0)
+        let a: f64 = -c2 / 3.0 + 2.0 * root_rho * cos(phi / 3.0)
+        let b: f64 = -c2 / 3.0 + 2.0 * root_rho * cos((phi + 2.0 * 3.141592653589793) / 3.0)
+        let c: f64 = -c2 / 3.0 + 2.0 * root_rho * cos((phi + 4.0 * 3.141592653589793) / 3.0)
+        if a <= b and a <= c { eigenvalue = a }
+        elif b <= c { eigenvalue = b }
+        else { eigenvalue = c }
+    }
+    let ka: f64 = -k10 * cosine / (k11 - eigenvalue) + k01 * sine / (k22 - eigenvalue)
+    let kb: f64 = -k10 * sine / (k11 - eigenvalue) - k01 * cosine / (k22 - eigenvalue)
+    let denominator: f64 = 1.0 + ka * ka + kb * kb
+    let plane_x: f64 = ((1.0 + kb * kb) * mean_x - ka * kb * mean_y + ka * mean_z) / denominator
+    let plane_y: f64 = (-ka * kb * mean_x + (1.0 + ka * ka) * mean_y + kb * mean_z) / denominator
+    let plane_z: f64 = (ka * mean_x + kb * mean_y + (ka * ka + kb * kb) * mean_z) / denominator
+    let mut vx: f64 = mean_x - plane_x
+    let mut vy: f64 = mean_y - plane_y
+    let mut vz: f64 = mean_z - plane_z
+    let scale: f64 = 1.0 / sqrt(vx * vx + vy * vy + vz * vz)
+    vx = vx * scale; vy = vy * scale; vz = vz * scale
+    free(xs as ptr<void>); free(ys as ptr<void>); free(zs as ptr<void>)
+    return DivisionVector { x: vx, y: vy, z: vz }
+}
+
+function is_disconnected(count: i32, members: ptr<i32>) -> bool {
+    if count <= 1 { return false }
+    let matrix: ptr<i32> = calloc((count * count) as i64, sizeof<i32>()) as ptr<i32>
+    let reached: ptr<i32> = calloc(count as i64, sizeof<i32>()) as ptr<i32>
+    if matrix == null or reached == null { mitosis_error = 2; return false }
+    let mut i: i32 = 0
+    while i < count {
+        let mut j: i32 = 0
+        while j < count {
+            if i != j {
+                let first: i32 = members[i + 1]
+                let second: i32 = members[j + 1]
+                let dx: f64 = node[first].x - node[second].x
+                let dy: f64 = node[first].y - node[second].y
+                let dz: f64 = node[first].z - node[second].z
+                let distance: f64 = sqrt(dx * dx + dy * dy + dz * dz)
+                if distance < node[first].add + node[second].add { matrix[i * count + j] = 1 }
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < count { reached[i] = matrix[i]; i = i + 1 }
+    let mut pass: i32 = 0
+    while pass < count {
+        i = 0
+        while i < count {
+            if reached[i] != 0 {
+                let mut j: i32 = 0
+                while j < count {
+                    if matrix[i * count + j] != 0 { reached[j] = 1 }
+                    j = j + 1
+                }
+            }
+            i = i + 1
+        }
+        pass = pass + 1
+    }
+    let mut connected: i32 = 0
+    i = 0
+    while i < count { connected = connected + reached[i]; i = i + 1 }
+    free(matrix as ptr<void>); free(reached as ptr<void>)
+    return connected < count
+}
+
+function asymmetric_centroid(cell_id: i32, axis: DivisionVector) -> DivisionVector {
+    let count: i32 = cels[cell_id].nunodes
+    let ordered: ptr<i32> = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    let projections: ptr<f64> = calloc((count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    let sorted: ptr<f64> = calloc((count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    let weights: ptr<f64> = calloc((count + 1) as i64, sizeof<f64>()) as ptr<f64>
+    if ordered == null or projections == null or sorted == null or weights == null { mitosis_error = 3; return DivisionVector { x: cels[cell_id].cex, y: cels[cell_id].cey, z: cels[cell_id].cez } }
+    let mut maximum: f64 = -1.0e300
+    let mut slot: i32 = 1
+    while slot <= count {
+        let node_id: i32 = cels[cell_id].node[slot]
+        let ix: f64 = node[node_id].x - cels[cell_id].cex
+        let iy: f64 = node[node_id].y - cels[cell_id].cey
+        let iz: f64 = node[node_id].z - cels[cell_id].cez
+        let projection: f64 = axis.x * ix + axis.y * iy + axis.z * iz
+        let radial: f64 = sqrt(ix * ix + iy * iy + iz * iz)
+        let angle: f64 = acos(projection / (sqrt(axis.x * axis.x + axis.y * axis.y + axis.z * axis.z) * radial))
+        let signed_projection: f64 = cos(angle) * radial
+        projections[slot] = signed_projection
+        if signed_projection > maximum { maximum = signed_projection }
+        ordered[slot] = slot
+        slot = slot + 1
+    }
+    let mut i: i32 = 1
+    while i <= count {
+        sorted[i] = maximum + 1.0
+        i = i + 1
+    }
+    i = 1
+    while i <= count {
+        let value: f64 = projections[i]
+        let mut position: i32 = 1
+        while position <= count {
+            if value < sorted[position] {
+                let mut shift: i32 = count
+                while shift > position {
+                    sorted[shift] = sorted[shift - 1]
+                    ordered[shift] = ordered[shift - 1]
+                    shift = shift - 1
+                }
+                sorted[position] = value
+                ordered[position] = i
+                break
+            }
+            position = position + 1
+        }
+        i = i + 1
+    }
+    let mut gene_slot: i32 = 1
+    while gene_slot <= npag[PROP_ASYMMETRIC_DIVISION] {
+        let gene_id: i32 = whonpag[PROP_ASYMMETRIC_DIVISION * (ng + 1) + gene_slot]
+        i = 1
+        while i <= count {
+            let node_id: i32 = cels[cell_id].node[ordered[i]]
+            let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+            if expression > 0.0 { weights[i] = weights[i] + expression * gene_effects[gene_effect_index(gene_id, PROP_ASYMMETRIC_DIVISION)] }
+            i = i + 1
+        }
+        gene_slot = gene_slot + 1
+    }
+    let mut total: f64 = 0.0
+    i = 1
+    while i <= count { total = total + weights[i]; i = i + 1 }
+    let mut centroid: DivisionVector = DivisionVector { x: cels[cell_id].cex, y: cels[cell_id].cey, z: cels[cell_id].cez }
+    if total != 0.0 {
+        let mut anterior: i32 = 0
+        let mut posterior: i32 = 0
+        i = 1
+        while i < count {
+            let mut first_weight: f64 = 0.0
+            let mut second_weight: f64 = 0.0
+            let mut j: i32 = 1
+            while j <= i { first_weight = first_weight + weights[j]; j = j + 1 }
+            j = i + 1
+            while j <= count { second_weight = second_weight + weights[j]; j = j + 1 }
+            if first_weight > second_weight {
+                if i > 1 { anterior = i - 1; posterior = i } else { anterior = 1; posterior = 2 }
+                break
+            }
+            if i == count - 1 { anterior = i; posterior = count }
+            i = i + 1
+        }
+        if anterior != 0 and posterior != 0 {
+            let left: i32 = cels[cell_id].node[ordered[anterior]]
+            let right: i32 = cels[cell_id].node[ordered[posterior]]
+            centroid.x = 0.5 * (node[left].x + node[right].x)
+            centroid.y = 0.5 * (node[left].y + node[right].y)
+            centroid.z = 0.5 * (node[left].z + node[right].z)
+            let first_count: i32 = anterior
+            let second_count: i32 = count - anterior
+            if first_count < second_count {
+                let mut disconnected: bool = is_disconnected(first_count, ordered)
+                let mut grown: i32 = 1
+                while disconnected and first_count + grown <= count {
+                    let members: ptr<i32> = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+                    let mut q: i32 = 1
+                    while q <= first_count + grown { members[q] = cels[cell_id].node[ordered[q]]; q = q + 1 }
+                    disconnected = is_disconnected(first_count + grown, members)
+                    free(members as ptr<void>)
+                    grown = grown + 1
+                }
+                if grown > 1 {
+                    let left: i32 = cels[cell_id].node[ordered[first_count + grown - 1]]
+                    let right: i32 = cels[cell_id].node[ordered[posterior + grown - 1]]
+                    centroid.x = 0.5 * (node[left].x + node[right].x)
+                    centroid.y = 0.5 * (node[left].y + node[right].y)
+                    centroid.z = 0.5 * (node[left].z + node[right].z)
+                }
+            } elif first_count > second_count {
+                let mut start: i32 = posterior
+                let mut members: ptr<i32> = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+                let mut q: i32 = 1
+                while start <= count { members[q] = cels[cell_id].node[ordered[start]]; q = q + 1; start = start + 1 }
+                let mut disconnected: bool = is_disconnected(second_count, members)
+                let mut grown: i32 = 1
+                while disconnected and second_count + grown <= count {
+                    free(members as ptr<void>)
+                    members = calloc((count + 1) as i64, sizeof<i32>()) as ptr<i32>
+                    start = posterior - grown
+                    q = 1
+                    while start <= count { members[q] = cels[cell_id].node[ordered[start]]; q = q + 1; start = start + 1 }
+                    disconnected = is_disconnected(second_count + grown, members)
+                    grown = grown + 1
+                }
+                free(members as ptr<void>)
+                if grown > 1 {
+                    let left: i32 = cels[cell_id].node[ordered[anterior - grown + 1]]
+                    let right: i32 = cels[cell_id].node[ordered[posterior - grown + 1]]
+                    centroid.x = 0.5 * (node[left].x + node[right].x)
+                    centroid.y = 0.5 * (node[left].y + node[right].y)
+                    centroid.z = 0.5 * (node[left].z + node[right].z)
+                }
+            }
+        }
+    }
+    free(ordered as ptr<void>); free(projections as ptr<void>); free(sorted as ptr<void>); free(weights as ptr<void>)
+    return centroid
+}
+
+function set_cell_members(cell_id: i32, count: i32, members: ptr<i32>) -> bool {
+    let capacity: i32 = count + 10
+    let new_members: ptr<i32> = calloc((capacity + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if new_members == null { mitosis_error = 4; return false }
+    let mut slot: i32 = 1
+    while slot <= count { new_members[slot] = members[slot]; slot = slot + 1 }
+    if cels[cell_id].node != null { free(cels[cell_id].node as ptr<void>) }
+    cels[cell_id].node = new_members
+    cels[cell_id].nunodes = count
+    cels[cell_id].nodela = capacity
+    return true
+}
+
+function division(cell_id: i32) -> bool {
+    mitosis_error = 0
+    if cell_id < 1 or cell_id > ncels { mitosis_error = 5; return false }
+    let original_count: i32 = cels[cell_id].nunodes
+    let epithelial: bool = cels[cell_id].ctipus < 3
+    if original_count < 2 { mitosis_error = 6; return false }
+    let physical: DivisionVector = physical_polarization(cell_id)
+    if mitosis_error != 0 { return false }
+    let mut axis_x: f64 = physical.x
+    let mut axis_y: f64 = physical.y
+    let mut axis_z: f64 = physical.z
+    let mut apical_x: f64 = 0.0
+    let mut apical_y: f64 = 0.0
+    let mut apical_z: f64 = 0.0
+    if epithelial {
+        let mut slot: i32 = 1
+        while slot <= original_count {
+            let node_id: i32 = cels[cell_id].node[slot]
+            if node[node_id].tipus == 1 {
+                let paired: i32 = node[node_id].altre
+                apical_x = apical_x + node[node_id].x - node[paired].x
+                apical_y = apical_y + node[node_id].y - node[paired].y
+                apical_z = apical_z + node[node_id].z - node[paired].z
+            }
+            slot = slot + 1
+        }
+        let length: f64 = sqrt(apical_x * apical_x + apical_y * apical_y + apical_z * apical_z)
+        apical_x = apical_x / length; apical_y = apical_y / length; apical_z = apical_z / length
+        let projection: f64 = apical_x * axis_x + apical_y * axis_y + apical_z * axis_z
+        let projected_x: f64 = axis_x - apical_x * projection
+        let projected_y: f64 = axis_y - apical_y * projection
+        let projected_z: f64 = axis_z - apical_z * projection
+        let projected_inverse: f64 = 1.0 / sqrt(projected_x * projected_x + projected_y * projected_y + projected_z * projected_z)
+        axis_x = projected_x * projected_inverse
+        axis_y = projected_y * projected_inverse
+        axis_z = projected_z * projected_inverse
+        cels[cell_id].hpolx = axis_x; cels[cell_id].hpoly = axis_y; cels[cell_id].hpolz = axis_z
+    } else {
+        cels[cell_id].hpolx = axis_x; cels[cell_id].hpoly = axis_y; cels[cell_id].hpolz = axis_z
+    }
+    let mut chemical_weight: f64 = 0.0
+    let mut slot: i32 = 1
+    while slot <= original_count {
+        let node_id: i32 = cels[cell_id].node[slot]
+        let mut gene_slot: i32 = 1
+        while gene_slot <= npag[PROP_DIVISION_POLARIZATION] {
+            let gene_id: i32 = whonpag[PROP_DIVISION_POLARIZATION * (ng + 1) + gene_slot]
+            chemical_weight = chemical_weight + gex[gene_expression_index(node_id, gene_id)] * gene_effects[gene_effect_index(gene_id, PROP_DIVISION_POLARIZATION)]
+            gene_slot = gene_slot + 1
+        }
+        slot = slot + 1
+    }
+    let physical_weight: f64 = 1.0 / (1.0 + chemical_weight)
+    let chemical_axis_x: f64 = cels[cell_id].polx
+    let chemical_axis_y: f64 = cels[cell_id].poly
+    let chemical_axis_z: f64 = cels[cell_id].polz
+    axis_x = (1.0 - physical_weight) * chemical_axis_x + physical_weight * cels[cell_id].hpolx
+    axis_y = (1.0 - physical_weight) * chemical_axis_y + physical_weight * cels[cell_id].hpoly
+    axis_z = (1.0 - physical_weight) * chemical_axis_z + physical_weight * cels[cell_id].hpolz
+    let axis: DivisionVector = asymmetric_centroid(cell_id, DivisionVector { x: axis_x, y: axis_y, z: axis_z })
+    if mitosis_error != 0 { return false }
+
+    let old_members: ptr<i32> = calloc((original_count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    let new_members: ptr<i32> = calloc((original_count + 1) as i64, sizeof<i32>()) as ptr<i32>
+    if old_members == null or new_members == null { mitosis_error = 7; return false }
+    let mut old_count: i32 = 0
+    let mut new_count: i32 = 0
+    slot = 1
+    while slot <= original_count {
+        let node_id: i32 = cels[cell_id].node[slot]
+        let kind: i32 = node[node_id].tipus
+        if kind == 1 or kind == 3 {
+            let dx: f64 = node[node_id].x - axis.x
+            let dy: f64 = node[node_id].y - axis.y
+            let dz: f64 = node[node_id].z - axis.z
+            let inverse: f64 = 1.0 / sqrt(dx * dx + dy * dy + dz * dz)
+            let projection: f64 = (dx * axis_x + dy * axis_y + dz * axis_z) * inverse
+            if projection > 0.0 {
+                if kind == 1 {
+                    new_count = new_count + 1; new_members[new_count] = node[node_id].altre
+                    new_count = new_count + 1; new_members[new_count] = node_id
+                    node[node_id].icel = ncels + 1
+                    node[node[node_id].altre].icel = ncels + 1
+                } else {
+                    new_count = new_count + 1; new_members[new_count] = node_id
+                    node[node_id].icel = ncels + 1
+                }
+            } else {
+                if kind == 1 {
+                    old_count = old_count + 1; old_members[old_count] = node[node_id].altre
+                    old_count = old_count + 1; old_members[old_count] = node_id
+                } else {
+                    old_count = old_count + 1; old_members[old_count] = node_id
+                }
+            }
+        }
+        slot = slot + 1
+    }
+    if old_count <= 0 and new_count <= 0 { mitosis_error = 8; return false }
+    let mut old_x: f64 = 0.0; let mut old_y: f64 = 0.0; let mut old_z: f64 = 0.0
+    let mut i: i32 = 1
+    while i <= old_count {
+        let node_id: i32 = old_members[i]
+        if node[node_id].tipus == 1 or node[node_id].tipus == 3 {
+            old_x = old_x + node[node_id].x; old_y = old_y + node[node_id].y; old_z = old_z + node[node_id].z
+        }
+        i = i + 1
+    }
+    let mut new_x: f64 = 0.0; let mut new_y: f64 = 0.0; let mut new_z: f64 = 0.0
+    i = 1
+    while i <= new_count {
+        let node_id: i32 = new_members[i]
+        if node[node_id].tipus == 1 or node[node_id].tipus == 3 {
+            new_x = new_x + node[node_id].x; new_y = new_y + node[node_id].y; new_z = new_z + node[node_id].z
+        }
+        i = i + 1
+    }
+    let old_factor: f64 = if epithelial { 2.0 / old_count as f64 } else { 1.0 / old_count as f64 }
+    let new_factor: f64 = if epithelial { 2.0 / new_count as f64 } else { 1.0 / new_count as f64 }
+    if ncels + 1 >= cell_capacity {
+        let new_capacity: i32 = cell_capacity + 20
+        if resize_cell_buffers(new_capacity) == false { mitosis_error = 9; return false }
+        ncals = new_capacity
+    }
+    ncels = ncels + 1
+    if set_cell_members(cell_id, old_count, old_members) == false { return false }
+    if set_cell_members(ncels, new_count, new_members) == false { return false }
+    cels[cell_id].cex = old_x * old_factor; cels[cell_id].cey = old_y * old_factor; cels[cell_id].cez = old_z * old_factor
+    cels[ncels].cex = new_x * new_factor; cels[ncels].cey = new_y * new_factor; cels[ncels].cez = new_z * new_factor
+    cels[ncels].ctipus = if epithelial { 1 } else { 3 }
+    cels[ncels].minsize_for_div = cels[cell_id].minsize_for_div
+    cels[ncels].maxsize_for_div = cels[cell_id].maxsize_for_div
+    cels[ncels].polx = cels[cell_id].polx; cels[ncels].poly = cels[cell_id].poly; cels[ncels].polz = cels[cell_id].polz
+
+    i = 1
+    while i <= old_count {
+        let node_id: i32 = old_members[i]
+        if node[node_id].marge == 0 { node[node_id].marge = 1 }
+        i = i + 1
+    }
+    i = 1
+    let mut nearest: i32 = old_members[1]
+    let mut nearest_distance: f64 = 1.0e3
+    while i <= old_count {
+        let node_id: i32 = old_members[i]
+        let dx: f64 = node[node_id].x - cels[cell_id].cex
+        let dy: f64 = node[node_id].y - cels[cell_id].cey
+        let dz: f64 = node[node_id].z - cels[cell_id].cez
+        let distance: f64 = sqrt(dx * dx + dy * dy + dz * dz)
+        if distance < nearest_distance { nearest_distance = distance; nearest = node_id }
+        i = i + 1
+    }
+    if node[nearest].tipus == 1 { node[node[nearest].altre].marge = 0 } else { node[nearest].marge = 0 }
+    i = 1
+    while i <= new_count {
+        let node_id: i32 = new_members[i]
+        if node[node_id].marge == 0 { node[node_id].marge = 1 }
+        i = i + 1
+    }
+    i = 1
+    nearest = new_members[1]
+    nearest_distance = 1.0e3
+    while i <= new_count {
+        let node_id: i32 = new_members[i]
+        let dx: f64 = node[node_id].x - cels[ncels].cex
+        let dy: f64 = node[node_id].y - cels[ncels].cey
+        let dz: f64 = node[node_id].z - cels[ncels].cez
+        let distance: f64 = sqrt(dx * dx + dy * dy + dz * dz)
+        if distance < nearest_distance { nearest_distance = distance; nearest = node_id }
+        i = i + 1
+    }
+    if node[nearest].tipus == 1 { node[node[nearest].altre].marge = 0 } else { node[nearest].marge = 0 }
+    free(old_members as ptr<void>); free(new_members as ptr<void>)
+    return true
+}
+
+function should_i_divide() -> bool {
+    mitosis_error = 0
+    let original_cells: i32 = ncels
+    let mut cell_id: i32 = 1
+    while cell_id <= original_cells {
+        let mut signal: f64 = 0.0
+        let mut slot: i32 = 1
+        while slot <= cels[cell_id].nunodes {
+            let node_id: i32 = cels[cell_id].node[slot]
+            let factor: f64 = 1.0 - node[node_id].dif
+            let mut gene_slot: i32 = 1
+            while gene_slot <= npag[37] {
+                let gene_id: i32 = whonpag[37 * (ng + 1) + gene_slot]
+                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                if expression > 0.0 { signal = signal + expression * gene_effects[gene_effect_index(gene_id, 37)] * factor }
+                gene_slot = gene_slot + 1
+            }
+            slot = slot + 1
+        }
+        signal = signal / cels[cell_id].nunodes as f64
+        cels[cell_id].fase = cels[cell_id].fase + signal * delta
+        if cels[cell_id].fase >= 1.0 and cels[cell_id].nunodes >= cels[cell_id].minsize_for_div as i32 {
+            if division(cell_id) == false { return false }
+            cels[cell_id].fase = cels[cell_id].fase - 1.0
+        }
+        if cels[cell_id].nunodes as f64 >= cels[cell_id].maxsize_for_div {
+            if division(cell_id) == false { return false }
+            cels[cell_id].fase = cels[cell_id].fase - 1.0
+        }
+        cell_id = cell_id + 1
+    }
+    return true
+}
+
+export mitosis_error, physical_polarization, division, should_i_divide

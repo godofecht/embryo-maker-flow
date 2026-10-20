@@ -1,0 +1,16 @@
+title: EmbryoMaker Flow
+description: A new implementation of the EmbryoMaker model of development, built for running and comparing morphological experiments.
+source_url: https://github.com/godofecht/embryo-maker-flow
+theme: null
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+  - scope:
+      path: "user-guide.md"
+    values:
+      layout: doc
+      nav: guide
+      title: User guide
+      permalink: /user-guide.html

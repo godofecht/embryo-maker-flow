@@ -1,0 +1,10 @@
+<header class="site-header wrap">
+  <a class="brand" href="{{ '/' | relative_url }}"><span class="mark" aria-hidden="true">&#9676;</span><span>{{ site.title }}</span></a>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a href="{{ '/#model' | relative_url }}">Model</a>
+    <a href="{{ '/#experiments' | relative_url }}">Experiments</a>
+    <a href="{{ '/downloads/' | relative_url }}"{% if page.nav == "downloads" %} aria-current="page"{% endif %}>Downloads</a>
+    <a href="{{ '/user-guide.html' | relative_url }}"{% if page.nav == "guide" %} aria-current="page"{% endif %}>User guide</a>
+    <a href="{{ site.source_url }}">Source</a>
+  </nav>
+</header>

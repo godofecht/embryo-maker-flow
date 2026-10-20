@@ -1,25 +1,24 @@
 # EmbryoMaker Flow
 
-An EmbryoMaker implementation in Flow, with a browser-based simulation viewer.
+EmbryoMaker Flow is a local cell simulation workbench with a browser-based Studio.
 
-The project page has a screenshot and setup notes: [EmbryoMaker Flow](https://godofecht.github.io/embryo-maker-flow/).
+## Download and run
 
-## Run the simulator
+Get the macOS or Linux package from the [project page](https://godofecht.github.io/embryo-maker-flow/). Extract it, keep its `reference` and `ui` folders beside the executable, then start it:
 
-Install the Flow compiler, then start the local server from this directory:
+- Apple silicon Mac: open `Start EmbryoMaker.command`.
+- Linux x86-64: run `./start-linux.sh` in a terminal.
 
-```sh
-tools/run-ui.sh
-```
+The Studio opens at `http://127.0.0.1:8765`. Keep the terminal window open while using it. Press Control-C to stop the server. See the [user guide](docs/user-guide.md) for setup, controls, saving, and troubleshooting.
 
-Open `http://127.0.0.1:8765`. Choose a starting model from the menu. The Studio controls include run, pause, single-step, reset, and an iteration slider. Each step advances the solver iteration counter by one.
+The project page contains the downloadable packages and a Studio preview. The simulator runs on your computer.
 
-The GitHub Pages site is a project overview. The simulation runs through the local Flow server.
+## Build from source
 
-## Examples
+Install the Flow compiler and a C compiler, then run `tools/run-ui.sh` from the project root. The browser smoke check is `node tools/ui_smoke.cjs`. The solver parity suite is `tools/run_flow_checks.sh`.
+
+## Examples and license
 
 The viewer includes the original EmbryoMaker examples and nine saved states from the Morphospace exploration collection. Their source and license details are in [the examples directory](reference/examples/morphospace_exploration/README.md).
 
-## License
-
-GPL-3.0. See [LICENSE](LICENSE) and the bundled reference license.
+EmbryoMaker Flow is licensed under GPL-3.0. See [LICENSE](LICENSE).

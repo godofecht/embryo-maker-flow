@@ -469,7 +469,8 @@ function d_opside(a: i32, b: i32, c: i32, d: i32, e: i32) -> i32 {
     if fabs(d_vcl[d_v(3, e)]) > maxe { maxe = fabs(d_vcl[d_v(3, e)]) }
     let ep: f64 = (d_vcl[d_v(1, e)] - ax) * nrml1 + (d_vcl[d_v(2, e)] - ay) * nrml2 + (d_vcl[d_v(3, e)] - az) * nrml3
     if fabs(ep) <= tol * maxe { return 0 }
-    return if dp * ep < 0.0 { 1 } else { -1 }
+    if dp * ep < 0.0 { return 1 }
+    return -1
 }
 
 struct DelaunaySphere {

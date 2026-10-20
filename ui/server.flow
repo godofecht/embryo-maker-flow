@@ -34,12 +34,19 @@ extern {
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <stdint.h>
+#include <signal.h>
 extern int close(int);
+static void embryomaker_ignore_sigpipe(void) { signal(SIGPIPE, SIG_IGN); }
 static int32_t embryomaker_loopback_listen(int32_t port) { int fd = socket(AF_INET, SOCK_STREAM, 0); if (fd < 0) return -1; int yes = 1; setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)); struct sockaddr_in addr = {0}; addr.sin_family = AF_INET; addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); addr.sin_port = htons((uint16_t)port); if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 || listen(fd, 64) < 0) { close(fd); return -1; } return fd; }
-static int32_t embryomaker_configure_client(int fd) { struct timeval send_timeout = {10, 0}; struct timeval recv_timeout = {30, 0}; int yes = 1; if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout)) < 0) return -1; if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &recv_timeout, sizeof(recv_timeout)) < 0) return -1; if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes)) < 0) return -1; return 0; }
+static int32_t embryomaker_configure_client(int fd) { struct timeval send_timeout = {10, 0}; struct timeval recv_timeout = {30, 0}; int yes = 1; if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout)) < 0) return -1; if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &recv_timeout, sizeof(recv_timeout)) < 0) return -1;
+#ifdef SO_NOSIGPIPE
+if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes)) < 0) return -1;
+#endif
+return 0; }
 ")
 extern { function embryomaker_loopback_listen(port: i32) -> i32 }
 extern { function embryomaker_configure_client(fd: i32) -> i32 }
+extern { function embryomaker_ignore_sigpipe() -> void }
 
 const MAX_REQUEST: i32 = 16777216
 const SESSION_ID: string = "00000000000000000000000000000001"
@@ -1514,6 +1521,7 @@ function route_request(fd: i32, request: HttpRequest) -> void {
 }
 
 function main() -> i32 {
+    embryomaker_ignore_sigpipe()
     let port_text: string = proc_getenv("PORT")
     let port: i32 = if port_text == "" { 8765 } else { str_parse_i64_at(port_text, 0).value as i32 }
     if port < 1 or port > 65535 { println("PORT must be between 1 and 65535"); return 2 }

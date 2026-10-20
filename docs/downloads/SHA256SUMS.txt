@@ -1,0 +1,2 @@
+f274e1d2f98f0911b65bd016a340a5ad0b4588982a84791102498fd8440c76b9  EmbryoMaker-Flow-macos-arm64-v0.1.0.zip
+1749d93a873d3a87c97dd6c2f4310caab38f636c0b9c39c80979b9e64fd42d6c  EmbryoMaker-Flow-linux-x86_64-v0.1.0.tar.gz

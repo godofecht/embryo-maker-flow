@@ -23,7 +23,7 @@
 <body>
   <header class="wrap">
     <a class="brand" href="#top"><span class="mark" aria-hidden="true">◌</span><span>EmbryoMaker Flow</span></a>
-    <nav aria-label="Main navigation"><a href="#studio">Studio</a><a href="#run">Run locally</a><a href="https://github.com/godofecht/embryo-maker-flow">Source</a></nav>
+    <nav aria-label="Main navigation"><a href="#studio">Studio</a><a href="downloads/">Downloads</a><a href="user-guide.html">User guide</a><a href="https://github.com/godofecht/embryo-maker-flow">Source</a></nav>
   </header>
   <main id="top" class="wrap">
     <section class="hero" aria-labelledby="title">
@@ -32,7 +32,7 @@
         <h1 id="title">A workbench for EmbryoMaker.</h1>
         <p class="intro">Load a starting state, advance the solver one iteration at a time, and inspect how cells and nodes change.</p>
         <div class="actions"><a class="button primary" href="#run">Run the simulator</a><a class="button" href="https://github.com/godofecht/embryo-maker-flow">View the source</a></div>
-        <p class="note">The simulator runs locally through the Flow server. This page is a project overview.</p>
+        <p class="note">The simulator runs on your computer. Download a package or read the setup guide.</p>
       </div>
       <figure id="studio" class="preview">
         <img src="assets/studio.png" alt="EmbryoMaker Studio with its model view, experiment controls, display settings, and model inspector">
@@ -45,8 +45,8 @@
       <article class="fact"><strong>Model inspection</strong><p>Change display fields, set color ranges, clip a section, and inspect node and cell properties.</p></article>
     </section>
     <section id="run" class="start" aria-labelledby="run-title">
-      <div><h2 id="run-title">Run it on your machine</h2><p>Install the Flow compiler, clone the source, and start the local simulation server. The Studio opens at `127.0.0.1:8765`.</p></div>
-      <div class="steps"><code>git clone https://github.com/godofecht/embryo-maker-flow.git</code><code>cd embryo-maker-flow</code><code>tools/run-ui.sh</code><span>Then open http://127.0.0.1:8765 in a browser.</span></div>
+      <div><h2 id="run-title">Run it on your machine</h2><p>Download the package for your system, extract it, and start the launcher. The Studio opens at 127.0.0.1:8765.</p></div>
+      <div class="steps"><a href="downloads/">Download for macOS or Linux</a><a href="user-guide.html">Read the user guide</a><span>The server stays on your computer. Keep its terminal window open while you use the Studio.</span></div>
     </section>
   </main>
   <footer class="wrap"><span>EmbryoMaker Flow</span><a href="https://github.com/godofecht/embryo-maker-flow">Source and license</a></footer>

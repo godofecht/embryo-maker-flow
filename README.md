@@ -11,7 +11,7 @@ Get the macOS or Linux package from the [project page](https://godofecht.github.
 
 The Studio opens at `http://127.0.0.1:8765`. Keep the terminal window open while using it. Press Control-C to stop the server. See the [user guide](docs/user-guide.md) for setup, controls, saving, and troubleshooting.
 
-The project page contains the downloadable packages and a Studio preview. The simulator runs on your computer.
+The project page contains the downloadable packages and a Studio preview. The simulator runs on your computer. The downloads page reads the latest GitHub release. CI checks changes on `main` and pull requests. Pushing a `v*` tag builds macOS Apple silicon and Linux x86-64 packages, runs the stem morphology checks, and creates or updates the matching GitHub release.
 
 ## Build from source
 

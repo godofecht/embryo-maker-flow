@@ -28,7 +28,7 @@ jobs:
             cc: clang
     runs-on: ${{ matrix.os }}
     env:
-      FLOW_BUILD_ROOT: ${{ runner.temp }}/flow-build
+      FLOW_BUILD_ROOT: /tmp/embryo-flow-build
       FLOW_OPT_LEVEL: "3"
       FLOW_CFLAGS: -ffp-contract=off
       CC: ${{ matrix.cc }}

@@ -124,6 +124,30 @@ async function benchmark() {
   });
   console.log('Sea Urchin scrub results:', JSON.stringify(urchinScrubResults, null, 2));
 
+  console.log('6. Scrubbing past the RAM cache to the last Sea Urchin snapshot…');
+  const urchinEnd = await page.evaluate(() => {
+    const range = document.querySelector('#iterationRange');
+    range.value = state.max;
+    range.dispatchEvent(new Event('input'));
+    range.dispatchEvent(new Event('change'));
+    return state.max;
+  });
+  await page.waitForFunction(target => state.iteration === target, urchinEnd, { timeout: 15000 });
+  const urchinEndState = await page.evaluate(() => ({
+    iteration: state.iteration,
+    nodeCount: state.nodes.length,
+    pointScale: state.pointScale,
+    readout: document.querySelector('#pointScaleReadout').value
+  }));
+  console.log('Sea Urchin last snapshot:', JSON.stringify(urchinEndState));
+
+  if (urchinEndState.iteration !== urchinEnd) {
+    throw new Error(`Scrubbing to iteration ${urchinEnd} displayed frame ${urchinEndState.iteration}`);
+  }
+  if (urchinEndState.pointScale !== 1 || urchinEndState.readout !== '100%') {
+    throw new Error(`Precomputed project applied point size ${urchinEndState.readout} (scale ${urchinEndState.pointScale})`);
+  }
+
   if (errors.length) {
     throw new Error(`Browser console/runtime errors:\n${errors.join('\n')}`);
   }

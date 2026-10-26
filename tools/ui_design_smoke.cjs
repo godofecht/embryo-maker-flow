@@ -20,6 +20,33 @@ const url = process.env.EMBRYOMAKER_URL || 'http://127.0.0.1:8765';
     await page.waitForFunction(() => document.querySelector('#timelinePlay').getAttribute('aria-pressed') === 'false');
     await page.locator('#resetBtn').click();
     await page.waitForFunction(() => document.querySelector('#iterationValue').textContent === '0');
+    // Every readout in the toolbar refreshes once per batch, so their boxes have
+    // to stay put: a count that gains a digit, the rate appearing, or the progress
+    // row toggling must not move or resize anything in the toolbar or the topbar.
+    await page.evaluate(() => { document.querySelector('#speed').value = 'fast'; });
+    const layout = await page.evaluate(async () => {
+      const round = value => Math.round(value);
+      const shape = () => {
+        const describe = el => { const r = el.getBoundingClientRect(); return [round(r.x), round(r.y), round(r.width), round(r.height)].join(','); };
+        const timeline = document.querySelector('.timeline');
+        return JSON.stringify({
+          timeline: describe(timeline),
+          topbar: describe(document.querySelector('.topbar')),
+          readouts: [...timeline.children]
+            .filter(el => getComputedStyle(el).display !== 'none')
+            .map(el => `${el.id || el.className}=${describe(el)}`),
+          stats: ['nodeCount', 'cellCount', 'modelStep', 'typeCount'].map(id => `${id}=${describe(document.getElementById(id))}`)
+        });
+      };
+      const shapes = new Set();
+      document.querySelector('#timelinePlay').click();
+      const started = performance.now();
+      while (performance.now() - started < 3000) { shapes.add(shape()); await new Promise(resolve => requestAnimationFrame(resolve)); }
+      if (state.playing) document.querySelector('#timelinePlay').click();
+      return { shapes: [...shapes], iteration: state.iteration };
+    });
+    assert(layout.iteration > 2, `Simulation did not advance while measuring the toolbar (${layout.iteration})`);
+    assert.equal(layout.shapes.length, 1, `Toolbar layout moved while running: ${JSON.stringify(layout.shapes, null, 2)}`);
     await page.locator('#cacheBadge').focus();
     await page.keyboard.press('Enter');
     assert(await page.locator('#cacheModal').isVisible());

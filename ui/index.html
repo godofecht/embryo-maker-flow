@@ -10,7 +10,7 @@
     :root{color-scheme:dark;--bg:#0b1119;--panel:#111a25;--panel2:#151f2b;--line:#24313f;--muted:#8292a3;--text:#e8edf2;--mint:#a8f0d0;--lime:#d6fb91;--coral:#ff9c83;--blue:#8bc9ff;--lav:#c5b1ff}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
     button,select,input{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
-    .shell{max-width:1680px;margin:auto;padding:14px 20px 20px}.topbar{display:flex;align-items:center;justify-content:space-between;height:42px;min-height:42px;padding:0 14px;background:linear-gradient(180deg,#181e26 0%,#11161d 100%);border:1px solid #283340;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06);user-select:none;-webkit-user-select:none;margin-bottom:12px}.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}.brand{display:flex;align-items:center;gap:8px;flex-shrink:0}.mark{width:26px;height:26px;border:1px solid #365c49;border-radius:7px;display:grid;place-items:center;background:linear-gradient(145deg,#1f3d32,#12251e);color:var(--mint);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 2px 4px rgba(0,0,0,.3)}.brand-name{font-size:13px;font-weight:650;letter-spacing:-.015em;color:#f0f4f8}.brand-tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;border-radius:4px;background:rgba(168,240,208,.12);color:var(--mint);border:1px solid rgba(168,240,208,.22)}.topbar-divider{width:1px;height:16px;background:#2a3644;flex-shrink:0}.doc-chip{display:flex;align-items:center;gap:7px;padding:4px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;font-size:12px;color:#c4d1de;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.doc-dot{width:6px;height:6px;border-radius:50%;background:#50e3a4;flex-shrink:0}.top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}.live-pill{display:flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid #273543;border-radius:6px;background:rgba(11,17,24,.75);color:#9ab0c2;font-size:11px;font-weight:500;letter-spacing:-.01em}.dot{width:6px;height:6px;background:#4ade80;border-radius:50%;box-shadow:0 0 8px rgba(74,222,128,.6);animation:pulse-dot 2.5s infinite ease-in-out}@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.92)}}.topbar-button-group{display:inline-flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid #273544;border-radius:7px;padding:2px;gap:2px}.topbar-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:transparent;border:1px solid transparent;border-radius:5px;color:#d1dde8;font-size:11.5px;font-weight:500;cursor:pointer;transition:all 120ms ease;white-space:nowrap}.topbar-btn:hover:not(:disabled){background:rgba(255,255,255,.08);color:#fff}.topbar-btn:active:not(:disabled){background:rgba(255,255,255,.12);transform:translateY(1px)}.topbar-btn:disabled{opacity:.35;cursor:not-allowed}.quiet-button,.icon-button,.primary,.secondary{border:1px solid var(--line);background:#17212d;border-radius:10px;padding:9px 13px}.quiet-button{color:#bdc8d2;font-size:12px}.quiet-button:hover,.secondary:hover,.icon-button:hover{background:#202d3a}.page-title{margin:0 0 4px;font-size:24px;font-weight:570;letter-spacing:-.035em}.page-intro{color:var(--muted);margin:0 0 20px;font-size:13px}.workspace{display:grid;grid-template-columns:258px minmax(400px,1fr) 276px;gap:14px;align-items:stretch}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}.left-panel,.right-panel{padding:17px}.section-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8192a4;font-weight:700}.field-label{display:flex;justify-content:space-between;align-items:center;color:#b4c0ca;font-size:12px;margin:17px 0 7px}.field-label small{color:var(--muted);font-size:11px}.select-wrap{position:relative}.select-wrap:after{content:"⌄";position:absolute;right:12px;top:9px;color:#9babb9;pointer-events:none}.select-wrap select{appearance:none;width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:10px 32px 10px 11px}.file-input{display:none}.upload{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:9px;padding:9px;border:1px dashed #344556;background:transparent;color:#a9b8c5;border-radius:9px;font-size:12px}.upload:hover{border-color:#84bea5;color:var(--mint)}.divider{height:1px;background:var(--line);margin:18px 0}.transport{display:grid;grid-template-columns:1fr 1fr;gap:8px}.primary{background:var(--mint);color:#12251d;border-color:var(--mint);font-weight:680}.primary:hover{background:#c5f8df}.secondary{font-size:12px;color:#d8e0e8}.wide{grid-column:1/-1}.range-row{display:flex;gap:11px;align-items:center}.range-row input[type=range]{flex:1;accent-color:var(--mint)}.range-number{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:#d3ddd8}.speed-select{width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:9px}.hint{font-size:11px;color:#718295;line-height:1.55;margin-top:12px}.view-panel{position:relative;min-height:570px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}.view-head{position:absolute;z-index:2;left:18px;right:18px;top:17px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}.view-head>*{pointer-events:auto}.view-title{font-size:13px;font-weight:600}.view-caption{font-size:11px;color:var(--muted);margin-top:2px}.view-actions{display:flex;gap:7px}.icon-button{width:34px;height:34px;padding:0;color:#bac6d0}.icon-button svg{width:15px;height:15px;vertical-align:middle}.stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none}.overlay-bottom{position:absolute;left:18px;right:18px;bottom:16px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.overlay-bottom>*{pointer-events:auto}.legend{display:flex;gap:12px;color:#9eacb8;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.swatch{width:7px;height:7px;border-radius:50%;display:inline-block}.view-controls{display:flex;gap:6px}.view-controls button{font-size:10px;padding:6px 9px;background:#101a25c9;border:1px solid #344556;color:#aebbc6;border-radius:8px}.view-controls button.active{color:var(--mint);border-color:#517a67}.empty-state{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}.empty-symbol{font-size:42px;color:#587268;margin-bottom:7px}.empty-state strong{font-size:14px;font-weight:570}.empty-state span{font-size:12px;color:var(--muted);margin-top:5px}.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.stat{background:#0d151e;border:1px solid #202d3a;border-radius:10px;padding:11px 10px}.stat-value{font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.04em}.stat-label{font-size:10px;color:var(--muted);margin-top:2px}.inspector-section{border-top:1px solid var(--line);margin-top:16px;padding-top:15px}.inspector-title{font-size:12px;color:#c9d2db;font-weight:560}.inspector-copy{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}.node-list{margin-top:10px;max-height:155px;overflow:auto;scrollbar-color:#3a4b5a transparent;scrollbar-width:thin}.node-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1d2935;color:#aebbc6;font-size:10px}.node-row b{font-weight:500;color:#e0e7ed}.statusline{height:24px;margin-top:10px;color:#788a9a;font-size:11px;display:flex;justify-content:space-between}.statusline .message{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.statusline.error{color:#ffad9d}.footer{display:flex;justify-content:space-between;color:#667789;font-size:10px;margin-top:14px}.badge{padding:4px 7px;border-radius:6px;background:#1c2b25;color:#b6edcd;font-size:10px}
+    .shell{max-width:1680px;margin:auto;padding:14px 20px 20px}.topbar{display:flex;align-items:center;justify-content:space-between;height:42px;min-height:42px;padding:0 14px;background:linear-gradient(180deg,#181e26 0%,#11161d 100%);border:1px solid #283340;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06);user-select:none;-webkit-user-select:none;margin-bottom:12px}.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}.brand{display:flex;align-items:center;gap:8px;flex-shrink:0}.mark{width:26px;height:26px;border:1px solid #365c49;border-radius:7px;display:grid;place-items:center;background:linear-gradient(145deg,#1f3d32,#12251e);color:var(--mint);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 2px 4px rgba(0,0,0,.3)}.brand-name{font-size:13px;font-weight:650;letter-spacing:-.015em;color:#f0f4f8}.brand-tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;border-radius:4px;background:rgba(168,240,208,.12);color:var(--mint);border:1px solid rgba(168,240,208,.22)}.topbar-divider{width:1px;height:16px;background:#2a3644;flex-shrink:0}.doc-chip{display:flex;align-items:center;gap:7px;padding:4px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;font-size:12px;color:#c4d1de;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.doc-dot{width:6px;height:6px;border-radius:50%;background:#50e3a4;flex-shrink:0}.top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}.live-pill{display:flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid #273543;border-radius:6px;background:rgba(11,17,24,.75);color:#9ab0c2;font-size:11px;font-weight:500;letter-spacing:-.01em}.dot{width:6px;height:6px;background:#4ade80;border-radius:50%;box-shadow:0 0 8px rgba(74,222,128,.6);animation:pulse-dot 2.5s infinite ease-in-out}@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.92)}}.topbar-button-group{display:inline-flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid #273544;border-radius:7px;padding:2px;gap:2px}.topbar-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:transparent;border:1px solid transparent;border-radius:5px;color:#d1dde8;font-size:11.5px;font-weight:500;cursor:pointer;transition:all 120ms ease;white-space:nowrap}.topbar-btn:hover:not(:disabled){background:rgba(255,255,255,.08);color:#fff}.topbar-btn:active:not(:disabled){background:rgba(255,255,255,.12);transform:translateY(1px)}.topbar-btn:disabled{opacity:.35;cursor:not-allowed}.quiet-button,.icon-button,.primary,.secondary{border:1px solid var(--line);background:#17212d;border-radius:10px;padding:9px 13px}.quiet-button{color:#bdc8d2;font-size:12px}.quiet-button:hover,.secondary:hover,.icon-button:hover{background:#202d3a}.page-title{margin:0 0 4px;font-size:24px;font-weight:570;letter-spacing:-.035em}.page-intro{color:var(--muted);margin:0 0 20px;font-size:13px}.workspace{display:grid;grid-template-columns:258px minmax(400px,1fr) 276px;gap:14px;align-items:stretch}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}.left-panel,.right-panel{padding:17px}.section-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8192a4;font-weight:700}.field-label{display:flex;justify-content:space-between;align-items:center;color:#b4c0ca;font-size:12px;margin:17px 0 7px}.field-label small{color:var(--muted);font-size:11px}.select-wrap{position:relative}.select-wrap:after{content:"⌄";position:absolute;right:12px;top:9px;color:#9babb9;pointer-events:none}.select-wrap select{appearance:none;width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:10px 32px 10px 11px}.file-input{display:none}.upload{width:100%;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:9px;padding:9px;border:1px dashed #344556;background:transparent;color:#a9b8c5;border-radius:9px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.upload:hover{border-color:#84bea5;color:var(--mint)}.divider{height:1px;background:var(--line);margin:18px 0}.transport{display:grid;grid-template-columns:1fr 1fr;gap:8px}.primary{background:var(--mint);color:#12251d;border-color:var(--mint);font-weight:680}.primary:hover{background:#c5f8df}.secondary{font-size:12px;color:#d8e0e8}.wide{grid-column:1/-1}.range-row{display:flex;gap:11px;align-items:center}.range-row input[type=range]{flex:1;accent-color:var(--mint)}.range-number{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:#d3ddd8}.speed-select{width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:9px}.hint{font-size:11px;color:#718295;line-height:1.55;margin-top:12px}.view-panel{position:relative;min-height:570px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}.view-head{position:absolute;z-index:2;left:18px;right:18px;top:17px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}.view-head>*{pointer-events:auto}.view-title{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.view-caption{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}.view-actions{display:flex;gap:7px}.icon-button{width:34px;height:34px;padding:0;color:#bac6d0}.icon-button svg{width:15px;height:15px;vertical-align:middle}.stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none}.overlay-bottom{position:absolute;left:18px;right:18px;bottom:16px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.overlay-bottom>*{pointer-events:auto}.legend{display:flex;gap:12px;color:#9eacb8;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.swatch{width:7px;height:7px;border-radius:50%;display:inline-block}.view-controls{display:flex;gap:6px}.view-controls button{font-size:10px;padding:6px 9px;background:#101a25c9;border:1px solid #344556;color:#aebbc6;border-radius:8px}.view-controls button.active{color:var(--mint);border-color:#517a67}.empty-state{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}.empty-symbol{font-size:42px;color:#587268;margin-bottom:7px}.empty-state strong{font-size:14px;font-weight:570}.empty-state span{font-size:12px;color:var(--muted);margin-top:5px}.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.stat{background:#0d151e;border:1px solid #202d3a;border-radius:10px;padding:11px 10px}.stat-value{font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stat-label{font-size:10px;color:var(--muted);margin-top:2px}.inspector-section{border-top:1px solid var(--line);margin-top:16px;padding-top:15px}.inspector-title{font-size:12px;color:#c9d2db;font-weight:560}.inspector-copy{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}.node-list{margin-top:10px;max-height:155px;overflow:auto;scrollbar-color:#3a4b5a transparent;scrollbar-width:thin}.node-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1d2935;color:#aebbc6;font-size:10px}.node-row b{font-weight:500;color:#e0e7ed}.statusline{height:24px;margin-top:10px;color:#788a9a;font-size:11px;display:flex;justify-content:space-between;gap:10px}.statusline .message{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.statusline .elapsed{flex:none;width:58px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}.statusline.error{color:#ffad9d}.footer{display:flex;justify-content:space-between;color:#667789;font-size:10px;margin-top:14px}.badge{padding:4px 7px;border-radius:6px;background:#1c2b25;color:#b6edcd;font-size:10px}
     .color-scale{display:inline-block;height:7px;min-width:70px;flex:1;border-radius:5px}
     @media(max-width:1150px){.workspace{grid-template-columns:230px minmax(360px,1fr)}.right-panel{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:15px}.right-panel>.section-label{grid-column:1/-1}.inspector-section{margin-top:0}.view-panel{min-height:540px}}
     @media(max-width:760px){.shell{padding:15px}.topbar{margin-bottom:16px}.top-right .quiet-button{display:none}.workspace{grid-template-columns:1fr}.left-panel{order:2}.view-panel{order:1;min-height:60vh}.right-panel{order:3;grid-template-columns:1fr 1fr}.page-title{font-size:21px}.footer{gap:14px;flex-wrap:wrap}.statusline{margin-bottom:5px}}
@@ -27,10 +27,12 @@
     .timeline-slider-wrap input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#eafff4;border:3px solid var(--mint)}
     .timeline-cache-track{height:4px;border-radius:2px;background:#18222d;width:100%;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);transition:background 120ms ease}
     .timeline-readout{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;font-size:18px;color:#e6edf3;flex:none}
-    .timeline-readout #iterationValue{min-width:3.2ch;text-align:right}
+    .timeline-readout #iterationValue{flex:none;width:5ch;text-align:right;font-variant-numeric:tabular-nums}
     .timeline-sep{color:#5c6b7a}
     .timeline-readout input{width:84px;background:#0d151e;border:1px solid #2a3948;border-radius:8px;color:#d3ddd8;font-size:15px;padding:5px 8px;font-variant-numeric:tabular-nums}
-    .cache-badge{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid #2a3746;color:#9eb0c0;font-size:11px;font-weight:500;cursor:pointer;user-select:none;transition:all 120ms ease;white-space:nowrap}
+    .cache-badge{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid #2a3746;color:#9eb0c0;font-size:11px;font-weight:500;cursor:pointer;user-select:none;transition:all 120ms ease;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .cache-badge #cacheSummary{display:inline-block;width:106px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cache-badge #topbarCacheText{display:inline-block;width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .cache-badge:hover{background:rgba(255,255,255,.09);border-color:#3f536b;color:#e2ecf5}
     .cache-dot{width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 6px rgba(52,211,153,.55)}
     .cache-dot.partial{background:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,.55)}
@@ -79,9 +81,10 @@
     .drop-box svg{color:#34d399}
     .drop-title{font-size:17px;font-weight:650;color:#f0f5fa}
     .drop-sub{font-size:11.5px;color:#8ba0b2}
-    .timeline-rate{font-size:11px;color:#8aa0b3;min-width:92px;text-align:right;flex:none}
-    .iteration-progress{display:none;align-items:center;gap:8px;flex:1 0 100%;color:#8aa0b3;font-size:11px}
-    .iteration-progress.active{display:flex}
+    .timeline-rate{font-size:11px;color:#8aa0b3;flex:none;width:74px;min-height:1.45em;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+    .iteration-progress{display:flex;visibility:hidden;align-items:center;gap:8px;flex:1 0 100%;color:#8aa0b3;font-size:11px;font-variant-numeric:tabular-nums}
+    .iteration-progress.active{visibility:visible}
+    .iteration-progress #iterationProgressLabel{flex:none;width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .iteration-progress progress{flex:1;height:5px;accent-color:#65c7a5}
     #viewPanel:fullscreen .timeline{left:16px;right:16px;top:62px}
     @media(max-width:700px){.timeline{top:56px;gap:8px;padding:8px 10px}.timeline-label,.timeline-rate{display:none}}
@@ -356,15 +359,21 @@
         this.sortedIters = [];
         this.activeExp = null;
         this.fetchingIters = new Set();
+        this.requestedIteration = null;
         this.MAX_RAM_FRAMES = maxRam;
       }
       get size() { return this.index.size; }
       has(it) { return this.index.has(it) || this.ramCache.has(it); }
       get(it) {
         if (this.ramCache.has(it)) {
+          this.requestedIteration = null;
           this._touch(it);
           return this.ramCache.get(it);
         }
+        // The nearest resident frame stands in while the exact one streams
+        // from the cache database. Remember the frame the view asked for so
+        // the restored one replaces the stand-in as soon as it arrives.
+        this.requestedIteration = it;
         void this.streamFromDisk(it);
         return this.getClosestInRam(it);
       }
@@ -387,6 +396,7 @@
         this.accessOrder = [];
         this.sortedIters = [];
         this.fetchingIters.clear();
+        this.requestedIteration = null;
       }
       keys() { return this.index.keys(); }
       values() { return this.ramCache.values(); }
@@ -427,9 +437,9 @@
         this.accessOrder.push(it);
       }
 
-      _enforceRamLimit() {
+      _enforceRamLimit(center = state.iteration || 0) {
         if (this.ramCache.size <= this.MAX_RAM_FRAMES) return;
-        const current = state.iteration || 0;
+        const current = center;
         while (this.ramCache.size > this.MAX_RAM_FRAMES && this.accessOrder.length > 0) {
           let furthestIter = null, maxDist = -1;
           for (const it of this.ramCache.keys()) {
@@ -507,8 +517,9 @@
             };
             this.ramCache.set(iteration, frame);
             this._touch(iteration);
-            this._enforceRamLimit();
-            if (state.iteration === iteration || (state.scrubbing && state.progressTarget === iteration)) {
+            this._enforceRamLimit(iteration);
+            if (this.requestedIteration === iteration || state.iteration === iteration || (state.scrubbing && state.progressTarget === iteration)) {
+              if (this.requestedIteration === iteration) this.requestedIteration = null;
               updateModel(frame, '', true);
               draw();
             }
@@ -594,7 +605,7 @@
     let ogCameraDistance = 5;
     let ogInitialCamera = { yaw: 0, pitch: 60*Math.PI/180 };
     const canvas = $('stage'), ctx = canvas.getContext('2d');
-    const state = { nodes: [], cells: [], edges: [], slicePlots: [], sliceSurface: false, boxGrid: {spacing:0,count:0}, iteration: 0, simulatedTime: 0, max: 120, maxPinned: false, scrubbing: false, pendingIterationTarget: null, progressTarget: null, msPerIteration: 0, rateText: '', keyboardIterationBatch:1, yaw: 0, pitch: 60*Math.PI/180, cameraDistance: 5, cameraShiftX: 0, cameraShiftY: 0, zoom: 1, panX: 0, panY: 0, playing: false, busy: false, colorMode: 'type', paletteMode: 'multi', pointScale: 1, radiusMode: 'add', ballMode: 'cylinders', nodeFilter: 'all', fixedOnly: false, showNodes: true, showApical: true, showBasal: true, showFixed: true, showBox: true, showGrid: false, showEggshell: false, showEllipses: false, showTransparentSpheres: false, showArrows: false, arrowField: 'type', sphereField: 'type', arrowScale: 1, sphereScale: 1, mechanicalArrowField:'scalar:x', otherArrowField:'type', mechanicalSphereField:'scalar:x', otherSphereField:'type', mechanicalColorField:'scalar:x', otherColorField:'type', showEpithelium: true, showMesenchyme: true, showECM: true, showCentroids: false, showPolarization: false, showDisplacement: false, showUnitMovement: false, showMovementVectors: false, showRepulsion: false, showLateralForce: false, showAxialForce: false, selected: null, selectionHistory: [], copiedNodeProperty: null, copiedCellProperty: null, cursor: null, cursorInitialized: false, cursorEnabled: false, dragDelta: null, temporalPlotsEnabled: true, geneSamples: [], plottedNodeIds: [], plottedGenes: [], inputText: null, fileName: null, lastSnapshot: null, timer: null, statusTimer: null, frame: [], bounds: null, colorLimits: {}, customColorLimits: {}, customArrowLimits: {}, customSphereLimits: {}, section: 'off', sectionFraction: 0, fixedSections: false, sectionBounds: null, dragMode: 'rotate', drawQueued: false, depthDirty: true };
+    const state = { nodes: [], cells: [], edges: [], slicePlots: [], sliceSurface: false, boxGrid: {spacing:0,count:0}, iteration: 0, simulatedTime: 0, max: 120, maxPinned: false, scrubbing: false, pendingIterationTarget: null, progressTarget: null, rewindTarget: null, pendingDisplay: null, scrubEpoch: 0, serverIteration: 0, msPerIteration: 0, rateText: '', keyboardIterationBatch:1, yaw: 0, pitch: 60*Math.PI/180, cameraDistance: 5, cameraShiftX: 0, cameraShiftY: 0, zoom: 1, panX: 0, panY: 0, playing: false, busy: false, colorMode: 'type', paletteMode: 'multi', pointScale: 1, radiusMode: 'add', ballMode: 'cylinders', nodeFilter: 'all', fixedOnly: false, showNodes: true, showApical: true, showBasal: true, showFixed: true, showBox: true, showGrid: false, showEggshell: false, showEllipses: false, showTransparentSpheres: false, showArrows: false, arrowField: 'type', sphereField: 'type', arrowScale: 1, sphereScale: 1, mechanicalArrowField:'scalar:x', otherArrowField:'type', mechanicalSphereField:'scalar:x', otherSphereField:'type', mechanicalColorField:'scalar:x', otherColorField:'type', showEpithelium: true, showMesenchyme: true, showECM: true, showCentroids: false, showPolarization: false, showDisplacement: false, showUnitMovement: false, showMovementVectors: false, showRepulsion: false, showLateralForce: false, showAxialForce: false, selected: null, selectionHistory: [], copiedNodeProperty: null, copiedCellProperty: null, cursor: null, cursorInitialized: false, cursorEnabled: false, dragDelta: null, temporalPlotsEnabled: true, geneSamples: [], plottedNodeIds: [], plottedGenes: [], inputText: null, fileName: null, lastSnapshot: null, timer: null, statusTimer: null, frame: [], bounds: null, colorLimits: {}, customColorLimits: {}, customArrowLimits: {}, customSphereLimits: {}, section: 'off', sectionFraction: 0, fixedSections: false, sectionBounds: null, dragMode: 'rotate', drawQueued: false, depthDirty: true };
     window.state = state;
     Object.assign(state,{periodicSnapshots:false,snapshotFrequency:1000,outputLabel:'',saveImages:false,movieRecorder:null,movieChunks:[],movieEnd:0,lastOutputIteration:-1,leftMouseAdjustment:null,middleMouseAdjustment:null,activeMouseAdjustment:null,trajectoryFrames:new FrameStorage(),isTrajectoryMode:false,minIteration:0});
     state.showSprings = false;state.showCylinders=true;state.smallBalls=false;state.noBalls=false;
@@ -646,7 +657,27 @@
       window.embryomakerDisplayConfig={values,flags,source,propertyForCode:property};
       return window.embryomakerDisplayConfig;
     }
-    const setStatus = (message, error=false, elapsed='') => { const el=$('status'); clearTimeout(state.statusTimer); el.classList.add('visible'); el.classList.toggle('error',error); el.querySelector('.message').textContent=message; el.querySelector('.elapsed').textContent=elapsed; if(!error)state.statusTimer=setTimeout(()=>el.classList.remove('visible'),1800); };
+    // Readouts that refresh every batch sit in fixed-width boxes, so a count that
+    // gains a digit must not widen them: anything past four digits switches to
+    // significant digits and the exact value moves into the tooltip. Flexible
+    // prose keeps full precision, since it can ellipsize on its own line.
+    const exactCount = value => (Number(value) || 0).toLocaleString();
+    const compactCount = value => {
+      const n = Math.round(Number(value) || 0), magnitude = Math.abs(n);
+      if (magnitude < 10000) return n.toLocaleString();
+      if (magnitude < 1e6) return `${(n / 1e3).toFixed(magnitude < 1e5 ? 1 : 0)}k`;
+      if (magnitude < 1e9) return `${(n / 1e6).toFixed(magnitude < 1e8 ? 1 : 0)}M`;
+      return `${(n / 1e9).toFixed(1)}B`;
+    };
+    const formatRate = rate => { const n = Number(rate) || 0; return `${n < 1000 ? n.toFixed(n < 100 ? 1 : 0) : compactCount(n)} it/s`; };
+    const setCountText = (id, value) => {
+      const el = $(id); if (!el) return;
+      const text = compactCount(value); el.textContent = text;
+      if (text === exactCount(value)) el.removeAttribute('title'); else el.title = exactCount(value);
+    };
+    function updateViewCaption() { const caption = `Iteration ${exactCount(state.iteration)} · ${exactCount(state.nodes.length)} nodes · drag to ${state.dragMode}`; const el = $('viewCaption'); el.textContent = caption; el.title = caption; }
+    const setUploadLabel = name => { const el = $('uploadLabel'); if (!el) return; const text = name || 'Load input file'; el.textContent = text; el.title = text; };
+    const setStatus = (message, error=false, elapsed='') => { const el=$('status'); clearTimeout(state.statusTimer); el.classList.add('visible'); el.classList.toggle('error',error); const messageEl=el.querySelector('.message'); messageEl.textContent=message; messageEl.title=message; el.querySelector('.elapsed').textContent=elapsed; if(!error)state.statusTimer=setTimeout(()=>el.classList.remove('visible'),1800); };
     const fitCanvas = () => { const rect=canvas.getBoundingClientRect(), dpr=Math.min(devicePixelRatio||1,2); canvas.width=Math.max(1,Math.round(rect.width*dpr)); canvas.height=Math.max(1,Math.round(rect.height*dpr)); ctx.setTransform(dpr,0,0,dpr,0,0); draw(); };
     const projectPosition = (n, bounds, w, h) => {
       const yaw=state.yaw,pitch=state.pitch,cz=Math.cos(yaw),sz=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),ax=Math.cos(yaw),ay=-Math.sin(yaw),dot=ax*n.x+ay*n.y;
@@ -781,7 +812,10 @@
     function updateModel(data, elapsed='', isReplay=false) {
       const selectedNodeId=state.selected,selectedNodeField=$('nodeProperty')?.value||'x',selectedCellField=$('cellProperty')?.value||'phase';
       data.experiment=data.experiment||(state.inputText!==null?(state.fileName||'custom'):$('experiment').value);
-      state.nodes=data.nodes; state.cells=data.cells||[]; state.edges=data.edges||[]; state.boxGrid=data.boxGrid||state.boxGrid; state.iteration=data.iterations; state.simulatedTime=data.simulatedTime??state.simulatedTime; state.session=data.session||state.session;
+      state.nodes=data.nodes; state.cells=data.cells||[]; state.edges=data.edges||[]; state.boxGrid=data.boxGrid||state.boxGrid; state.iteration=data.iterations;
+      // Where the physics actually stands. A cache replay moves the view without
+      // moving the solver, and a scrub can leave the two on different iterations.
+      if(!isReplay)state.serverIteration=data.iterations; state.simulatedTime=data.simulatedTime??state.simulatedTime; state.session=data.session||state.session;
       const geneOptions=$('geneColorOptions');geneOptions.textContent='';for(let gene=1;gene<=data.geneCount;gene++){const option=document.createElement('option');option.value=`scalar:gene_${gene}`;option.textContent=`Amount of regulatory molecule ${gene}`;geneOptions.append(option);}if(state.colorMode.startsWith('scalar:gene_')&&Number(state.colorMode.slice(12))>data.geneCount)state.colorMode='type';$('colorMode').value=state.colorMode;populateOgPropertyMenus();
       state.lastSnapshot=data; state.selected=null;
       let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity,minRadius=Infinity,maxRadius=-Infinity;const cells=new Set(),types=new Set();
@@ -795,11 +829,11 @@
       state.frame=state.nodes.map(n=>({n,x:0,y:0,z:0,r:0,perspective:1,visible:true}));
       refreshColorRange();updateLegend();
       state.depthDirty=true;
-      $('emptyState').style.display='none'; $('viewTitle').textContent=data.experiment; if($('activeModelChip'))$('activeModelChip').textContent=data.experiment;
-      $('viewCaption').textContent=`Iteration ${data.iterations.toLocaleString()} · ${data.count.toLocaleString()} nodes · drag to ${state.dragMode}`;
+      $('emptyState').style.display='none'; $('viewTitle').textContent=data.experiment; $('viewTitle').title=data.experiment; if($('activeModelChip')){$('activeModelChip').textContent=data.experiment;$('activeModelChip').title=`Active model · ${data.experiment}`;}
+      updateViewCaption();
       syncTimeline();
-      $('nodeCount').textContent=data.count.toLocaleString();
-      $('cellCount').textContent=cells.size.toLocaleString(); $('modelStep').textContent=data.iterations.toLocaleString(); $('typeCount').textContent=types.size.toLocaleString();
+      setCountText('nodeCount',data.count);
+      setCountText('cellCount',cells.size); setCountText('modelStep',data.iterations); setCountText('typeCount',types.size);
       $('modelReadout').textContent=`${data.experiment} has ${data.count.toLocaleString()} nodes across ${cells.size.toLocaleString()} cells.`;
       $('sectionPosition').disabled=state.section==='off';
       if(!isReplay&&data&&typeof data.iterations==='number'){persistFrame(data);}
@@ -990,7 +1024,8 @@
       const tooltip=`Calculated: ${formatSpans(cachedSpans)} · Uncalculated: ${formatSpans(uncalculatedSpans)} · Click to manage`;
       const badgeSummary=$('cacheSummary');if(badgeSummary)badgeSummary.textContent=summaryText;
       const cacheDot=$('cacheDot');if(cacheDot)cacheDot.className=`cache-dot ${dotState}`.trim();
-      const badge=$('cacheBadge');if(badge)badge.title=tooltip;
+      const badge=$('cacheBadge');if(badge)badge.title=`${summaryText} · ${tooltip}`;
+      const topbarBadge=$('topbarCacheBadge');if(topbarBadge)topbarBadge.title=`${summaryText} · click to view the simulation cache`;
       const topbarText=$('topbarCacheText');if(topbarText)topbarText.textContent=`Cache: ${summaryText}`;
       const topbarDot=$('topbarCacheDot');if(topbarDot)topbarDot.className=`cache-dot ${dotState}`.trim();
       const modal=$('cacheModal');
@@ -1102,7 +1137,7 @@
     function downloadBlob(blob,name){const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);}
     async function saveSnapshotToOutput(){const data=await sendSession({label:state.outputLabel},`/api/session/${state.session}/save`);setStatus(`Saved iteration ${data.iteration} to ${data.path}.`);}
     async function outputImage(iteration){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));const gl=$('stageGL'),overlay=$('stage'),capture=document.createElement('canvas');capture.width=gl.width;capture.height=gl.height;const context=capture.getContext('2d');context.drawImage(gl,0,0);context.drawImage(overlay,0,0);const blob=await new Promise(resolve=>capture.toBlob(resolve,'image/png'));if(!blob)throw Error('Could not capture the current view as a PNG');const image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the captured PNG'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.outputLabel,image},`/api/session/${state.session}/save-image`);setStatus(`Saved image for iteration ${iteration} to ${result.path}.`);}
-    function toggleMovie(){if(state.movieRecorder){const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();return;}const end=Number(window.prompt('Save movie until which iteration?',String(Math.max(state.iteration+1,state.iteration+state.snapshotFrequency*10))));if(!Number.isInteger(end)||end<=state.iteration){setStatus('Enter an iteration after the current time.',true);return;}if(typeof $('stageGL').captureStream!=='function'||typeof MediaRecorder==='undefined'){setStatus('Movie recording is unavailable in this browser.',true);return;}try{const stream=$('stageGL').captureStream(20),track=stream.getVideoTracks()[0];state.movieChunks=[];state.movieEnd=end;state.movieLabel=`${state.outputLabel||'embryomaker'}_${Date.now()}`;state.max=Math.max(state.max,end);$('iterationRange').max=state.max;$('iterationReadout').textContent=`${state.iteration} / ${state.max}`;state.movieTrack=track;const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';state.movieRecorder=new MediaRecorder(stream,{mimeType});state.movieRecorder.ondataavailable=event=>{if(event.data.size)state.movieChunks.push(event.data);};state.movieRecorder.onstop=async()=>{const blob=new Blob(state.movieChunks,{type:mimeType});stream.getTracks().forEach(item=>item.stop());state.movieTrack=null;state.movieChunks=[];try{const movie=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the movie recording'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.movieLabel,movie},`/api/session/${state.session}/save-movie`);setStatus(`Saved movie to ${result.path}.`);}catch(error){downloadBlob(blob,`${state.movieLabel}.webm`);setStatus(`GIF conversion failed. Saved WebM movie instead: ${error.message}`,true);}};state.movieRecorder.start();setStatus(`Movie recording through iteration ${end}.`);}catch(error){state.movieRecorder=null;setStatus(`Could not start movie recording: ${error.message}`,true);}}
+    function toggleMovie(){if(state.movieRecorder){const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();return;}const end=Number(window.prompt('Save movie until which iteration?',String(Math.max(state.iteration+1,state.iteration+state.snapshotFrequency*10))));if(!Number.isInteger(end)||end<=state.iteration){setStatus('Enter an iteration after the current time.',true);return;}if(typeof $('stageGL').captureStream!=='function'||typeof MediaRecorder==='undefined'){setStatus('Movie recording is unavailable in this browser.',true);return;}try{const stream=$('stageGL').captureStream(20),track=stream.getVideoTracks()[0];state.movieChunks=[];state.movieEnd=end;state.movieLabel=`${state.outputLabel||'embryomaker'}_${Date.now()}`;state.max=Math.max(state.max,end);$('iterationRange').max=state.max;$('iterationReadout').textContent=`${compactCount(state.iteration)} / ${compactCount(state.max)}`;$('iterationReadout').title=`Recorded range · iteration ${exactCount(state.iteration)} of ${exactCount(state.max)}`;state.movieTrack=track;const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';state.movieRecorder=new MediaRecorder(stream,{mimeType});state.movieRecorder.ondataavailable=event=>{if(event.data.size)state.movieChunks.push(event.data);};state.movieRecorder.onstop=async()=>{const blob=new Blob(state.movieChunks,{type:mimeType});stream.getTracks().forEach(item=>item.stop());state.movieTrack=null;state.movieChunks=[];try{const movie=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the movie recording'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.movieLabel,movie},`/api/session/${state.session}/save-movie`);setStatus(`Saved movie to ${result.path}.`);}catch(error){downloadBlob(blob,`${state.movieLabel}.webm`);setStatus(`GIF conversion failed. Saved WebM movie instead: ${error.message}`,true);}};state.movieRecorder.start();setStatus(`Movie recording through iteration ${end}.`);}catch(error){state.movieRecorder=null;setStatus(`Could not start movie recording: ${error.message}`,true);}}
     async function handleOutputIteration(iteration){const frequency=Math.max(1,state.snapshotFrequency),atFrequency=iteration%frequency===0;if(atFrequency&&state.periodicSnapshots)await saveSnapshotToOutput();if(atFrequency&&state.saveImages)await outputImage(iteration);if(state.movieRecorder){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));await new Promise(resolve=>setTimeout(resolve,60));if(iteration>=state.movieEnd){await new Promise(resolve=>setTimeout(resolve,100));const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();}}}
     async function runAt(iteration,restart=false) {
       if(state.isTrajectoryMode){
@@ -1121,11 +1156,24 @@
           return true;
         }
       }
-      if(state.busy){state.pendingIterationTarget=Math.max(0,Math.floor(iteration));return true;} state.busy=true; clearTimeout(state.timer);state.pendingIterationTarget=null;state.progressTarget=iteration;
+      if(state.busy){
+        const requested=Math.max(0,Math.floor(iteration));
+        // A running batch can only move forward, so a target behind it is a
+        // rewind: hold it until the batch ends and then restart from a
+        // checkpoint. Dropping it left the slider snapping back to the batch.
+        if(requested<state.iteration){state.rewindTarget=requested;state.pendingIterationTarget=null;}
+        else state.pendingIterationTarget=requested;
+        return true;
+      }
+      state.busy=true; clearTimeout(state.timer);state.pendingIterationTarget=null;state.rewindTarget=null;state.progressTarget=iteration;
+      const epoch=state.scrubEpoch;
       $('pauseBtn').disabled=false; $('runBtn').disabled=true; $('stepBtn').disabled=true; $('exportBtn').disabled=true;
       setStatus('Running Flow simulation…'); const started=performance.now(); let succeeded=true;syncIterationProgress();
       try {
-        const rewinding=!restart&&Boolean(state.session)&&iteration<state.iteration;
+        const rewinding=!restart&&Boolean(state.session)&&iteration<state.serverIteration;
+        // Show the requested iteration while the rewind runs instead of letting
+        // the slider bounce back to the batch it is replacing.
+        if(rewinding)state.pendingDisplay=iteration;
         if(restart||!state.session||rewinding) {
           let body={};
           if(state.inputText!==null){body.inputText=state.inputText;body.fileName=state.fileName;}
@@ -1137,6 +1185,7 @@
             }
           }
           const initial=await sendSession(body);
+          if(epoch!==state.scrubEpoch){state.serverIteration=initial.iterations;return true;}
           if(!rewinding&&restart){state.selected=null;state.selectionHistory=[];state.selectionMode=null;state.cursorEnabled=false;state.cursorInitialized=false;state.cursor=null;state.temporalPlotsEnabled=true;state.geneSamples=[];state.plottedNodeIds=[];state.plottedGenes=[];state.slicePlots=[];state.sliceSurface=false;state.fixedSections=false;state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};state.sectionBounds=null;state.section='off';state.sectionFraction=0;state.max=Math.max(120,initial.iterations+120);state.maxPinned=false;state.msPerIteration=0;state.rateText='';$('genePlotPanel').hidden=true;$('sectionPlane').value='off';$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';resetCamera();setDragMode('rotate');}
           updateModel(initial,`${((performance.now()-started)/1000).toFixed(1)} s`);
         }
@@ -1152,12 +1201,15 @@
           }
           const includeSnapshot=(state.periodicSnapshots&&next%frequency===0)||next===iteration;
           const data=await sendSession({steps:next-state.iteration,includeSnapshot},`/api/session/${state.session}/advance`);
+          if(epoch!==state.scrubEpoch){state.serverIteration=data.iterations;break;}
           updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);
           syncIterationProgress();
           if(next%frequency===0)await handleOutputIteration(next);
         }
       } catch(e) { succeeded=false; setStatus(e.message,true); }
-      finally { state.busy=false;state.progressTarget=null;state.pendingIterationTarget=null;syncIterationProgress();$('runBtn').disabled=false; $('stepBtn').disabled=false; $('pauseBtn').disabled=!state.playing; $('exportBtn').disabled=!state.lastSnapshot; flushQueuedRestart(); }
+      finally { state.busy=false;state.progressTarget=null;state.pendingIterationTarget=null;state.pendingDisplay=null;syncIterationProgress();$('runBtn').disabled=false; $('stepBtn').disabled=false; $('pauseBtn').disabled=!state.playing; $('exportBtn').disabled=!state.lastSnapshot;
+        if(restartQueued){state.rewindTarget=null;flushQueuedRestart();}
+        else{const rewind=state.rewindTarget;state.rewindTarget=null;if(rewind!==null)void runAt(rewind);} }
       return succeeded;
     }
     async function runMenuIterations(count){
@@ -1192,14 +1244,19 @@
       const range=$('iterationRange');if(Number(range.max)!==state.max)range.max=state.max;
       if(!state.scrubbing)range.value=Math.min(state.iteration,state.max);
       range.style.setProperty('--fill',`${(Number(range.value)/Math.max(1,state.max))*100}%`);
-      $('iterationValue').textContent=state.scrubbing?Number(range.value):state.iteration;
+      // A queued or running rewind owns the readout until it lands, so the
+      // slider does not snap back to the batch the user just scrubbed away from.
+      const shownIteration=state.scrubbing?Number(range.value):(state.rewindTarget??state.pendingDisplay??state.iteration);
+      setCountText('iterationValue',shownIteration);
+      if(!state.scrubbing&&state.rewindTarget!==null)range.value=Math.min(state.rewindTarget,state.max);
       const maxInput=$('iterationMax');if(document.activeElement!==maxInput&&Number(maxInput.value)!==state.max)maxInput.value=state.max;
-      $('iterationReadout').textContent=state.playing&&state.rateText?state.rateText:'';
+      const rate=state.playing&&state.rateText?state.rateText:'';
+      const rateEl=$('iterationReadout');rateEl.textContent=rate;rateEl.title=rate?`Measured rate · ${rate}`:'';
       range.setAttribute('aria-valuetext',`Iteration ${range.value} of ${state.max}`);
       const playButton=$('timelinePlay');playButton.setAttribute('aria-label',state.playing?'Pause simulation':'Run simulation');playButton.setAttribute('aria-pressed',String(state.playing));playButton.innerHTML=state.playing?'&#10074;&#10074;':'&#9654;';playButton.classList.toggle('playing',state.playing);
       if(!state.scrubbing)updateCacheVisuals();
     }
-    function syncIterationProgress(){const panel=$('iterationProgress'),bar=$('iterationProgressBar'),label=$('iterationProgressLabel');if(!panel)return;const target=state.progressTarget;panel.classList.toggle('active',state.busy&&target!==null);if(target===null)return;bar.max=Math.max(1,target);bar.value=Math.min(state.iteration,target);label.textContent=`Iteration ${Math.min(state.iteration,target)} of ${target}`;}
+    function syncIterationProgress(){const panel=$('iterationProgress'),bar=$('iterationProgressBar'),label=$('iterationProgressLabel');if(!panel)return;const target=state.progressTarget;panel.classList.toggle('active',state.busy&&target!==null);if(target===null)return;const done=Math.min(state.iteration,target);bar.max=Math.max(1,target);bar.value=done;label.textContent=`Iteration ${compactCount(done)} of ${compactCount(target)}`;label.title=`Iteration ${exactCount(done)} of ${exactCount(target)}`;}
     function stop(){state.playing=false;clearTimeout(state.timer);if(state.busy)state.pendingIterationTarget=state.iteration;$('pauseBtn').disabled=true;setStatus(state.busy?'Pausing after the current batch.':`Paused at iteration ${state.iteration}.`);syncTimeline();}
     // Play modes: slow waits 300 ms between single iterations, frame runs one
     // iteration per screen update, fast and max batch several iterations per
@@ -1227,9 +1284,12 @@
               nextIter = null;
             }
           }
-        } else if (state.isTrajectoryMode || (state.iteration >= state.max && iters.length > 1)) {
+        } else if (state.isTrajectoryMode) {
+          // Only a packaged trajectory loops back to its first frame. A live run
+          // that reaches its target keeps computing: rewinding it to the start
+          // threw the calculation away and dragged the slider back with it.
           if (!state.maxPinned) {
-            const minIt = state.isTrajectoryMode ? state.minIteration : iters[0];
+            const minIt = state.minIteration;
             state.iteration = minIt;
             const f0 = state.trajectoryFrames.get(minIt);
             if (f0) updateModel(f0, '', true);
@@ -1283,7 +1343,7 @@
       if (advanced > 0) {
         const per = elapsed / advanced;
         state.msPerIteration = state.msPerIteration ? 0.7 * state.msPerIteration + 0.3 * per : per;
-        state.rateText = `${(1000 / per).toFixed(per > 100 ? 1 : 0)} it/s`;
+        state.rateText = formatRate(1000 / per);
       }
       if (!ok) { state.playing = false; $('pauseBtn').disabled = true; syncTimeline(); return; }
       if (!state.playing) { syncTimeline(); return; }
@@ -1315,7 +1375,7 @@
     function scrubInstant(target){
       const range=$('iterationRange');
       range.style.setProperty('--fill',`${(target/Math.max(1,state.max))*100}%`);
-      $('iterationValue').textContent=target;
+      setCountText('iterationValue',target);
       if(state.trajectoryFrames.size>0){
         state.trajectoryFrames.prefetchAround(target,5);
         const closestIt=state.trajectoryFrames.findClosestIteration(target);
@@ -1335,17 +1395,24 @@
       range.addEventListener('input',()=>{
         state.scrubbing=true;
         if(state.playing)stop();
+        // Take the view away from any batch already in flight. The batch keeps
+        // its request open, so without this its result lands a moment later and
+        // drags the slider back to where the calculation had got to.
+        state.scrubEpoch++;
+        state.pendingIterationTarget=state.iteration;
         const target=Number(range.value);
         scrubInstant(target);
       });
       range.addEventListener('change',()=>{
         state.scrubbing=false;
+        state.scrubEpoch++;
         const target=Number(range.value);
         if(!scrubInstant(target)){
           if(target!==state.iteration){
-            state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;void runAt(target);
+            state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;state.rewindTarget=target<state.iteration?target:null;void runAt(target);
           } else syncTimeline();
         } else {
+          state.rewindTarget=null;
           syncTimeline();
         }
       });
@@ -1354,9 +1421,13 @@
     }
     function loadProjectData(proj, fileName='Project'){
       if(!proj.frames||!proj.frames.length)throw Error('Project has no snapshot frames');
+      const experiment=proj.name||fileName;
       state.trajectoryFrames.clear();
+      // Frames past the RAM budget stream back from the cache database, so the
+      // store has to look them up under this project's experiment key.
+      state.trajectoryFrames.activeExp=experiment;
       for(const f of proj.frames){
-        f.experiment=proj.name||fileName;
+        f.experiment=experiment;
         state.trajectoryFrames.set(f.iterations,f);
         queueFramePersist(f);
       }
@@ -1398,9 +1469,14 @@
           if($('paletteMode'))$('paletteMode').value=proj.display.paletteMode;
         }
         if(proj.display.pointScale!==undefined){
-          state.pointScale=proj.display.pointScale;
-          if($('pointScale'))$('pointScale').value=proj.display.pointScale;
-          if($('pointScaleReadout'))$('pointScaleReadout').value=`${proj.display.pointScale}%`;
+          // Bundles saved here store the multiplier (1 = 100%); older bundles
+          // stored the slider's percentage, which drew nodes 100x too big.
+          const stored=Number(proj.display.pointScale);
+          const scale=Number.isFinite(stored)&&stored>0?(stored>10?stored/100:stored):1;
+          const percent=Math.round(scale*100);
+          state.pointScale=scale;
+          if($('pointScale'))$('pointScale').value=String(percent);
+          if($('pointScaleReadout'))$('pointScaleReadout').value=`${percent}%`;
         }
         if(proj.display.showNodes!==undefined){
           state.showNodes=proj.display.showNodes;
@@ -1411,9 +1487,9 @@
       range.min=state.minIteration;
       range.max=state.max;
       range.value=state.minIteration;
-      $('iterationValue').textContent=state.minIteration;
+      setCountText('iterationValue',state.minIteration);
       $('iterationMax').value=state.max;
-      $('uploadLabel').textContent=fileName;
+      setUploadLabel(fileName);
       if($('saveProjBtn'))$('saveProjBtn').disabled=false;
       if($('exportTrajBtn'))$('exportTrajBtn').disabled=false;
       state.playing=false;
@@ -1525,7 +1601,7 @@
     });
     $('experiment').addEventListener('change',async()=>{
       if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;
-      state.inputText=null;state.fileName=null;$('uploadLabel').textContent='Load input file';
+      state.inputText=null;state.fileName=null;setUploadLabel('');
       state.trajectoryFrames.clear();
       setStatus('Loading model…');
       requestModelRestart();
@@ -1558,11 +1634,11 @@
       }
       state.isTrajectoryMode=false;
       const inputText=text,previousInput=state.inputText,previousName=state.fileName;
-      state.inputText=inputText;state.fileName=file.name;$('uploadLabel').textContent=file.name;state.playing=false;
+      state.inputText=inputText;state.fileName=file.name;setUploadLabel(file.name);state.playing=false;
       const cacheSnapshot=state.trajectoryFrames.snapshotCache();
       state.trajectoryFrames.clear();
       if(!await runAt(0,true)){
-        state.inputText=previousInput;state.fileName=previousName;$('uploadLabel').textContent=previousName||'Load input file';
+        state.inputText=previousInput;state.fileName=previousName;setUploadLabel(previousName);
         state.trajectoryFrames.restore(cacheSnapshot);
       }
     });
@@ -1600,7 +1676,7 @@
     $('nodeProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected);if(node)$('nodeValue').value=node[$('nodeProperty').value]??0;});$('cellProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected),cell=state.cells.find(item=>item.id===node?.cell);if(cell)$('cellValue').value=cell[$('cellProperty').value]??0;});
     $('applyCellEdit').addEventListener('click',async()=>{const selected=state.nodes.find(n=>n.id===state.selected),cellId=selected?.cell,field=$('cellProperty').value,value=Number($('cellValue').value);if(!cellId||!Number.isFinite(value))return;try{const data=await sendSession({cellId,field,value},`/api/session/${state.session}/cell-edit`);updateModel(data);setStatus(`Updated cell ${cellId}.`);draw();}catch(e){setStatus(e.message,true);}});
     $('applyNodeEdit').addEventListener('click',async()=>{const nodeId=state.selected,field=$('nodeProperty').value,value=Number($('nodeValue').value);if(!nodeId||!Number.isFinite(value))return;try{const data=await sendSession({nodeId,field,value},`/api/session/${state.session}/edit`);updateModel(data);setStatus(`Updated node ${nodeId}.`);draw();}catch(e){setStatus(e.message,true);}});
-    function setDragMode(mode){state.dragMode=mode;state.leftMouseAdjustment=null;for(const name of ['pan','rotate','zoom'])$(`${name}Mode`).classList.toggle('active',name===mode);$('viewCaption').textContent=`Iteration ${state.iteration.toLocaleString()} · ${state.nodes.length.toLocaleString()} nodes · drag to ${mode}`;draw();}
+    function setDragMode(mode){state.dragMode=mode;state.leftMouseAdjustment=null;for(const name of ['pan','rotate','zoom'])$(`${name}Mode`).classList.toggle('active',name===mode);updateViewCaption();draw();}
     function setOgMouseAdjustment(channel,kind,button){const property=channel==='color'?state.colorMode:channel==='arrow'?state.arrowField:state.sphereField;const adjustment={channel,kind,property};if(button==='left')state.leftMouseAdjustment=adjustment;else state.middleMouseAdjustment=adjustment;setStatus(`Drag the ${button} mouse button vertically to adjust ${channel} ${kind==='scale'?'scale':kind} for ${property}.`);}
     function setOgMouseRange(channel){const property=channel==='color'?state.colorMode:channel==='arrow'?state.arrowField:state.sphereField;const range=visualizationRange(property,channel);const minimum=window.prompt(`Minimum ${channel} value for ${property}`,String(range[0]));if(minimum===null)return;const maximum=window.prompt(`Maximum ${channel} value for ${property}`,String(range[1]));if(maximum===null)return;const lo=Number(minimum),hi=Number(maximum);if(!Number.isFinite(lo)||!Number.isFinite(hi)||hi<=lo){setStatus('Enter a finite minimum below the maximum.',true);return;}const store=channel==='arrow'?state.customArrowLimits:channel==='sphere'?state.customSphereLimits:state.customColorLimits;const rangeKey=property==='cells'?'cell':visualizationField(property);store[rangeKey]=[lo,hi];syncOgColorRanges();if(channel==='color')updateLegend();draw();setStatus(`Set ${channel} range to ${lo} through ${hi}.`);}
     function applyOgMouseAdjustment(dy,adjustment){const {channel,kind,property}=adjustment;if(kind==='scale'){const value=adjustment.initialScale-.1*adjustment.initialScale*dy;if(channel==='arrow')state.arrowScale=value;else state.sphereScale=value;}else{const store=channel==='arrow'?state.customArrowLimits:channel==='sphere'?state.customSphereLimits:state.customColorLimits,rangeKey=property==='cells'?'cell':visualizationField(property),range=adjustment.initialRange.slice(),index=kind==='min'?0:1;let value=range[index];if(kind==='min'&&value<1.2e-6)value=1e-4;range[index]=value-.1*value*dy;store[rangeKey]=range;}syncOgColorRanges();if(channel==='color')updateLegend();draw();}

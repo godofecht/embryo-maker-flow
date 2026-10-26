@@ -43,7 +43,7 @@ xattr -dr com.apple.quarantine .
 
 Choose a starting state from the `Starting model` menu. The bundle includes the original examples and nine saved Morphospace states. Loading a new example resets the workspace to that example.
 
-Three sea urchin gastrulation test inputs are also available. They change the epithelial deformation cap, ECM release threshold, or req diffusion rate. The tested predictions and measured morphology are in [the hypothesis examples README](../reference/examples/sea_urchin_gastrulation_hypotheses/README.md).
+The sea urchin morphology hypothesis run compares the epithelial deformation cap, ECM release threshold, and req diffusion rate from one starting state. Its predictions and measured results are in [the hypothesis examples README](../reference/examples/sea_urchin_gastrulation_hypotheses/README.md). Run `python3 tools/run_gastrulation_hypotheses.py` to repeat it.
 
 The `Auxin stem growth` example tests how a tip auxin source and signal mobility affect a seven-cell stem. Set the color field to gene 1 to see the response. The matched runs and morphology figure are in [the example README](../reference/examples/auxin_stem_growth/README.md).
 

@@ -124,6 +124,8 @@ def main() -> None:
             lines[i] = line.replace("9.9999999999999995E-07", "1.0000000000000000E+00")
             break
 
+    while lines and not lines[-1].strip():
+        lines.pop()
     OUTPUT.write_text("\n".join(line.rstrip() for line in lines) + "\n", encoding="latin1")
     print(f"wrote {OUTPUT.relative_to(ROOT)}")
     print("initial state: 7 cells, basal-to-apical chain, auxin source in cell 7")

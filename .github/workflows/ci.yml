@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      FLOW_BUILD_ROOT: ${{ runner.temp }}/flow-build
+      FLOW_OPT_LEVEL: "3"
+      FLOW_CFLAGS: -ffp-contract=off
+      CC: clang
+      PORT: "8765"
+      EMBRYO_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: flooooooooooow/flow
+          ref: v2.0.0
+          path: flow-toolchain
+      - name: Install compiler dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+      - name: Add Flow compiler to PATH
+        run: echo "$GITHUB_WORKSPACE/flow-toolchain" >> "$GITHUB_PATH"
+      - name: Check generated stem input
+        run: |
+          python3 tools/create_auxin_stem_example.py
+          git diff --exit-code -- reference/examples/auxin_stem_growth/auxin_stem_growth.txt
+      - name: Check latest-release downloads page
+        run: node tests/test_download_page_release.cjs
+      - name: Run Flow checks
+        run: tools/run_flow_checks.sh
+      - name: Build Studio server
+        run: flow compile ui/server.flow
+      - name: Check example and morphology hypotheses
+        run: |
+          "$FLOW_BUILD_ROOT/server" > "$RUNNER_TEMP/studio.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8765/api/examples >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          python3 tools/run_auxin_stem_hypotheses.py --iterations 5000 --output "$RUNNER_TEMP/auxin-results"
+          if grep -Ei 'runtime error|uncaught exception|panic:' "$RUNNER_TEMP/studio.log"; then exit 1; fi

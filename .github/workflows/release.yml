@@ -1,0 +1,106 @@
+name: Release packages
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x86_64
+            cc: clang
+          - os: macos-14
+            target: macos-arm64
+            cc: clang
+    runs-on: ${{ matrix.os }}
+    env:
+      FLOW_BUILD_ROOT: ${{ runner.temp }}/flow-build
+      FLOW_OPT_LEVEL: "3"
+      FLOW_CFLAGS: -ffp-contract=off
+      CC: ${{ matrix.cc }}
+      PORT: "8765"
+      EMBRYO_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - uses: actions/checkout@v4
+        with:
+          repository: flooooooooooow/flow
+          ref: v2.0.0
+          path: flow-toolchain
+      - name: Install compiler dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Add Flow compiler to PATH
+        run: echo "$GITHUB_WORKSPACE/flow-toolchain" >> "$GITHUB_PATH"
+      - name: Verify generated stem input
+        run: |
+          python3 tools/create_auxin_stem_example.py
+          git diff --exit-code -- reference/examples/auxin_stem_growth/auxin_stem_growth.txt
+      - name: Build Studio server
+        run: flow compile ui/server.flow
+      - name: Run morphology checks
+        run: |
+          "$FLOW_BUILD_ROOT/server" > "$RUNNER_TEMP/studio.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8765/api/examples >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          python3 tools/run_auxin_stem_hypotheses.py --iterations 5000 --output "$RUNNER_TEMP/auxin-results"
+          if grep -Ei 'runtime error|uncaught exception|panic:' "$RUNNER_TEMP/studio.log"; then exit 1; fi
+      - name: Package release archive
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: tools/package_release.sh "${{ matrix.target }}" "$FLOW_BUILD_ROOT/server" "${RELEASE_TAG#v}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: dist/EmbryoMaker-Flow-${{ matrix.target }}-v*.*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          cd release-assets
+          sha256sum EmbryoMaker-Flow-linux-x86_64-v*.tar.gz EmbryoMaker-Flow-macos-arm64-v*.zip > SHA256SUMS.txt
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          printf '%s\n' 'EmbryoMaker Flow desktop packages built from this tag.' '' '- macOS Apple silicon ZIP archive' '- Linux x86-64 TAR.GZ archive' '- SHA256SUMS.txt contains archive checksums' > "$RUNNER_TEMP/release-notes.md"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            gh release edit "$RELEASE_TAG" --title "EmbryoMaker Flow $RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "EmbryoMaker Flow $RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

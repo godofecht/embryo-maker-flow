@@ -4,12 +4,30 @@ nav: downloads
 description: Download EmbryoMaker Flow for Apple silicon Macs and x86-64 Linux.
 ---
 <main class="wrap narrow doc">
-    <p class="eyebrow">Version 0.1.0</p>
+    <p class="eyebrow" id="releaseVersion">Version 0.1.0</p>
     <h1>Downloads</h1>
     <p>Each package contains the simulator, the bundled examples and the Morphospace starting states, and the local Studio. Extract the archive before launching it.</p>
     <div class="downloads">
-      <div class="download"><div>macOS, Apple silicon<small>ZIP archive. Open <code>Start EmbryoMaker.command</code>.</small></div><a href="EmbryoMaker-Flow-macos-arm64-v0.1.0.zip" download>Download</a></div>
-      <div class="download"><div>Linux, x86-64<small>TAR.GZ archive for Ubuntu 24.04 or compatible. Run <code>./start-linux.sh</code>.</small></div><a href="EmbryoMaker-Flow-linux-x86_64-v0.1.0.tar.gz" download>Download</a></div>
+      <div class="download"><div>macOS, Apple silicon<small>ZIP archive. Open <code>Start EmbryoMaker.command</code>.</small></div><a id="macDownload" href="EmbryoMaker-Flow-macos-arm64-v0.1.0.zip" download>Download</a></div>
+      <div class="download"><div>Linux, x86-64<small>TAR.GZ archive for Ubuntu 24.04 or compatible. Run <code>./start-linux.sh</code>.</small></div><a id="linuxDownload" href="EmbryoMaker-Flow-linux-x86_64-v0.1.0.tar.gz" download>Download</a></div>
     </div>
-    <p class="small"><a href="SHA256SUMS.txt">SHA256 checksums</a>. The Mac package is not signed or notarized. The first-launch steps are in the <a href="../user-guide.html#macos-first-launch">user guide</a>. The Linux package needs an x86-64 system with a compatible C library.</p>
+    <p class="small"><a id="checksumDownload" href="SHA256SUMS.txt">SHA256 checksums</a>. The Mac package is not signed or notarized. The first-launch steps are in the <a href="../user-guide.html#macos-first-launch">user guide</a>. The Linux package needs an x86-64 system with a compatible C library.</p>
   </main>
+  <script>
+    fetch("https://api.github.com/repos/godofecht/embryo-maker-flow/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" }
+    }).then(response => {
+      if (!response.ok) throw new Error("Release metadata unavailable");
+      return response.json();
+    }).then(release => {
+      const assets = new Map((release.assets || []).map(asset => [asset.name, asset.browser_download_url]));
+      const mac = [...assets].find(([name]) => name.startsWith("EmbryoMaker-Flow-macos-arm64-v") && name.endsWith(".zip"));
+      const linux = [...assets].find(([name]) => name.startsWith("EmbryoMaker-Flow-linux-x86_64-v") && name.endsWith(".tar.gz"));
+      const checksums = assets.get("SHA256SUMS.txt");
+      if (!mac || !linux || !checksums) throw new Error("Release assets are incomplete");
+      document.getElementById("releaseVersion").textContent = `Version ${release.tag_name.replace(/^v/, "")}`;
+      document.getElementById("macDownload").href = mac[1];
+      document.getElementById("linuxDownload").href = linux[1];
+      document.getElementById("checksumDownload").href = checksums;
+    }).catch(() => {});
+  </script>

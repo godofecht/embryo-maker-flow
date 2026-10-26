@@ -9,7 +9,11 @@ fi
 
 target=$1
 server_binary=$2
-version=${3:-0.1.0}
+version=${3:-$(git -C "$repo_dir" describe --tags --exact-match 2>/dev/null | sed 's/^v//')}
+if [ -z "$version" ]; then
+    echo "version is required when HEAD has no version tag" >&2
+    exit 2
+fi
 case "$target" in
     macos-arm64) archive_ext=zip ;;
     linux-x86_64) archive_ext=tar.gz ;;

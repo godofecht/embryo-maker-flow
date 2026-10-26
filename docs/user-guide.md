@@ -43,6 +43,10 @@ xattr -dr com.apple.quarantine .
 
 Choose a starting state from the `Starting model` menu. The bundle includes the original examples and nine saved Morphospace states. Loading a new example resets the workspace to that example.
 
+Three sea urchin gastrulation test inputs are also available. They change the epithelial deformation cap, ECM release threshold, or req diffusion rate. The tested predictions and measured morphology are in [the hypothesis examples README](../reference/examples/sea_urchin_gastrulation_hypotheses/README.md).
+
+The `Auxin stem growth` example tests how a tip auxin source and signal mobility affect a seven-cell stem. Set the color field to gene 1 to see the response. The matched runs and morphology figure are in [the example README](../reference/examples/auxin_stem_growth/README.md).
+
 Select `Controls` above the model view to show the experiment and display panels. Use `Run` to advance the simulation continuously, `Pause` to stop it, `Step once` to advance exactly one solver iteration, and `Reset` to return to the selected starting state. The iteration slider selects an iteration. The speed menu changes how quickly batches run.
 
 The original EmbryoMaker menu is available by right-clicking the model view or selecting its menu button. Hover a menu category to open its submenu. The iteration commands run the requested number of solver iterations. The custom command accepts values from 1 to 50,000.

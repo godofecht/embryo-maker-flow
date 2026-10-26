@@ -15,7 +15,6 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "runs" / "gastrulation_hypotheses"
 BASE = ROOT / "reference" / "examples" / "sea_urchin_gastrulation" / "sea_urchin.txt"
-EXAMPLE_DIR = ROOT / "reference" / "examples" / "sea_urchin_gastrulation_hypotheses"
 ITERATIONS = int(os.environ.get("HYPOTHESIS_ITERATIONS", "500"))
 sys.path.insert(0, str(ROOT / "tools"))
 import embryomaker_mcp as mcp  # noqa: E402
@@ -61,7 +60,7 @@ def parameter_variant(index: int, value: float, name: str) -> Path:
             if not match:
                 raise RuntimeError(f"Malformed global parameter row {index}")
             lines[i] = match.group(1) + format(value, ".17g") + match.group(2)
-            path = EXAMPLE_DIR / f"{name}.txt"
+            path = OUT / "inputs" / f"{name}.txt"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("".join(lines))
             return path
@@ -212,7 +211,7 @@ def write_readme(results: list[dict]) -> None:
         delta = item.get("difference_from_control", 0.0)
         outcome = item.get("prediction_result", "baseline")
         lines.append(f"| {item['name']} | {change_text} | {item['metrics']['invagination_score']:.5f} | {delta:+.5f} | {outcome} |")
-    lines.extend(["", "## Files", "", "- `morphology.svg`: x-z projections. Gray dots show the starting shell. Colored dots mark starting gene 1-positive nodes at the final step.", "- `metrics.csv`: compact condition metrics.", "- `results.json`: complete run metadata and metrics.", "- `reference/examples/sea_urchin_gastrulation_hypotheses/`: variant inputs listed in the Studio model picker.", "- `snapshots/`: final states for inspection in Studio.", "", "## Reproduce", "", "```sh", "python3 tools/run_gastrulation_hypotheses.py", "```", "", "Set `HYPOTHESIS_ITERATIONS=1000` to advance each condition for 1,000 iterations.", ""])
+    lines.extend(["", "## Files", "", "- `morphology.svg`: x-z projections. Gray dots show the starting shell. Colored dots mark starting gene 1-positive nodes at the final step.", "- `metrics.csv`: compact condition metrics.", "- `results.json`: complete run metadata and metrics.", "- `inputs/`: generated parameter variants derived from the bundled input.", "- `snapshots/`: final states for inspection in Studio.", "", "## Reproduce", "", "```sh", "python3 tools/run_gastrulation_hypotheses.py", "```", "", "Set `HYPOTHESIS_ITERATIONS=1000` to advance each condition for 1,000 iterations.", ""])
     (OUT / "README.md").write_text("\n".join(lines))
 
 

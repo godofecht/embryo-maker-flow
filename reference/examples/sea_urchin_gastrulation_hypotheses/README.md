@@ -1,10 +1,10 @@
 # Sea urchin gastrulation tests
 
-These three inputs start from the bundled sea urchin gastrulation state. Each changes one global parameter. Select a test in the Studio's Starting model menu and compare its run with Sea urchin gastrulation.
+The runner creates three parameter variants from the bundled sea urchin gastrulation state. Each changes one global parameter, runs from the same seed, and measures the resulting morphology.
 
 The expected morphology is inward movement at the vegetal pole. The accompanying local run measured the starting gene 1-positive cap's z displacement against the equator after 500 iterations. A larger score means more inward cap movement. The C backend used one solver thread and the seed stored in the shared starting input.
 
-![Four x-z projections after 500 iterations. Gray marks starting positions. Dark marks final positions. Color marks the starting vegetal cap at its final position.](../../../docs/assets/gastrulation-hypotheses.png)
+![Four x-z projections after 500 iterations. Gray marks starting positions. Dark marks final positions. Color marks the starting vegetal cap at its final position.](../../../docs/assets/gastrulation-hypotheses.svg)
 
 | Studio case | Change | Prediction | Score at 500 iterations | Result |
 |---|---|---|---:|---|

@@ -36,6 +36,9 @@ jobs:
           sudo apt-get install -y clang
       - name: Add Flow compiler to PATH
         run: echo "$GITHUB_WORKSPACE/flow-toolchain" >> "$GITHUB_PATH"
+      - name: Remove Apple frameworks on Linux
+        if: runner.os == 'Linux'
+        run: sed -i 's/^frameworks = \["Metal", "Foundation"\]/frameworks = []/' flow.toml
       - name: Check generated stem input
         run: |
           python3 tools/create_auxin_stem_example.py

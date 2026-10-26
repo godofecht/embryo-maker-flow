@@ -1,0 +1,133 @@
+# Conformance check for the software binary64 in gpu/metal/softdouble.metal.
+# Random operand pairs, including signs, tiny and huge magnitudes, exact
+# zeros and powers of two, go through add, sub, mul, div, sqrt and the
+# comparisons on the GPU and on the CPU; every result must match bit for bit.
+#
+#   flow run tools/softdouble_check.flow            (default 200000 pairs)
+#   flow run tools/softdouble_check.flow -- 2000000
+import std.process { proc_argc, proc_argv }
+import std.string { str_parse_i64_at, ParseI64 }
+
+extern {
+    function malloc(size: i64) -> ptr<void>
+    function free(p: ptr<void>) -> void
+    function sqrt(x: f64) -> f64
+    function fabs(x: f64) -> f64
+    function printf(fmt: string, ...) -> i32
+    function embryo_gpu_available() -> i32
+    function embryo_gpu_softdouble_test(a: ptr<u64>, b: ptr<u64>, n: i32, out_add: ptr<u64>, out_sub: ptr<u64>, out_mul: ptr<u64>, out_div: ptr<u64>, out_sqrt: ptr<u64>, out_cmp: ptr<u32>) -> i32
+}
+
+let mut rng_state: u64 = 0x9E3779B97F4A7C15
+
+function next_u64() -> u64 {
+    rng_state = rng_state ^ (rng_state << 13)
+    rng_state = rng_state ^ (rng_state >> 7)
+    rng_state = rng_state ^ (rng_state << 17)
+    return rng_state
+}
+
+# A random double drawn from several distributions so every code path sees
+# traffic: full random bits, exponent-limited values near the force scale,
+# exact zeros, powers of two, and subnormals.
+function random_bits(slot: i32) -> u64 {
+    let r: u64 = next_u64()
+    let kind: i32 = (slot % 8) as i32
+    if kind == 0 { return r }
+    if kind == 1 { return (r & 0x800FFFFFFFFFFFFF) | ((1023 + ((r >> 52) % 40) - 20) << 52) }
+    if kind == 2 { return (r & 0x8000000000000000) }
+    if kind == 3 { return ((r & 0x8000000000000000) | ((1023 + ((r >> 52) % 80) - 40) << 52)) }
+    if kind == 4 { return (r & 0x800FFFFFFFFFFFFF) }
+    if kind == 5 { return (r & 0x800FFFFFFFFFFFFF) | ((1023 + ((r >> 52) % 6) - 3) << 52) }
+    if kind == 6 { return (r & 0x800FFFFFFFFFFFFF) | ((1023 + ((r >> 52) % 400) - 200) << 52) }
+    return (r & 0x800FFFFFFFFFFFFF) | (((r >> 52) % 2046 + 1) << 52)
+}
+
+function bits_to_f64(b: u64) -> f64 {
+    let cell: ptr<u64> = malloc(8) as ptr<u64>
+    cell[0] = b
+    let value: f64 = (cell as ptr<f64>)[0]
+    free(cell as ptr<void>)
+    return value
+}
+
+function main() -> i32 {
+    let mut count: i32 = 200000
+    if proc_argc() > 1 {
+        let parsed: ParseI64 = str_parse_i64_at(proc_argv(1), 0)
+        if parsed.ok { count = parsed.value as i32 }
+    }
+    if embryo_gpu_available() == 0 { printf("softdouble_check: Metal unavailable\n"); return 2 }
+    let a: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let b: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let af: ptr<f64> = a as ptr<f64>
+    let bf: ptr<f64> = b as ptr<f64>
+    let out_add: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let out_sub: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let out_mul: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let out_div: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let out_sqrt: ptr<u64> = malloc(count as i64 * 8) as ptr<u64>
+    let out_cmp: ptr<u32> = malloc(count as i64 * 4) as ptr<u32>
+    let mut i: i32 = 0
+    while i < count {
+        a[i] = random_bits(i)
+        b[i] = random_bits(i + 3)
+        i = i + 1
+    }
+    let status: i32 = embryo_gpu_softdouble_test(a, b, count, out_add, out_sub, out_mul, out_div, out_sqrt, out_cmp)
+    if status != 0 { printf("softdouble_check: GPU run failed with status %d\n", status); return 2 }
+    let expect_add: ptr<f64> = malloc(count as i64 * 8) as ptr<f64>
+    let expect_sub: ptr<f64> = malloc(count as i64 * 8) as ptr<f64>
+    let expect_mul: ptr<f64> = malloc(count as i64 * 8) as ptr<f64>
+    let expect_div: ptr<f64> = malloc(count as i64 * 8) as ptr<f64>
+    let expect_sqrt: ptr<f64> = malloc(count as i64 * 8) as ptr<f64>
+    let ea: ptr<u64> = expect_add as ptr<u64>
+    let es: ptr<u64> = expect_sub as ptr<u64>
+    let em: ptr<u64> = expect_mul as ptr<u64>
+    let ed: ptr<u64> = expect_div as ptr<u64>
+    let eq: ptr<u64> = expect_sqrt as ptr<u64>
+    let mut bad_add: i32 = 0
+    let mut bad_sub: i32 = 0
+    let mut bad_mul: i32 = 0
+    let mut bad_div: i32 = 0
+    let mut bad_sqrt: i32 = 0
+    let mut bad_cmp: i32 = 0
+    let mut shown: i32 = 0
+    i = 0
+    while i < count {
+        let x: f64 = af[i]
+        let y: f64 = bf[i]
+        expect_add[i] = x + y
+        expect_sub[i] = x - y
+        expect_mul[i] = x * y
+        expect_div[i] = x / y
+        expect_sqrt[i] = sqrt(fabs(x))
+        let nan_x: bool = x != x
+        let nan_y: bool = y != y
+        let mut expect_cmp: u32 = 0
+        if x < y { expect_cmp = expect_cmp | 1 }
+        if x <= y { expect_cmp = expect_cmp | 2 }
+        if x == y { expect_cmp = expect_cmp | 4 }
+        # NaN results compare by class only: any NaN matches any NaN.
+        let add_ok: bool = ea[i] == out_add[i] or ((expect_add[i] != expect_add[i]) and ((out_add[i] & 0x7FF0000000000000) == 0x7FF0000000000000 and (out_add[i] & 0x000FFFFFFFFFFFFF) != 0))
+        let sub_ok: bool = es[i] == out_sub[i] or ((expect_sub[i] != expect_sub[i]) and ((out_sub[i] & 0x7FF0000000000000) == 0x7FF0000000000000 and (out_sub[i] & 0x000FFFFFFFFFFFFF) != 0))
+        let mul_ok: bool = em[i] == out_mul[i] or ((expect_mul[i] != expect_mul[i]) and ((out_mul[i] & 0x7FF0000000000000) == 0x7FF0000000000000 and (out_mul[i] & 0x000FFFFFFFFFFFFF) != 0))
+        let div_ok: bool = ed[i] == out_div[i] or ((expect_div[i] != expect_div[i]) and ((out_div[i] & 0x7FF0000000000000) == 0x7FF0000000000000 and (out_div[i] & 0x000FFFFFFFFFFFFF) != 0))
+        let sqrt_ok: bool = eq[i] == out_sqrt[i] or ((expect_sqrt[i] != expect_sqrt[i]) and ((out_sqrt[i] & 0x7FF0000000000000) == 0x7FF0000000000000 and (out_sqrt[i] & 0x000FFFFFFFFFFFFF) != 0))
+        let cmp_ok: bool = expect_cmp == out_cmp[i] or nan_x or nan_y
+        if add_ok == false { bad_add = bad_add + 1 }
+        if sub_ok == false { bad_sub = bad_sub + 1 }
+        if mul_ok == false { bad_mul = bad_mul + 1 }
+        if div_ok == false { bad_div = bad_div + 1 }
+        if sqrt_ok == false { bad_sqrt = bad_sqrt + 1 }
+        if cmp_ok == false { bad_cmp = bad_cmp + 1 }
+        if shown < 12 and (add_ok == false or sub_ok == false or mul_ok == false or div_ok == false or sqrt_ok == false or cmp_ok == false) {
+            printf("  a=%016llx b=%016llx add %016llx/%016llx sub %016llx/%016llx mul %016llx/%016llx div %016llx/%016llx sqrt %016llx/%016llx cmp %u/%u\n", a[i], b[i], ea[i], out_add[i], es[i], out_sub[i], em[i], out_mul[i], ed[i], out_div[i], eq[i], out_sqrt[i], expect_cmp, out_cmp[i])
+            shown = shown + 1
+        }
+        i = i + 1
+    }
+    printf("softdouble_check: %d pairs: add %d sub %d mul %d div %d sqrt %d cmp %d mismatch(es)\n", count, bad_add, bad_sub, bad_mul, bad_div, bad_sqrt, bad_cmp)
+    if bad_add + bad_sub + bad_mul + bad_div + bad_sqrt + bad_cmp > 0 { return 1 }
+    return 0
+}

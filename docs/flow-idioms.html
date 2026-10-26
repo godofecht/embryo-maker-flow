@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b0d">
+  <meta name="description" content="A field guide to reducing a Fortran-to-Flow port with Flow ranges, match, defer, shared passes, and explicit state boundaries.">
+  <title>Reducing the Flow port | EmbryoMaker Flow</title>
+  <style>/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+html {
+  color: #1a1a1a;
+  background-color: #fdfdfd;
+}
+body {
+  margin: 0 auto;
+  max-width: 36em;
+  padding-left: 50px;
+  padding-right: 50px;
+  padding-top: 50px;
+  padding-bottom: 50px;
+  hyphens: auto;
+  overflow-wrap: break-word;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+}
+@media (max-width: 600px) {
+  body {
+    font-size: 0.9em;
+    padding: 12px;
+  }
+  h1 {
+    font-size: 1.8em;
+  }
+}
+@media print {
+  html {
+    background-color: white;
+  }
+  body {
+    background-color: transparent;
+    color: black;
+  }
+  p, h2, h3 {
+    orphans: 3;
+    widows: 3;
+  }
+  h2, h3, h4 {
+    page-break-after: avoid;
+  }
+}
+p {
+  margin: 1em 0;
+}
+a {
+  color: #1a1a1a;
+}
+a:visited {
+  color: #1a1a1a;
+}
+img {
+  max-width: 100%;
+}
+svg {
+  height: auto;
+  max-width: 100%;
+}
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 1.4em;
+}
+h5, h6 {
+  font-size: 1em;
+  font-style: italic;
+}
+h6 {
+  font-weight: normal;
+}
+ol, ul {
+  padding-left: 1.7em;
+  margin-top: 1em;
+}
+li > ol, li > ul {
+  margin-top: 0;
+}
+blockquote {
+  margin: 1em 0 1em 1.7em;
+  padding-left: 1em;
+  border-left: 2px solid #e6e6e6;
+  color: #606060;
+}
+code {
+  white-space: pre-wrap;
+  font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+  font-size: 85%;
+  margin: 0;
+  hyphens: manual;
+}
+pre {
+  margin: 1em 0;
+  overflow: auto;
+}
+pre code {
+  padding: 0;
+  overflow: visible;
+  overflow-wrap: normal;
+}
+.sourceCode {
+ background-color: transparent;
+ overflow: visible;
+}
+hr {
+  border: none;
+  border-top: 1px solid #1a1a1a;
+  height: 1px;
+  margin: 1em 0;
+}
+table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  width: 100%;
+  overflow-x: auto;
+  display: block;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+table caption {
+  margin-bottom: 0.75em;
+}
+tbody {
+  margin-top: 0.5em;
+  border-top: 1px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a;
+}
+th {
+  border-top: 1px solid #1a1a1a;
+  padding: 0.25em 0.5em 0.25em 0.5em;
+}
+td {
+  padding: 0.125em 0.5em 0.25em 0.5em;
+}
+header {
+  margin-bottom: 4em;
+  text-align: center;
+}
+#TOC li {
+  list-style: none;
+}
+#TOC ul {
+  padding-left: 1.3em;
+}
+#TOC > ul {
+  padding-left: 0;
+}
+#TOC a:not(:hover) {
+  text-decoration: none;
+}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+/* The extra [class] is a hack that increases specificity enough to
+   override a similar rule in reveal.js */
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  font-size: inherit;
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1.6em;
+  vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    background-color: #232629;
+    color: #7a7c7d;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #7a7c7d;  padding-left: 4px; }
+div.sourceCode
+  { color: #cfcfc2; background-color: #232629; }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span { color: #cfcfc2; } /* Normal */
+code span.al { color: #95da4c; background-color: #4d1f24; font-weight: bold; } /* Alert */
+code span.an { color: #3f8058; } /* Annotation */
+code span.at { color: #2980b9; } /* Attribute */
+code span.bn { color: #f67400; } /* BaseN */
+code span.bu { color: #7f8c8d; } /* BuiltIn */
+code span.cf { color: #fdbc4b; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #3daee9; } /* Char */
+code span.cn { color: #27aeae; font-weight: bold; } /* Constant */
+code span.co { color: #7a7c7d; } /* Comment */
+code span.cv { color: #7f8c8d; } /* CommentVar */
+code span.do { color: #a43340; } /* Documentation */
+code span.dt { color: #2980b9; } /* DataType */
+code span.dv { color: #f67400; } /* DecVal */
+code span.er { color: #da4453; text-decoration: underline; } /* Error */
+code span.ex { color: #0099ff; font-weight: bold; } /* Extension */
+code span.fl { color: #f67400; } /* Float */
+code span.fu { color: #8e44ad; } /* Function */
+code span.im { color: #27ae60; } /* Import */
+code span.in { color: #c45b00; } /* Information */
+code span.kw { color: #cfcfc2; font-weight: bold; } /* Keyword */
+code span.op { color: #cfcfc2; } /* Operator */
+code span.ot { color: #27ae60; } /* Other */
+code span.pp { color: #27ae60; } /* Preprocessor */
+code span.re { color: #2980b9; background-color: #153042; } /* RegionMarker */
+code span.sc { color: #3daee9; } /* SpecialChar */
+code span.ss { color: #da4453; } /* SpecialString */
+code span.st { color: #f44f4f; } /* String */
+code span.va { color: #27aeae; } /* Variable */
+code span.vs { color: #da4453; } /* VerbatimString */
+code span.wa { color: #da4453; } /* Warning */
+</style>
+  <link rel="stylesheet" href="assets/site.css">
+  <link rel="stylesheet" href="assets/flow-idioms.css">
+</head>
+<body>
+  <header class="site-header wrap">
+    <a class="brand" href="index.html"><span class="mark">E</span><span>EmbryoMaker Flow</span></a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="index.html">Project</a>
+      <a href="user-guide.html">User guide</a>
+      <a href="flow-idioms.html" aria-current="page">Engineering notes</a>
+      <a href="https://github.com/godofecht/embryo-maker-flow">Source</a>
+    </nav>
+  </header>
+  <main class="wrap narrow doc article">
+    <h1 id="reducing-the-flow-port">Reducing the Flow port</h1>
+    <p class="article-meta">
+    <span>ENGINEERING NOTES</span><span>FLOW · EMBRYOMAKER</span>
+    </p>
+    <p>This project began as a close port of EmbryoMaker's Fortran
+    program. The first goal was behavioral parity. The next goal has
+    been to let Flow express the same work with less scaffolding, while
+    keeping the original model's operation order and outputs.</p>
+    <h2 id="stage-1-let-ranges-express-counted-loops">Stage 1: let
+    ranges express counted loops</h2>
+    <p>The port had many loops that declared an index, checked its
+    limit, incremented it, and handled the loop body. Flow's range loop
+    expresses that pattern directly:</p>
+    <div class="compare">
+    <section id="before" class="example">
+    <h4>Before</h4>
+    <pre class="flow"><code>let mut node_id: i32 = 1
+while node_id &lt;= nd {
+    update_node(node_id)
+    node_id = node_id + 1
+}</code></pre>
+    </section>
+    <section id="with-a-range" class="example after">
+    <h4>With a range</h4>
+    <pre class="flow"><code>for node_id in 1 to nd + 1 {
+    update_node(node_id)
+}</code></pre>
+    </section>
+    </div>
+    <p>The compiler owns the counter and its increment. The body keeps
+    the model's one-based indexing visible. This pattern now appears in
+    model preparation, centroid updates, gene expression commits, growth
+    buffers, geometry checks, editor operations, and other bounded
+    passes. <code>continue</code> and <code>break</code> still express
+    early movement when the algorithm needs them.</p>
+    <h2 id="stage-2-use-flows-process-and-string-libraries">Stage 2: use
+    Flow's process and string libraries</h2>
+    <p>The command line entry point used a C embedding bridge to read
+    arguments and environment variables. <code>std.process</code> now
+    supplies those values. Parsing and formatting use
+    <code>std.string</code>, so the entry point keeps its
+    platform-facing work in Flow.</p>
+    <h2 id="stage-3-make-temporary-memory-scopes-visible">Stage 3: make
+    temporary memory scopes visible</h2>
+    <p>Temporary C allocations now use <code>defer free(...)</code>. The
+    release stays beside the allocation, and it runs on each return
+    path. This is used for formatted error text, snapshot input buffers,
+    and other short-lived strings.</p>
+    <div class="compare">
+    <section id="before-1" class="example">
+    <h4>Before</h4>
+    <pre class="flow"><code>let text: ptr&lt;u8&gt; = format_error(code)
+print(text)
+free(text as ptr&lt;void&gt;)</code></pre>
+    </section>
+    <section id="with-defer" class="example after">
+    <h4>With <code>defer</code></h4>
+    <pre class="flow"><code>let text: ptr&lt;u8&gt; = format_error(code)
+defer free(text as ptr&lt;void&gt;)
+print(text)</code></pre>
+    </section>
+    </div>
+    <h2 id="stage-4-use-match-for-dispatch">Stage 4: use
+    <code>match</code> for dispatch</h2>
+    <p>The parallel pass dispatcher keeps each worker kind beside its
+    handler in one Flow <code>match</code>. Guarded arms remain where
+    the compiler needs them for integer constants.</p>
+    <div class="compare">
+    <section id="before-2" class="example">
+    <h4>Before</h4>
+    <pre class="flow"><code>if kind == 1 { run_force_range(start, end) }
+elif kind == 2 { run_gene_range(start, end) }
+elif kind == 3 { run_neighbor_range(start, end) }</code></pre>
+    </section>
+    <section id="with-match" class="example after">
+    <h4>With <code>match</code></h4>
+    <pre class="flow"><code>match kind {
+    value if value == PARALLEL_FORCE_PAIRS =&gt; { force_pairs_range(start, end, thread) }
+    value if value == PARALLEL_GENE_STEP =&gt; { genestep_range(start, end, thread) }
+    value if value == PARALLEL_NEIGHBOR_SCAN =&gt; { neighbor_scan_range(start, end, thread) }
+    _ =&gt; {}
+}</code></pre>
+    </section>
+    </div>
+    <h2 id="stage-5-share-state-transitions">Stage 5: share state
+    transitions</h2>
+    <p>Serial and parallel force setup used to carry duplicate
+    capacity-growth code. Both paths now call
+    <code>ensure_force_active_genes_capacity()</code>.</p>
+    <p>The synchronous batch runner now enters the same batch state
+    machine as the chunked worker path. Both callers share stopping
+    conditions and failure handling.</p>
+    <h2 id="stage-6-share-algorithms-with-the-same-rule">Stage 6: share
+    algorithms with the same rule</h2>
+    <p>The minimum and maximum division-size calculations followed the
+    same traversal and accumulation rule. A property parameter now
+    selects which field is updated. The wrappers preserve the existing
+    call sites.</p>
+    <div class="compare">
+    <section id="before-3" class="example">
+    <h4>Before</h4>
+    <pre class="flow"><code>function change_minsize_for_div() -&gt; bool {
+    # traverse nodes and genes, accumulate the minimum
+}
+
+function change_maxsize_for_div() -&gt; bool {
+    # repeat the traversal and accumulation for the maximum
+}</code></pre>
+    </section>
+    <section id="with-one-shared-pass" class="example after">
+    <h4>With one shared pass</h4>
+    <pre class="flow"><code>function change_division_size(property_id: i32, minimum: bool) -&gt; bool {
+    for cell_id in 1 to ncels + 1 {
+        let mut signal: f64 = 0.0
+        for node_slot in 1 to cels[cell_id].nunodes + 1 {
+            let node_id: i32 = cels[cell_id].node[node_slot]
+            for gene_slot in 1 to npag[property_id] + 1 {
+                let gene_id: i32 = whonpag[property_id * (ng + 1) + gene_slot]
+                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                if expression &gt; 0.0 {
+                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, property_id)]
+                }
+            }
+        }
+        signal = signal * delta / cels[cell_id].nunodes as f64
+        let mut size: f64 = if minimum { cels[cell_id].minsize_for_div } else { cels[cell_id].maxsize_for_div }
+        size = size + signal
+        if size &lt; 1.0 { size = 1.0 }
+        if minimum { cels[cell_id].minsize_for_div = size + signal }
+        else { cels[cell_id].maxsize_for_div = size + signal }
+    }
+    return true
+}</code></pre>
+    </section>
+    </div>
+    <p>The implementation lives in <a
+    href="https://github.com/godofecht/embryo-maker-flow/blob/main/src/nexus.flow"><code>src/nexus.flow</code></a>.
+    It retains the accumulation order.</p>
+    <h2 id="stage-7-express-arithmetic-at-the-types-natural-width">Stage
+    7: express arithmetic at the type's natural width</h2>
+    <p>The random generator's local arithmetic uses Flow's native
+    <code>u64</code> operations and counted loops. Its persistent state
+    remains split into <code>i32</code> words because the current Flow
+    module storage path does not support static <code>u64</code> values.
+    This keeps the generator compact without relying on unsupported
+    global state.</p>
+    <h2 id="stage-8-use-ranges-across-whole-domain-passes">Stage 8: use
+    ranges across whole domain passes</h2>
+    <p>The range conversion now reaches Delaunay setup and checks, ECM
+    and polarization, growth and mitosis, single-node division, editor
+    operations, and gene expression updates. In the RK4 path, each node
+    and gene pass remains a separate stage. Ranges remove counter setup
+    and increments while preserving the stage boundaries and iteration
+    order.</p>
+    <h2 id="stage-9-keep-progress-driven-loops-explicit">Stage 9: keep
+    progress-driven loops explicit</h2>
+    <p>Some loops change their own bounds as they run. Node removal
+    shifts later indices. Buffer growth repeats until capacity is
+    sufficient. Neighbor and token scans stop when they find a match.
+    These remain <code>while</code> loops because their stopping
+    conditions describe the algorithm's progress.</p>
+    <h2
+    id="stage-10-keep-computation-structure-when-it-protects-behavior">Stage
+    10: keep computation structure when it protects behavior</h2>
+    <p>Shorter source helps when it removes repeated rules and preserves
+    floating-point order, mutation order, and the model's error
+    contract. The pair-force and integration code keeps explicit
+    accumulation steps where order affects parity. Performance changes
+    are measured against reference snapshots. Changes that slow the
+    workload are removed.</p>
+    <h2 id="stage-11-organize-hot-force-data-by-node">Stage 11: organize
+    hot force data by node</h2>
+    <p>The force pass kept twelve values for each node in separate
+    arrays. The new scratch buffer stores those twelve values together.
+    Each thread works on its node row, and the serial reducer replays
+    partner terms in the same order as the reference routine.</p>
+    <div class="compare">
+    <section id="before-4" class="example">
+    <h4>Before</h4>
+    <pre class="flow"><code>adhesion_x[node_id] = adhesion_x[node_id] + force_x
+adhesion_y[node_id] = adhesion_y[node_id] + force_y
+repulsion_x[node_id] = repulsion_x[node_id] + repel_x
+repulsion_y[node_id] = repulsion_y[node_id] + repel_y</code></pre>
+    </section>
+    <section id="row-of-force-scratch" class="example after">
+    <h4>Row of force scratch</h4>
+    <pre class="flow"><code>let nrow: i32 = node_id * 12
+acc[nrow + 0] = acc[nrow + 0] + force_x
+acc[nrow + 1] = acc[nrow + 1] + force_y
+acc[nrow + 3] = acc[nrow + 3] + repel_x
+acc[nrow + 4] = acc[nrow + 4] + repel_y</code></pre>
+    </section>
+    </div>
+    <p>The same pass gathers active adhesion genes once, reuses neighbor
+    geometry, and avoids clearing display arrays for nodes that
+    overwrite their own values. Prepared diffusion data is reused across
+    the sweeps in one iteration. These changes are measured in <a
+    href="https://github.com/godofecht/embryo-maker-flow/blob/main/PORTING.md">the
+    porting record</a>; each kept solver change was checked against the
+    reference snapshots.</p>
+    <h2
+    id="stage-12-split-independent-work-into-deterministic-ranges">Stage
+    12: split independent work into deterministic ranges</h2>
+    <p>The worker pool handles neighbor scans, gene derivatives, and
+    force work. Each job receives a node range. Force computation has
+    two phases: one records pair terms, then a reducer adds them in the
+    order used by the serial routine.</p>
+    <div class="compare">
+    <section id="one-serial-traversal" class="example">
+    <h4>One serial traversal</h4>
+    <pre class="flow"><code>for node_id in 1 to nd + 1 {
+    visit_neighbors_and_update_both_nodes(node_id)
+}</code></pre>
+    </section>
+    <section id="range-jobs-and-ordered-reduction"
+    class="example after">
+    <h4>Range jobs and ordered reduction</h4>
+    <pre class="flow"><code>embryo_pool_run(FORCE_PAIRS, nd, grain)
+embryo_pool_run(FORCE_REDUCE, nd, grain)</code></pre>
+    </section>
+    </div>
+    <p><code>src/workers.flow</code> dispatches jobs to range bodies in
+    their owning modules. Small models can remain serial.
+    <code>EMBRYO_THREADS=1</code> selects the serial policy. The parity
+    switch compares parallel force results with the serial routine.</p>
+    <h2 id="stage-13-expose-exact-and-preview-compute-paths">Stage 13:
+    expose exact and preview compute paths</h2>
+    <p>The Metal neighbor kernel filters candidate pairs. Flow repeats
+    the exact binary64 distance test on the surviving candidates in
+    their original order. Forces can run on the CPU, in a float32
+    preview, or in software binary64 on the GPU. Exact modes retain the
+    snapshot result. Preview mode reports its numeric tradeoff in the
+    Studio.</p>
+    <p>The <code>gpu/</code> and <code>native/</code> directories
+    contain the Metal kernels, software binary64 operations, allocation
+    bridge, and platform stubs. <code>flow.toml</code> registers the
+    native layer. GPU failures fall back to the CPU path.</p>
+    <h2
+    id="stage-14-send-compact-frames-and-request-work-in-batches">Stage
+    14: send compact frames and request work in batches</h2>
+    <p>The viewer used to fetch a JSON model after every solver
+    iteration. It now requests a packed frame with typed arrays for node
+    values, genes, and edges. The server keeps the JSON response for
+    callers that omit the binary request flag.</p>
+    <div class="compare">
+    <section id="json-arrays-on-every-response" class="example">
+    <h4>JSON arrays on every response</h4>
+    <div class="sourceCode" id="cb13"><pre
+    class="sourceCode json"><code class="sourceCode json"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;nodes&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="fu">{</span><span class="dt">&quot;x&quot;</span><span class="fu">:</span><span class="fl">0.1</span><span class="fu">,</span><span class="dt">&quot;y&quot;</span><span class="fu">:</span><span class="fl">0.2</span><span class="fu">,</span><span class="dt">&quot;z&quot;</span><span class="fu">:</span><span class="fl">0.3</span><span class="fu">}</span><span class="ot">]</span><span class="fu">,</span><span class="dt">&quot;edges&quot;</span><span class="fu">:</span><span class="ot">[[</span><span class="dv">1</span><span class="ot">,</span><span class="dv">2</span><span class="ot">]]</span><span class="fu">}</span></span></code></pre></div>
+    </section>
+    <section id="header-plus-packed-values" class="example after">
+    <h4>Header plus packed values</h4>
+    <pre class="text"><code>EMB1 | metadata length | JSON metadata | f64 nodes | i32 fields | edges</code></pre>
+    </section>
+    </div>
+    <p>Playback has slow, frame, fast, and maximum modes. The faster
+    modes adapt the number of solver iterations per request to the
+    measured iteration time. The timeline supports scrubbing, keyboard
+    stepping, and an editable run target. The compute selector changes
+    CPU and GPU modes through the server API.</p>
+    <h2 id="stage-15-make-the-build-paths-repeatable">Stage 15: make the
+    build paths repeatable</h2>
+    <p><code>tools/build-pgo.sh</code> trains a profile and the normal
+    UI build reuses it when present. <code>tools/build-mlir.sh</code>
+    lowers the Flow program through MLIR and applies the floating-point
+    contraction rewrite needed for parity.
+    <code>tools/build-gpu.sh</code> builds the Metal path.
+    <code>tools/backend_parity.sh</code> compares snapshots across
+    backends. The MCP simulation tools can select C, MLIR, or GPU
+    builds.</p>
+    <p>The UI's status and compute controls expose the selected backend
+    and worker settings. The notebook records the long-run performance
+    hypothesis. The measurements, platform limits, and remaining gaps
+    are in <a
+    href="https://github.com/godofecht/embryo-maker-flow/blob/main/PORTING.md">the
+    porting record</a>.</p>
+    <h2 id="change-ledger">Change ledger</h2>
+    <p>This ledger maps every source, runtime, build, and project file
+    changed or added in this worktree. The paired examples above show
+    representative shapes; the linked source and build notes cover the
+    full implementation.</p>
+    <table>
+    <colgroup>
+    <col style="width: 33%" />
+    <col style="width: 33%" />
+    <col style="width: 33%" />
+    </colgroup>
+    <thead>
+    <tr>
+    <th>Area</th>
+    <th>Files</th>
+    <th>Change</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+    <td>Bounded simulation passes</td>
+    <td><code>src/aleas.flow</code>, <code>src/death.flow</code>,
+    <code>src/delaunay.flow</code>, <code>src/ecm.flow</code>,
+    <code>src/editor.flow</code>, <code>src/energy.flow</code>,
+    <code>src/growth.flow</code>, <code>src/mitosis.flow</code>,
+    <code>src/noise.flow</code>, <code>src/nexus.flow</code>,
+    <code>src/polarization.flow</code>,
+    <code>src/single_node.flow</code></td>
+    <td>Replaced explicit counted-loop counters with Flow ranges. Merged
+    minimum and maximum division-size accumulation in
+    <code>src/nexus.flow</code>.</td>
+    </tr>
+    <tr>
+    <td>State, genes, and time stepping</td>
+    <td><code>src/general.flow</code>, <code>src/genetic.flow</code>,
+    <code>src/model.flow</code>, <code>src/rng.flow</code></td>
+    <td>Added environment-backed worker and GPU policy, geometric buffer
+    growth, gene and RK4 range passes, shared batch state transitions,
+    and native unsigned RNG arithmetic.</td>
+    </tr>
+    <tr>
+    <td>Mechanics and neighbor search</td>
+    <td><code>src/biomechanic.flow</code>,
+    <code>src/neighboring.flow</code>,
+    <code>src/workers.flow</code></td>
+    <td>Added cache-aware force scratch, prepared gene and diffusion
+    data, deterministic range jobs, GPU candidate filtering,
+    verification, and CPU fallback.</td>
+    </tr>
+    <tr>
+    <td>Input and server</td>
+    <td><code>src/embryomaker.flow</code>, <code>src/io.flow</code>,
+    <code>ui/server.flow</code></td>
+    <td>Moved process and string handling into Flow libraries, scoped
+    temporary allocations with <code>defer</code>, added compute-mode
+    control, batched model execution, and packed binary model
+    frames.</td>
+    </tr>
+    <tr>
+    <td>Browser client</td>
+    <td><code>ui/index.html</code></td>
+    <td>Added adaptive playback, a timeline and editable target,
+    keyboard stepping, compute selection, and binary frame
+    decoding.</td>
+    </tr>
+    <tr>
+    <td>Native and GPU support</td>
+    <td><code>gpu/kernels/neighbor_prefilter.flow</code>,
+    <code>gpu/metal/force_pairs.metal</code>,
+    <code>gpu/metal/softdouble.metal</code>,
+    <code>gpu/metal/softdouble_test.metal</code>,
+    <code>native/embryo_metal.m</code>,
+    <code>native/embryo_pool.c</code>,
+    <code>native/embryo_metal_force.h</code>,
+    <code>native/embryo_metal_kernels.h</code>,
+    <code>native/embryo_metal_softdouble.h</code></td>
+    <td>Added Metal kernels, software binary64 arithmetic, Flow kernel
+    embedding, and native bridges.</td>
+    </tr>
+    <tr>
+    <td>Build and parity tools</td>
+    <td><code>tools/backend_parity.sh</code>,
+    <code>tools/build-gpu.sh</code>, <code>tools/build-mlir.sh</code>,
+    <code>tools/build-pgo.sh</code>,
+    <code>tools/gen_metal_header.py</code>,
+    <code>tools/mlir_unfuse.py</code>,
+    <code>tools/softdouble_check.flow</code>,
+    <code>tools/run-ui.sh</code></td>
+    <td>Added repeatable PGO, MLIR and Metal builds, backend
+    comparisons, generated kernel headers, and software binary64
+    checks.</td>
+    </tr>
+    <tr>
+    <td>MCP and project wiring</td>
+    <td><code>tools/embryomaker_mcp.py</code>,
+    <code>flow.toml</code></td>
+    <td>Added GPU backend selection and registered native build
+    inputs.</td>
+    </tr>
+    <tr>
+    <td>Performance record</td>
+    <td><code>notebooks/EmbryoMaker-Flow-long-run-hypothesis.ipynb</code>,
+    <code>PORTING.md</code></td>
+    <td>Recorded long-run questions, measurements, parity results, and
+    backend limits.</td>
+    </tr>
+    <tr>
+    <td>Project and idiom docs</td>
+    <td><code>README.md</code>, <code>CLAUDE.md</code>,
+    <code>MCP.md</code>, <code>FLOW_IDIOMS.md</code>,
+    <code>docs/_includes/header.html</code>,
+    <code>docs/flow-idioms.md</code></td>
+    <td>Linked the project guidance and rendered article from the
+    project site.</td>
+    </tr>
+    <tr>
+    <td>Article renderer</td>
+    <td><code>docs/flow-idioms.template.html</code>,
+    <code>docs/assets/flow-idioms.css</code>,
+    <code>docs/flow-idioms.html</code>,
+    <code>tools/render-flow-idioms.sh</code></td>
+    <td>Added the Pandoc template, responsive paired-code styles,
+    generated page, and render command.</td>
+    </tr>
+    </tbody>
+    </table>
+    <h2
+    id="stage-16-share-the-contact-rule-across-candidate-sources">Stage
+    16: share the contact rule across candidate sources</h2>
+    <p>The buffered-candidate experiment initially duplicated the
+    contact calculation inside two traversals. The shared
+    <code>scan_contact</code> function now owns distance arithmetic,
+    layer filtering, and row output. The shared function and scan body
+    occupy 57 lines. Bounded spans use Flow ranges. Linked lists retain
+    their terminating condition.</p>
+    <p>These excerpts show the two candidate sources after
+    consolidation:</p>
+    <div class="compare">
+    <section id="buffered-candidates" class="example">
+    <h4>Buffered candidates</h4>
+    <pre class="flow"><code>for cursor in candidate_offsets[i] to candidate_ends[i] {
+    count = scan_contact(i, candidate_ids[cursor], count)
+}</code></pre>
+    </section>
+    <section id="grid-candidates" class="example after">
+    <h4>Grid candidates</h4>
+    <pre class="flow"><code>for z in zbin - 1 to zbin + 2 {
+    for y in ybin - 1 to ybin + 2 {
+        for x in xbin - 1 to xbin + 2 {
+            let mut candidate: i32 = box_head_at(box_index(x, y, z))
+            while candidate != 0 {
+                count = scan_contact(i, candidate, count)
+                candidate = list[candidate]
+            }
+        }
+    }
+}</code></pre>
+    </section>
+    </div>
+    <p>The cache remains opt-in. Its initial Sea urchin measurements did
+    not establish a speedup. See <a
+    href="benchmarks/candidate-cache.md">the experiment record</a> for
+    parity checks, timings, and limits. The shared contact rule is used
+    by the default box scan too.</p>
+    <h2
+    id="stage-17-let-the-adaptive-integration-scope-release-its-cache">Stage
+    17: let the adaptive integration scope release its cache</h2>
+    <p><code>adaptive_rungekutta</code> repeated the same two flag
+    resets at three failure exits and at successful completion. It now
+    registers one deferred release after pinning the cache. Its bounded
+    node passes also use ranges. A two-step Sea urchin check with
+    adaptive integration enabled produced a byte-identical snapshot
+    before and after this change.</p>
+    <div class="compare">
+    <section id="repeated-failure-cleanup" class="example">
+    <h4>Repeated failure cleanup</h4>
+    <pre class="flow"><code>if rungekutta4(half_step) == false {
+    force_active_gene_cache_pinned = false
+    force_active_gene_cache_valid = false
+    return false
+}</code></pre>
+    </section>
+    <section id="cleanup-owned-by-the-function-scope"
+    class="example after">
+    <h4>Cleanup owned by the function scope</h4>
+    <pre class="flow"><code>force_active_gene_cache_pinned = true
+force_active_gene_cache_valid = false
+defer release_force_gene_cache()
+# The remaining integration stages share this cleanup.
+if rungekutta4(half_step) == false { return false }</code></pre>
+    </section>
+    </div>
+    <h2 id="stage-18-centralize-gene-to-property-signals">Stage 18:
+    centralize gene-to-property signals</h2>
+    <p>ECM secretion, polarization, and node-property updates now call
+    <code>genetic.node_gene_effect(node_id, property_id)</code>. The
+    helper preserves the stored gene order and includes only positive
+    expression. This removes four copies of the same accumulation. Death
+    and division retain their factors inside their sums to preserve
+    arithmetic order. All 19 bundled parity cases passed at the suite's
+    full step counts after consolidation.</p>
+    <h2 id="what-comes-next">What comes next</h2>
+    <p>Flow's <code>flow</code> declarations can own continuous state
+    and generate an integrator. A small experiment confirmed that the
+    compiler generates the state type and integrator. The simulator's
+    mechanics still depend on shared mutable arrays, discrete biological
+    events, and legacy error codes. Moving them into declared dynamics
+    needs a clear state boundary and output comparisons. Start with one
+    isolated continuous subsystem, then compare snapshots and
+    trajectories before expanding the boundary.</p>
+    <p>The <a
+    href="https://github.com/godofecht/embryo-maker-flow/blob/main/FLOW_IDIOMS.md">Flow
+    idiom guideline</a> records the rules for future changes.</p>
+    <footer class="article-footer">
+      <a href="https://github.com/godofecht/embryo-maker-flow/blob/main/FLOW_IDIOMS.md">Read the Flow idiom guideline <span aria-hidden="true">↗</span></a>
+      <a href="index.html">EmbryoMaker Flow</a>
+    </footer>
+  </main>
+</body>
+</html>

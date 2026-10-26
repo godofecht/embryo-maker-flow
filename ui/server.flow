@@ -3,6 +3,10 @@
 
 import embryo.general { Nod, Cel, node, nodeo, cels, ncels, neigh, nneigh, dneigh, neigh_ld, px, py, pz, vcilx, vcily, vcilz, vtorx, vtory, vtorz, vstorx, vstory, vstorz, erep, erepcel, eyou, eadh, nd, ng, nparti, getot, rtime, ffu, rv, maxelong }
 import embryo.genetic { gex, gene_effects, npag, whonpag, gene_expression_index, gene_effect_index }
+import embryo.workers { parallel_init }
+import embryo.general { gpu_mode, set_gpu_mode, set_parallel_threads_policy, parallel_workers, GPU_MODE_OFF, GPU_MODE_EXACT, GPU_MODE_PREVIEW, GPU_MODE_EXACT64 }
+import embryo.neighboring { neighbor_gpu_reset }
+import embryo.biomechanic { force_gpu_calls, force_gpu_fallbacks, force_parallel_calls }
 import embryo.io { read_snapshot_parameters, snapshot_error, write_snapshot, format_i64, format_f64 }
 import embryo.aleas { inialea3d }
 import embryo.model { advance_model_iteration, advance_model_batch, model_batch_reset, model_batch_begin, model_batch_advance_chunk, ModelBatchProgress, model_error }
@@ -750,6 +754,15 @@ function json_put_f64(out: ptr<ByteBuf>, value: f64) -> void {
 
 function make_model_json(iteration: i32, include_snapshot: bool, batch_complete: bool) -> string {
     let out: ptr<ByteBuf> = bb_new(8192)
+    write_model_json(out, iteration, include_snapshot, batch_complete, true)
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
+# The model as JSON. With include_arrays false the edges and nodes arrays
+# are left out; make_model_binary then appends them as packed numbers.
+function write_model_json(out: ptr<ByteBuf>, iteration: i32, include_snapshot: bool, batch_complete: bool, include_arrays: bool) -> void {
     bb_puts(out, "{\"iterations\":")
     bb_put_i32(out, iteration)
     bb_puts(out, ",\"simulatedTime\":")
@@ -799,6 +812,7 @@ function make_model_json(iteration: i32, include_snapshot: bool, batch_complete:
         bb_putc(out, 125)
         cell_index = cell_index + 1
     }
+    if include_arrays {
     bb_puts(out, "],\"edges\":[")
     let mut edge_count: i32 = 0
     let mut edge_from: i32 = 1
@@ -941,6 +955,7 @@ function make_model_json(iteration: i32, include_snapshot: bool, batch_complete:
         bb_putc(out, 125)
         i = i + 1
     }
+    }
     bb_puts(out, "],\"count\":")
     bb_put_i32(out, nd)
     bb_puts(out, ",\"session\":\"")
@@ -961,9 +976,6 @@ function make_model_json(iteration: i32, include_snapshot: bool, batch_complete:
         }
     }
     bb_putc(out, 125)
-    let result: string = bb_str(out)
-    bb_free(out)
-    return result
 }
 
 function make_batch_progress_json() -> string {
@@ -978,6 +990,18 @@ function make_batch_progress_json() -> string {
     return result
 }
 
+function make_iteration_progress_json() -> string {
+    let out: ptr<ByteBuf> = bb_new(96)
+    bb_puts(out, "{\"iterations\":")
+    bb_put_i32(out, getot)
+    bb_puts(out, ",\"simulatedTime\":")
+    json_put_f64(out, rtime)
+    bb_puts(out, ",\"batchComplete\":true}")
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
 function make_error(message: string) -> string {
     let out: ptr<ByteBuf> = bb_new(128)
     bb_puts(out, "{\"error\":")
@@ -986,6 +1010,104 @@ function make_error(message: string) -> string {
     let result: string = bb_str(out)
     bb_free(out)
     return result
+}
+
+# Packed model frame for the viewer, requested with {"binary": true}.
+# Layout, little endian:
+#   "EMB1", u32 meta_len, meta JSON (write_model_json without arrays),
+#   padding to 8 bytes, u32 node_count, u32 float_fields, u32 int_fields,
+#   u32 gene_count, f64[node_count * float_fields], i32[node_count * int_fields],
+#   f64[node_count * gene_count], u32 edge_count, u32 zero,
+#   i32[edge_count * 3] as (a, b, inter).
+# The field order is BINARY_FLOAT_FIELDS / BINARY_INT_FIELDS in ui/index.html.
+const BINARY_FLOAT_FIELDS: i32 = 42
+const BINARY_INT_FIELDS: i32 = 10
+
+function bb_put_u32(out: ptr<ByteBuf>, value: i32) -> void {
+    let mut word: i32 = value
+    bb_put_bytes(out, &word as ptr<u8>, 4)
+}
+
+function make_model_binary(iteration: i32, include_snapshot: bool, batch_complete: bool) -> ptr<ByteBuf> {
+    let meta: ptr<ByteBuf> = bb_new(8192)
+    write_model_json(meta, iteration, include_snapshot, batch_complete, false)
+    let node_count: i32 = nd
+    let float_bytes: i64 = node_count as i64 * BINARY_FLOAT_FIELDS as i64 * 8
+    let int_bytes: i64 = node_count as i64 * BINARY_INT_FIELDS as i64 * 4
+    let gene_bytes: i64 = node_count as i64 * ng as i64 * 8
+    let out: ptr<ByteBuf> = bb_new((bb_len(meta) as i64 + float_bytes + int_bytes + gene_bytes + 65536) as i32)
+    bb_puts(out, "EMB1")
+    bb_put_u32(out, bb_len(meta))
+    bb_put_bytes(out, bb_cstr(meta) as ptr<u8>, bb_len(meta))
+    bb_free(meta)
+    while (bb_len(out) % 8) != 0 { bb_putc(out, 32) }
+    bb_put_u32(out, node_count)
+    bb_put_u32(out, BINARY_FLOAT_FIELDS)
+    bb_put_u32(out, BINARY_INT_FIELDS)
+    bb_put_u32(out, ng)
+    let floats: ptr<f64> = malloc(float_bytes + 8) as ptr<f64>
+    let ints: ptr<i32> = malloc(int_bytes + 8) as ptr<i32>
+    let genes: ptr<f64> = malloc(gene_bytes + 8) as ptr<f64>
+    if floats == null or ints == null or genes == null {
+        bb_free(out)
+        return null
+    }
+    let mut i: i32 = 1
+    while i <= node_count {
+        let n: Nod = node[i]
+        let f: i32 = (i - 1) * BINARY_FLOAT_FIELDS
+        floats[f + 0] = n.x; floats[f + 1] = n.y; floats[f + 2] = n.z; floats[f + 3] = n.add; floats[f + 4] = n.eqd
+        floats[f + 5] = n.e; floats[f + 6] = n.you; floats[f + 7] = n.adh; floats[f + 8] = n.rep; floats[f + 9] = n.rec
+        floats[f + 10] = n.erp; floats[f + 11] = n.est; floats[f + 12] = n.eqs; floats[f + 13] = n.hoo; floats[f + 14] = n.mov
+        floats[f + 15] = n.dmo; floats[f + 16] = n.orix; floats[f + 17] = n.oriy; floats[f + 18] = n.oriz; floats[f + 19] = n.ecm
+        floats[f + 20] = n.cod; floats[f + 21] = n.grd; floats[f + 22] = n.pld; floats[f + 23] = n.vod; floats[f + 24] = n.dif
+        floats[f + 25] = n.kfi; floats[f + 26] = n.pla; floats[f + 27] = n.kvol
+        floats[f + 28] = if n.tipus < 4 and n.icel > 0 { cels[n.icel].fase } else { 0.0 }
+        floats[f + 29] = node_elongation_factor(i)
+        floats[f + 30] = px[i]; floats[f + 31] = py[i]; floats[f + 32] = pz[i]
+        floats[f + 33] = vcilx[i]; floats[f + 34] = vcily[i]; floats[f + 35] = vcilz[i]
+        floats[f + 36] = vtorx[i]; floats[f + 37] = vtory[i]; floats[f + 38] = vtorz[i]
+        floats[f + 39] = vstorx[i]; floats[f + 40] = vstory[i]; floats[f + 41] = vstorz[i]
+        let k: i32 = (i - 1) * BINARY_INT_FIELDS
+        ints[k + 0] = i; ints[k + 1] = if n.fix != 0 { 1 } else { 0 }; ints[k + 2] = n.tipus; ints[k + 3] = n.icel
+        ints[k + 4] = n.altre; ints[k + 5] = n.marge; ints[k + 6] = n.talone; ints[k + 7] = n.ndiv
+        ints[k + 8] = nodeo[i].icel; ints[k + 9] = neighbor_box_head(i)
+        let g: i32 = (i - 1) * ng
+        let mut gene_index: i32 = 1
+        while gene_index <= ng {
+            genes[g + gene_index - 1] = gex[gene_expression_index(i, gene_index)]
+            gene_index = gene_index + 1
+        }
+        i = i + 1
+    }
+    bb_put_bytes(out, floats as ptr<u8>, float_bytes as i32)
+    bb_put_bytes(out, ints as ptr<u8>, int_bytes as i32)
+    bb_put_bytes(out, genes as ptr<u8>, gene_bytes as i32)
+    free(floats as ptr<void>); free(ints as ptr<void>); free(genes as ptr<void>)
+    let mut edge_count: i32 = 0
+    let mut pass: i32 = 0
+    while pass < 2 {
+        if pass == 1 { bb_put_u32(out, edge_count); bb_put_u32(out, 0) }
+        let mut edge_from: i32 = 1
+        while edge_from <= node_count {
+            let mut slot: i32 = 1
+            while slot <= nneigh[edge_from] {
+                let edge_to: i32 = neigh[edge_from * neigh_ld + slot]
+                if edge_to > edge_from and dneigh[edge_from * neigh_ld + slot] < node[edge_from].add + node[edge_to].add {
+                    if pass == 0 { edge_count = edge_count + 1 }
+                    else {
+                        bb_put_u32(out, edge_from)
+                        bb_put_u32(out, edge_to)
+                        bb_put_u32(out, if node[edge_from].icel != node[edge_to].icel { 1 } else { 0 })
+                    }
+                }
+                slot = slot + 1
+            }
+            edge_from = edge_from + 1
+        }
+        pass = pass + 1
+    }
+    return out
 }
 
 function send_all(fd: i32, bytes: ptr<u8>, length: i32) -> bool {
@@ -1014,12 +1136,37 @@ function send_response(fd: i32, status: i32, content_type: string, body: string)
     if body_len > 0 { let _b: bool = send_all(fd, body as ptr<u8>, body_len) }
 }
 
+function send_sized_response(fd: i32, status: i32, content_type: string, data: ptr<u8>, data_len: i64) -> void {
+    send_encoded_response(fd, status, content_type, data, data_len, "")
+}
+
+function send_encoded_response(fd: i32, status: i32, content_type: string, data: ptr<u8>, data_len: i64, encoding: string) -> void {
+    let encoding_header: string = if encoding == "" { "" } else { "Content-Encoding: " + encoding + "\r\n" }
+    let header: string = "HTTP/1.1 " + format_i64(status as i64) + " " + status_reason(status) + "\r\nContent-Type: " + content_type + "\r\nContent-Length: " + format_i64(data_len) + "\r\n" + encoding_header + "Cache-Control: no-store\r\nConnection: close\r\n\r\n"
+    let _h: bool = send_all(fd, header as ptr<u8>, strlen(header) as i32)
+    if data_len > 0 { let _b: bool = send_all(fd, data, data_len as i32) }
+}
+
 function send_owned_response(fd: i32, status: i32, content_type: string, body: string) -> void {
     send_response(fd, status, content_type, body)
     free(body as ptr<void>)
 }
 
+# Set per request from {"binary": true} in the POST body.
+let mut request_wants_binary: bool = false
+
 function send_model_response(fd: i32, iteration: i32, include_snapshot: bool, batch_complete: bool) -> void {
+    if request_wants_binary {
+        let frame: ptr<ByteBuf> = make_model_binary(iteration, include_snapshot, batch_complete)
+        if frame != null {
+            let length: i32 = bb_len(frame)
+            let header: string = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + format_i64(length as i64) + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
+            let _h: bool = send_all(fd, header as ptr<u8>, strlen(header) as i32)
+            let _b: bool = send_all(fd, bb_cstr(frame) as ptr<u8>, length)
+            bb_free(frame)
+            return
+        }
+    }
     let response: string = make_model_json(iteration, include_snapshot, batch_complete)
     send_owned_response(fd, 200, "application/json; charset=utf-8", response)
 }
@@ -1282,6 +1429,57 @@ function handle_start(fd: i32, body: ptr<u8>, body_len: i32) -> void {
     send_model_response(fd, getot, false, true)
 }
 
+# Compute mode for the running server: {"mode": "serial"|"threads"|"preview"|"exact64"}.
+# serial keeps every pass on one core, threads uses the worker pool (its
+# size is fixed at start by EMBRYO_THREADS), preview adds the float32 GPU
+# force kernel, exact64 the software binary64 one. An empty body reports.
+function compute_mode_name() -> string {
+    let mode: i32 = gpu_mode()
+    if mode == GPU_MODE_PREVIEW { return "preview" }
+    if mode == GPU_MODE_EXACT64 { return "exact64" }
+    if parallel_workers() > 1 and compute_threads_enabled { return "threads" }
+    return "serial"
+}
+
+let mut compute_threads_enabled: bool = true
+
+function make_compute_json() -> string {
+    let out: ptr<ByteBuf> = bb_new(256)
+    bb_puts(out, "{\"mode\":")
+    write_json_string(out, compute_mode_name())
+    bb_puts(out, ",\"threads\":")
+    bb_put_i32(out, if compute_threads_enabled { parallel_workers() } else { 1 })
+    bb_puts(out, ",\"gpuForceCalls\":")
+    bb_put_i32(out, force_gpu_calls)
+    bb_puts(out, ",\"gpuForceFallbacks\":")
+    bb_put_i32(out, force_gpu_fallbacks)
+    bb_puts(out, ",\"parallelForceCalls\":")
+    bb_put_i32(out, force_parallel_calls)
+    bb_putc(out, 125)
+    let result: string = bb_str(out)
+    bb_free(out)
+    return result
+}
+
+function handle_compute(fd: i32, body: ptr<u8>, body_len: i32) -> void {
+    let mode_position: i32 = json_key_value(body, body_len, "mode")
+    if mode_position >= 0 {
+        let mode: ptr<u8> = malloc(32) as ptr<u8>
+        let mode_len: i32 = decode_json_string(body, body_len, "mode", mode, 31)
+        let name: string = mode as string
+        if mode_len > 0 {
+            if name == "serial" { set_gpu_mode(GPU_MODE_OFF); compute_threads_enabled = false; set_parallel_threads_policy(2147483647) }
+            elif name == "threads" { set_gpu_mode(GPU_MODE_OFF); compute_threads_enabled = true; set_parallel_threads_policy(512) }
+            elif name == "preview" { set_gpu_mode(GPU_MODE_PREVIEW); compute_threads_enabled = true; set_parallel_threads_policy(512) }
+            elif name == "exact64" { set_gpu_mode(GPU_MODE_EXACT64); compute_threads_enabled = true; set_parallel_threads_policy(512) }
+            else { free(mode as ptr<void>); send_response(fd, 400, "application/json", make_error("Unknown compute mode.")); return }
+            neighbor_gpu_reset()
+        }
+        free(mode as ptr<void>)
+    }
+    send_owned_response(fd, 200, "application/json; charset=utf-8", make_compute_json())
+}
+
 function handle_advance(fd: i32, body: ptr<u8>, body_len: i32) -> void {
     if session_active == false { send_response(fd, 404, "application/json", make_error("Simulation session expired. Reload the experiment.")); return }
     let batch_mode: bool = json_key_value(body, body_len, "timeUnits") >= 0
@@ -1331,6 +1529,11 @@ function handle_advance(fd: i32, body: ptr<u8>, body_len: i32) -> void {
             return
         }
         i = i + 1
+    }
+    if json_true(body, body_len, "progressOnly") {
+        model_batch_reset()
+        send_owned_response(fd, 200, "application/json; charset=utf-8", make_iteration_progress_json())
+        return
     }
     let snapshot: bool = json_true(body, body_len, "includeSnapshot")
     model_batch_reset()
@@ -1477,6 +1680,12 @@ function route_request(fd: i32, request: HttpRequest) -> void {
             else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read ui/index.html") }
             return
         }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/studio.css") {
+            let stylesheet: FileRead = io_read_file("ui/studio.css")
+            if stylesheet.ok { send_response(fd, 200, "text/css; charset=utf-8", stylesheet.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read studio styles") }
+            return
+        }
         if bytes_equal(bytes, request.path_start, request.path_end, "/favicon.svg") {
             let icon: FileRead = io_read_file("ui/favicon.svg")
             if icon.ok { send_response(fd, 200, "image/svg+xml", icon.data) }
@@ -1489,10 +1698,29 @@ function route_request(fd: i32, request: HttpRequest) -> void {
             else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read ui/renderer.js") }
             return
         }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/sea_urchin_project.json.gz") or bytes_equal(bytes, request.path_start, request.path_end, "/ui/sea_urchin_project.json.gz") {
+            let gz_data: FileRead = io_read_file("ui/sea_urchin_project.json.gz")
+            if gz_data.ok { send_sized_response(fd, 200, "application/gzip", gz_data.data as ptr<u8>, gz_data.len) }
+            else { send_response(fd, 404, "text/plain", "Not found") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/sea_urchin_gastrulation.mp4") or bytes_equal(bytes, request.path_start, request.path_end, "/build/sea_urchin_video/sea_urchin_gastrulation.mp4") {
+            let video_data: FileRead = io_read_file("ui/assets/sea_urchin_gastrulation.mp4")
+            if video_data.ok { send_sized_response(fd, 200, "video/mp4", video_data.data as ptr<u8>, video_data.len) }
+            else { send_response(fd, 404, "text/plain", "Not found") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/sea_urchin_project.json") or bytes_equal(bytes, request.path_start, request.path_end, "/ui/sea_urchin_project.json") {
+            let project_data: FileRead = io_read_file("ui/sea_urchin_project.json.gz")
+            if project_data.ok { send_encoded_response(fd, 200, "application/json; charset=utf-8", project_data.data as ptr<u8>, project_data.len, "gzip") }
+            else { send_response(fd, 404, "text/plain", "Not found") }
+            return
+        }
         send_response(fd, 404, "text/plain; charset=utf-8", "Not found")
         return
     }
     if bytes_equal(bytes, request.method_start, request.method_end, "POST") {
+        request_wants_binary = json_true(body, body_len, "binary")
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session") { handle_start(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/edit") { handle_node_edit(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-edit") { handle_cell_edit(fd, body, body_len); return }
@@ -1507,6 +1735,7 @@ function route_request(fd: i32, request: HttpRequest) -> void {
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/cell-paste") { handle_cell_paste(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/gene-edit") { handle_gene_edit(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/advance") { handle_advance(fd, body, body_len); return }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/api/compute") { handle_compute(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/slice-plot") { handle_slice_plot(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/save") { handle_save_snapshot(fd, body, body_len); return }
         if bytes_equal(bytes, request.path_start, request.path_end, "/api/session/" + SESSION_ID + "/save-image") { handle_save_image(fd, body, body_len); return }
@@ -1527,9 +1756,10 @@ function main() -> i32 {
     if port < 1 or port > 65535 { println("PORT must be between 1 and 65535"); return 2 }
     snapshot_file = "/tmp/embryomaker-flow-" + format_i64(proc_pid() as i64) + "-snapshot.dat"
     rollback_file = "/tmp/embryomaker-flow-" + format_i64(proc_pid() as i64) + "-rollback.dat"
+    let worker_threads: i32 = parallel_init()
     let listener: i32 = embryomaker_loopback_listen(port)
     if listener < 0 { println("Could not open EmbryoMaker Studio HTTP listener"); return 1 }
-    println("EmbryoMaker Studio (Flow) at http://127.0.0.1:" + format_i64(port as i64))
+    println("EmbryoMaker Studio (Flow) at http://127.0.0.1:" + format_i64(port as i64) + " with " + format_i64(worker_threads as i64) + " worker thread(s)")
     while true {
         let client: i32 = flow_rt_tcp_accept(listener)
         if client >= 0 {

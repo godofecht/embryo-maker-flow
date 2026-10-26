@@ -17,7 +17,10 @@ When a user asks to test a hypothesis:
 
 For quick runs, start with `reference/examples/migration/migration.txt` or a
 starting state from the morphospace collection. The C backend is the default.
-Use `backend: "mlir"` when asked to compare the MLIR lowering path.
+Use `backend: "mlir"` when asked to compare the MLIR lowering path and
+`backend: "gpu"` for the Metal path (prefilter plus software binary64
+forces). Both keep the snapshot parity contract; see PORTING.md for the
+pipelines, the worker pool, and the measurements.
 
 The local viewer starts with `tools/run-ui.sh` and opens at
 `http://127.0.0.1:8765`. The Claude starter prompt in the viewer copies a

@@ -1,19 +1,257 @@
 import embryo.general {
     nd, nda, node, neigh, nneigh, dneigh, neigh_ld, ffu, mnn_dyn, mnn_dynam,
-    extre, rv, urv, dmax, rdiffmax, omnn, ndch, screen_radius
+    extre, rv, urv, dmax, rdiffmax, omnn, ndch, screen_radius,
+    parallel_workers, use_parallel, embryo_pool_run,
+    gpu_mode, gpu_min_nodes, GPU_MODE_OFF, GPU_MODE_VERIFY
 }
 import embryo.delaunay {
     delaunay_initialize, delaunay_build, delaunay_release,
     delaunay_face_count, delaunay_face_vertex, delaunay_map_at, delaunay_error
 }
+import std.process { proc_getenv }
+import std.string { ParseI64, str_parse_i64_at }
 
 extern {
+    function embryo_candidates_enabled() -> i32
+    function embryo_candidates_reset()
+    function embryo_candidates_prepare(n: i32, geometry: ptr<f64>, scale: f64, side: i32,
+        heads: ptr<i32>, epochs: ptr<i32>, epoch: i32, next: ptr<i32>) -> i32
+    function embryo_candidates_offsets() -> ptr<i32>
+    function embryo_candidates_ends() -> ptr<i32>
+    function embryo_candidates_ids() -> ptr<i32>
     function calloc(count: i64, size: i64) -> ptr<void>
     function realloc(p: ptr<void>, size: i64) -> ptr<void>
     function free(p: ptr<void>)
     function memset(p: ptr<void>, value: i32, size: i64) -> ptr<void>
+    function memcpy(dst: ptr<void>, src: ptr<void>, size: i64) -> ptr<void>
     function sqrt(x: f64) -> f64
     function round(x: f64) -> f64
+    function fprintf(stream: ptr<void>, fmt: string, ...) -> i32
+    function fdopen(fd: i32, mode: string) -> ptr<void>
+    # native/embryo_metal.m, linked through the [native] table in flow.toml.
+    function embryo_gpu_available() -> i32
+    function embryo_gpu_neighbor_prefilter(px: ptr<f32>, py: ptr<f32>, pz: ptr<f32>, radius: ptr<f32>,
+        node_slots: i32, box_start: ptr<i32>, box_start_count: i32, box_nodes: ptr<i32>, box_node_count: i32,
+        node_box: ptr<i32>, n: i32, side: i32, stride: i32, margin: f32,
+        out_count: ptr<i32>, out_ids: ptr<i32>) -> i32
+}
+
+# GPU candidate prefilter for the standard box scan. EMBRYO_GPU=1 enables
+# it, EMBRYO_GPU=verify runs the serial scan as well and compares every row.
+# The kernel (gpu/kernels/neighbor_prefilter.flow) walks the boxes in the
+# serial order with single precision and a widened contact test; the exact
+# double precision test then runs on the survivors in that order, so the
+# rows match the serial scan bit for bit. Any kernel failure or overflow
+# falls back to the serial scan for that call.
+const NEIGHBOR_GPU_MARGIN: f32 = 0.001
+let mut neighbor_gpu_mode: i32 = -1
+# Below this node count the dispatch costs more than the scan it replaces
+# (measured on an M4 Max: 2.3 times slower on the 364 node migration input,
+# even at 1144 nodes). EMBRYO_GPU_MIN_NODES overrides it; verify mode ignores it.
+let mut neighbor_gpu_min_nodes: i32 = 1000
+let mut neighbor_gpu_fallbacks: i32 = 0
+let mut neighbor_gpu_calls: i32 = 0
+let mut gpu_px: ptr<f32> = null
+let mut gpu_py: ptr<f32> = null
+let mut gpu_pz: ptr<f32> = null
+let mut gpu_radius: ptr<f32> = null
+let mut gpu_node_capacity: i32 = 0
+let mut gpu_box_start: ptr<i32> = null
+let mut gpu_box_start_capacity: i64 = 0
+let mut gpu_box_nodes: ptr<i32> = null
+let mut gpu_box_nodes_capacity: i32 = 0
+let mut gpu_out_count: ptr<i32> = null
+let mut gpu_out_count_capacity: i32 = 0
+let mut gpu_out_ids: ptr<i32> = null
+let mut gpu_out_ids_capacity: i64 = 0
+let mut gpu_verify_nneigh: ptr<i32> = null
+let mut gpu_verify_neigh: ptr<i32> = null
+let mut gpu_verify_dneigh: ptr<f64> = null
+let mut gpu_verify_capacity: i64 = 0
+
+function neighbor_gpu_enabled() -> i32 {
+    if neighbor_gpu_mode < 0 {
+        let mode: i32 = gpu_mode()
+        neighbor_gpu_mode = 0
+        if mode == GPU_MODE_VERIFY { neighbor_gpu_mode = 2 }
+        elif mode != GPU_MODE_OFF { neighbor_gpu_mode = 1 }
+        neighbor_gpu_min_nodes = gpu_min_nodes
+        if neighbor_gpu_mode > 0 and embryo_gpu_available() == 0 {
+            fprintf(fdopen(2, "w"), "EmbryoMaker: EMBRYO_GPU set but Metal is unavailable, using the serial scan\n")
+            neighbor_gpu_mode = 0
+        }
+    }
+    return neighbor_gpu_mode
+}
+
+function neighbor_gpu_reset() -> void { neighbor_gpu_mode = -1 }
+
+function ensure_gpu_scratch(total_boxes: i64, stride: i32) -> bool {
+    let required: i32 = nd + 1
+    if gpu_node_capacity < required {
+        let px: ptr<f32> = realloc(gpu_px as ptr<void>, required as i64 * sizeof<f32>()) as ptr<f32>
+        let py: ptr<f32> = realloc(gpu_py as ptr<void>, required as i64 * sizeof<f32>()) as ptr<f32>
+        let pz: ptr<f32> = realloc(gpu_pz as ptr<void>, required as i64 * sizeof<f32>()) as ptr<f32>
+        let pr: ptr<f32> = realloc(gpu_radius as ptr<void>, required as i64 * sizeof<f32>()) as ptr<f32>
+        if px == null or py == null or pz == null or pr == null { return false }
+        gpu_px = px; gpu_py = py; gpu_pz = pz; gpu_radius = pr
+        gpu_node_capacity = required
+    }
+    if gpu_box_start_capacity < total_boxes + 1 {
+        let grown: ptr<i32> = realloc(gpu_box_start as ptr<void>, (total_boxes + 1) * sizeof<i32>()) as ptr<i32>
+        if grown == null { return false }
+        gpu_box_start = grown
+        gpu_box_start_capacity = total_boxes + 1
+    }
+    if gpu_box_nodes_capacity < required {
+        let grown: ptr<i32> = realloc(gpu_box_nodes as ptr<void>, required as i64 * sizeof<i32>()) as ptr<i32>
+        if grown == null { return false }
+        gpu_box_nodes = grown
+        gpu_box_nodes_capacity = required
+    }
+    if gpu_out_count_capacity < required {
+        let grown: ptr<i32> = realloc(gpu_out_count as ptr<void>, required as i64 * sizeof<i32>()) as ptr<i32>
+        if grown == null { return false }
+        gpu_out_count = grown
+        gpu_out_count_capacity = required
+    }
+    let ids_required: i64 = required as i64 * stride as i64
+    if gpu_out_ids_capacity < ids_required {
+        let grown: ptr<i32> = realloc(gpu_out_ids as ptr<void>, ids_required * sizeof<i32>()) as ptr<i32>
+        if grown == null { return false }
+        gpu_out_ids = grown
+        gpu_out_ids_capacity = ids_required
+    }
+    return true
+}
+
+# 1 when the rows were filled from the GPU survivors, 0 to fall back to the
+# serial scan, -1 after setting neighbor_error.
+function neighbor_scan_rows_gpu() -> i32 {
+    let node_count: i32 = nd
+    let side: i32 = box_side
+    let total_boxes: i64 = side as i64 * side as i64 * side as i64
+    let stride: i32 = mnn_dynam
+    if ensure_gpu_scratch(total_boxes, stride) == false { return 0 }
+    # Compressed rows in chain order: each box lists its nodes from the chain
+    # head, which the insertion order makes descending by id.
+    let mut cursor: i32 = 0
+    let mut slot: i64 = 0
+    while slot < total_boxes {
+        gpu_box_start[slot as i32] = cursor
+        if box_epochs[slot as i32] == box_generation {
+            let mut chain: i32 = boxes[slot as i32]
+            while chain != 0 {
+                gpu_box_nodes[cursor] = chain
+                cursor = cursor + 1
+                chain = list[chain]
+            }
+        }
+        slot = slot + 1
+    }
+    gpu_box_start[total_boxes as i32] = cursor
+    let mut i: i32 = 1
+    while i <= node_count {
+        gpu_px[i] = node[i].x as f32
+        gpu_py[i] = node[i].y as f32
+        gpu_pz[i] = node[i].z as f32
+        gpu_radius[i] = node[i].add as f32
+        i = i + 1
+    }
+    neighbor_gpu_calls = neighbor_gpu_calls + 1
+    let status: i32 = embryo_gpu_neighbor_prefilter(gpu_px, gpu_py, gpu_pz, gpu_radius, node_count + 1,
+        gpu_box_start, (total_boxes + 1) as i32, gpu_box_nodes, cursor, node_box_slots,
+        node_count, side, stride, NEIGHBOR_GPU_MARGIN, gpu_out_count, gpu_out_ids)
+    if status != 0 { neighbor_gpu_fallbacks = neighbor_gpu_fallbacks + 1; return 0 }
+    let row_stride: i32 = neigh_ld
+    let cross_layer_ok: bool = ffu[17] != 0
+    let mut largest_row: i32 = 0
+    i = 1
+    while i <= node_count {
+        let survivors: i32 = gpu_out_count[i]
+        if survivors > stride { neighbor_gpu_fallbacks = neighbor_gpu_fallbacks + 1; return 0 }
+        let ix: f64 = node[i].x
+        let iy: f64 = node[i].y
+        let iz: f64 = node[i].z
+        let iadd: f64 = node[i].add
+        let itipus: i32 = node[i].tipus
+        let row_base: i32 = i * row_stride
+        let survivor_base: i32 = i * stride
+        let mut count: i32 = 0
+        let mut k: i32 = 0
+        while k < survivors {
+            let candidate: i32 = gpu_out_ids[survivor_base + k]
+            let dx: f64 = node[candidate].x - ix
+            let dy: f64 = node[candidate].y - iy
+            let dz: f64 = node[candidate].z - iz
+            let dx_squared: f64 = dx * dx
+            let dy_squared: f64 = dy * dy
+            let dz_squared: f64 = dz * dz
+            let xy_squared: f64 = dx_squared + dy_squared
+            let distance_squared: f64 = xy_squared + dz_squared
+            let contact: f64 = node[candidate].add + iadd
+            if distance_squared <= contact * contact {
+                let ctipus: i32 = node[candidate].tipus
+                let same_layer: bool = (ctipus == 1 and itipus == 2) or (ctipus == 2 and itipus == 1)
+                if cross_layer_ok or same_layer == false {
+                    count = count + 1
+                    if count > stride { nneigh[i] = count; neighbor_error = 7; return -1 }
+                    let nidx: i32 = row_base + count
+                    neigh[nidx] = candidate
+                    dneigh[nidx] = sqrt(distance_squared)
+                }
+            }
+            k = k + 1
+        }
+        nneigh[i] = count
+        if count > largest_row { largest_row = count }
+        i = i + 1
+    }
+    omnn = largest_row
+    return 1
+}
+
+# EMBRYO_GPU=verify: fill the rows from the GPU, keep a copy, rerun the
+# serial scan, and compare. A mismatch is a defect in the prefilter margin or
+# ordering, so it stops the run with neighbor_error 11.
+function neighbor_scan_rows_verified() -> bool {
+    let gpu_result: i32 = neighbor_scan_rows_gpu()
+    if gpu_result < 0 { return false }
+    if gpu_result == 0 { return neighbor_scan_rows() }
+    let rows: i64 = (nd + 1) as i64
+    let cells: i64 = rows * neigh_ld as i64
+    if gpu_verify_capacity < cells {
+        let a: ptr<i32> = realloc(gpu_verify_nneigh as ptr<void>, rows * sizeof<i32>()) as ptr<i32>
+        let b: ptr<i32> = realloc(gpu_verify_neigh as ptr<void>, cells * sizeof<i32>()) as ptr<i32>
+        let c: ptr<f64> = realloc(gpu_verify_dneigh as ptr<void>, cells * sizeof<f64>()) as ptr<f64>
+        if a == null or b == null or c == null { neighbor_error = 4; return false }
+        gpu_verify_nneigh = a; gpu_verify_neigh = b; gpu_verify_dneigh = c
+        gpu_verify_capacity = cells
+    }
+    memcpy(gpu_verify_nneigh as ptr<void>, nneigh as ptr<void>, rows * sizeof<i32>())
+    memcpy(gpu_verify_neigh as ptr<void>, neigh as ptr<void>, cells * sizeof<i32>())
+    memcpy(gpu_verify_dneigh as ptr<void>, dneigh as ptr<void>, cells * sizeof<f64>())
+    if neighbor_scan_rows() == false { return false }
+    let mut mismatches: i32 = 0
+    let mut i: i32 = 1
+    while i <= nd {
+        if gpu_verify_nneigh[i] != nneigh[i] { mismatches = mismatches + 1 }
+        else {
+            let mut slot: i32 = 1
+            while slot <= nneigh[i] {
+                let idx: i32 = i * neigh_ld + slot
+                if gpu_verify_neigh[idx] != neigh[idx] or gpu_verify_dneigh[idx] != dneigh[idx] { mismatches = mismatches + 1; slot = nneigh[i] }
+                slot = slot + 1
+            }
+        }
+        i = i + 1
+    }
+    if mismatches > 0 {
+        fprintf(fdopen(2, "w"), "EmbryoMaker: GPU neighbor rows differ from the serial scan for %d node(s)\n", mismatches)
+        neighbor_error = 11
+        return false
+    }
+    return true
 }
 
 const ROOT_TWO: f64 = 1.414213562
@@ -46,6 +284,7 @@ function neighbor_invalidate_node_bounds() -> void { node_bounds_cache_valid = f
 let mut triang_last_ivv: i32 = 0
 let mut oneigh: ptr<i32> = null
 let mut onneigh: ptr<i32> = null
+let mut old_incoming: ptr<i32> = null
 let mut oneigh_ld: i32 = 0
 let mut oneigh_capacity_nodes: i32 = 0
 # Set only after a successful local rebuild where only the moved node row
@@ -53,6 +292,7 @@ let mut oneigh_capacity_nodes: i32 = 0
 let mut neighbor_incremental_node: i32 = 0
 let mut restore_first_marks: ptr<i32> = null
 let mut restore_pair_marks: ptr<i32> = null
+let mut restore_shared: ptr<i32> = null
 let mut restore_dirty_marks: ptr<i32> = null
 let mut restore_mark_capacity: i32 = 0
 let mut restore_mark_generation: i32 = 0
@@ -77,16 +317,20 @@ function ensure_restore_marks(required: i32) -> bool {
     let first: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
     let pair: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
     let dirty: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
-    if first == null or pair == null or dirty == null {
+    let shared: ptr<i32> = calloc(required as i64, sizeof<i32>()) as ptr<i32>
+    if first == null or pair == null or dirty == null or shared == null {
         if first != null { free(first as ptr<void>) }
         if pair != null { free(pair as ptr<void>) }
         if dirty != null { free(dirty as ptr<void>) }
+        if shared != null { free(shared as ptr<void>) }
         neighbor_error = 8
         return false
     }
     if restore_first_marks != null { free(restore_first_marks as ptr<void>) }
     if restore_pair_marks != null { free(restore_pair_marks as ptr<void>) }
     if restore_dirty_marks != null { free(restore_dirty_marks as ptr<void>) }
+    if restore_shared != null { free(restore_shared as ptr<void>) }
+    restore_shared = shared
     restore_first_marks = first
     restore_pair_marks = pair
     restore_dirty_marks = dirty
@@ -123,9 +367,11 @@ function old_neighbor_index(node_id: i32, column: i32) -> i32 {
 }
 
 function neighbor_reset() -> void {
+    embryo_candidates_reset()
     neighbor_invalidate_node_bounds()
     if oneigh != null { free(oneigh as ptr<void>); oneigh = null }
     if onneigh != null { free(onneigh as ptr<void>); onneigh = null }
+    if old_incoming != null { free(old_incoming as ptr<void>); old_incoming = null }
     if boxes != null { free(boxes as ptr<void>); boxes = null }
     if box_counts != null { free(box_counts as ptr<void>); box_counts = null }
     if box_epochs != null { free(box_epochs as ptr<void>); box_epochs = null }
@@ -262,9 +508,10 @@ function prepare_neighbor_table(max_neighbors: i32) -> bool {
     if neigh == null or dneigh == null or neigh_ld <= max_neighbors {
         if grow_neighbor_buffers(max_neighbors) == false { return false }
     }
-    let row_count: i64 = nda as i64 + 1
-    memset(neigh as ptr<void>, 0, row_count * neigh_ld as i64 * sizeof<i32>())
-    memset(dneigh as ptr<void>, 0, row_count * neigh_ld as i64 * sizeof<f64>())
+    # Rows are filled from column 1 up to nneigh on every build, and every
+    # reader stops at nneigh, so the table needs no clearing here. The full
+    # clear was 12 percent of an iteration at 1144 nodes with a 540 column
+    # stride.
     return true
 }
 
@@ -291,6 +538,12 @@ function neighbor_remove_node(deleted_id: i32) -> void {
                     write_column = write_column + 1
                 }
                 onneigh[source] = write_column - 1
+                # IDs and row positions both shift during deletion. Recompute
+                # the prefix against the row's new ID after compaction.
+                let new_source: i32 = if source > deleted_id { source - 1 } else { source }
+                let mut prefix: i32 = 0
+                while prefix < onneigh[source] and oneigh[source * oneigh_ld + prefix + 1] < new_source { prefix = prefix + 1 }
+                old_incoming[source] = prefix
             }
             source = source + 1
         }
@@ -302,6 +555,7 @@ function neighbor_remove_node(deleted_id: i32) -> void {
                 column = column + 1
             }
             onneigh[row] = onneigh[row + 1]
+            old_incoming[row] = old_incoming[row + 1]
             row = row + 1
         }
         let mut column: i32 = 0
@@ -310,6 +564,7 @@ function neighbor_remove_node(deleted_id: i32) -> void {
             column = column + 1
         }
         onneigh[ndch] = 0
+        old_incoming[ndch] = 0
         ndch = ndch - 1
     }
 }
@@ -322,20 +577,9 @@ function fill_co_griders() -> bool {
         if nneigh[node_id] > max_neighbors { max_neighbors = nneigh[node_id] }
         node_id = node_id + 1
     }
-    let new_oneigh: ptr<i32> = calloc((nd + 1) as i64 * (max_neighbors + 1) as i64, sizeof<i32>()) as ptr<i32>
-    let new_onneigh: ptr<i32> = calloc((nd + 1) as i64, sizeof<i32>()) as ptr<i32>
-    if new_oneigh == null or new_onneigh == null {
-        if new_oneigh != null { free(new_oneigh as ptr<void>) }
-        if new_onneigh != null { free(new_onneigh as ptr<void>) }
-        neighbor_error = 8
-        return false
-    }
-    if oneigh != null { free(oneigh as ptr<void>) }
-    if onneigh != null { free(onneigh as ptr<void>) }
-    oneigh = new_oneigh
-    onneigh = new_onneigh
-    oneigh_ld = max_neighbors + 1
-    oneigh_capacity_nodes = nd + 1
+    if ensure_old_neighbor_capacity(max_neighbors + 1) == false { return false }
+    node_id = 1
+    while node_id <= nd { onneigh[node_id] = 0; old_incoming[node_id] = 0; node_id = node_id + 1 }
     node_id = 1
     while node_id <= nd {
         if node[node_id].tipus < 3 {
@@ -347,6 +591,7 @@ function fill_co_griders() -> bool {
                     oneigh[old_neighbor_index(node_id, onneigh[node_id])] = other
                     onneigh[other] = onneigh[other] + 1
                     oneigh[old_neighbor_index(other, onneigh[other])] = node_id
+                    if node_id < other { old_incoming[other] = old_incoming[other] + 1 }
                 }
                 slot = slot + 1
             }
@@ -359,41 +604,58 @@ function fill_co_griders() -> bool {
 
 function ensure_old_neighbor_capacity(required_ld: i32) -> bool {
     let required_nodes: i32 = nd + 1
-    if required_ld <= oneigh_ld and required_nodes <= oneigh_capacity_nodes { return true }
-    let mut next_ld: i32 = oneigh_ld
-    if required_ld > oneigh_ld {
-        let doubled_ld: i32 = if oneigh_ld > 1073741823 { required_ld } else { oneigh_ld * 2 }
+    let has_buffers: bool = oneigh != null and onneigh != null
+    if has_buffers and required_ld <= oneigh_ld and required_nodes <= oneigh_capacity_nodes { return true }
+    let mut next_ld: i32 = if has_buffers { oneigh_ld } else { required_ld }
+    if required_ld > next_ld {
+        let doubled_ld: i32 = if next_ld > 1073741823 { required_ld } else { next_ld * 2 }
         next_ld = if required_ld > doubled_ld { required_ld } else { doubled_ld }
     }
-    let mut next_nodes: i32 = oneigh_capacity_nodes
-    if required_nodes > oneigh_capacity_nodes {
-        let doubled_nodes: i32 = if oneigh_capacity_nodes > 1073741823 { required_nodes } else { oneigh_capacity_nodes * 2 }
+    let mut next_nodes: i32 = if has_buffers { oneigh_capacity_nodes } else { required_nodes }
+    if required_nodes > next_nodes {
+        let doubled_nodes: i32 = if next_nodes > 1073741823 { required_nodes } else { next_nodes * 2 }
         next_nodes = if required_nodes > doubled_nodes { required_nodes } else { doubled_nodes }
     }
     let new_oneigh: ptr<i32> = calloc(next_nodes as i64 * next_ld as i64, sizeof<i32>()) as ptr<i32>
     let new_onneigh: ptr<i32> = calloc(next_nodes as i64, sizeof<i32>()) as ptr<i32>
-    if new_oneigh == null or new_onneigh == null {
+    let new_incoming: ptr<i32> = calloc(next_nodes as i64, sizeof<i32>()) as ptr<i32>
+    if new_oneigh == null or new_onneigh == null or new_incoming == null {
         if new_oneigh != null { free(new_oneigh as ptr<void>) }
         if new_onneigh != null { free(new_onneigh as ptr<void>) }
+        if new_incoming != null { free(new_incoming as ptr<void>) }
         neighbor_error = 8
         return false
     }
     let mut row: i32 = 1
-    while row <= ndch {
+    let last_copy_row: i32 = if ndch < next_nodes - 1 { ndch } else { next_nodes - 1 }
+    while has_buffers and row <= last_copy_row {
         new_onneigh[row] = onneigh[row]
-        let mut slot: i32 = 1
-        while slot <= onneigh[row] {
-            new_oneigh[row * next_ld + slot] = oneigh[row * oneigh_ld + slot]
-            slot = slot + 1
+        new_incoming[row] = old_incoming[row]
+        let count: i32 = onneigh[row]
+        if count > 0 {
+            memcpy(&new_oneigh[row * next_ld + 1] as ptr<void>, &oneigh[row * oneigh_ld + 1] as ptr<void>, count as i64 * sizeof<i32>())
         }
         row = row + 1
     }
     if oneigh != null { free(oneigh as ptr<void>) }
     if onneigh != null { free(onneigh as ptr<void>) }
+    if old_incoming != null { free(old_incoming as ptr<void>) }
+    old_incoming = new_incoming
     oneigh = new_oneigh
     onneigh = new_onneigh
     oneigh_ld = next_ld
     oneigh_capacity_nodes = next_nodes
+    return true
+}
+
+# Diagnostic invariant check used by restoration regression tests.
+function neighbor_validate_saved_prefixes() -> bool {
+    if oneigh == null or onneigh == null or old_incoming == null { return ndch == 0 }
+    for row in 1 to ndch + 1 {
+        let mut prefix: i32 = 0
+        while prefix < onneigh[row] and oneigh[old_neighbor_index(row, prefix + 1)] < row { prefix = prefix + 1 }
+        if old_incoming[row] != prefix { return false }
+    }
     return true
 }
 
@@ -408,6 +670,7 @@ function old_neighbor_remove(row: i32, neighbor_id: i32) -> void {
             }
             oneigh[old_neighbor_index(row, onneigh[row])] = 0
             onneigh[row] = onneigh[row] - 1
+            if slot <= old_incoming[row] { old_incoming[row] = old_incoming[row] - 1 }
             return
         }
         slot = slot + 1
@@ -415,8 +678,7 @@ function old_neighbor_remove(row: i32, neighbor_id: i32) -> void {
 }
 
 function old_neighbor_insert_incoming(row: i32, source: i32) -> bool {
-    let mut incoming: i32 = 0
-    while incoming < onneigh[row] and oneigh[old_neighbor_index(row, incoming + 1)] < row { incoming = incoming + 1 }
+    let incoming: i32 = old_incoming[row]
     let mut search: i32 = 1
     while search <= incoming {
         if oneigh[old_neighbor_index(row, search)] == source { return true }
@@ -431,6 +693,7 @@ function old_neighbor_insert_incoming(row: i32, source: i32) -> bool {
     }
     oneigh[old_neighbor_index(row, position)] = source
     onneigh[row] = onneigh[row] + 1
+    old_incoming[row] = incoming + 1
     return true
 }
 
@@ -438,8 +701,21 @@ function sync_old_neighbor_row(source: i32, current_stamp: i32) -> bool {
     # Saved rows list lower-id incoming edges first, followed by this row's
     # outgoing edges in neighbor order. Update only the outgoing portion.
     if node[source].tipus > 2 { return true }
-    let mut incoming: i32 = 0
-    while incoming < onneigh[source] and oneigh[old_neighbor_index(source, incoming + 1)] < source { incoming = incoming + 1 }
+    let incoming: i32 = old_incoming[source]
+    # Noise often changes positions while leaving the outgoing row identical.
+    # Preserve its existing storage when both membership and order match.
+    let mut previous: i32 = incoming + 1
+    let mut current: i32 = 1
+    let mut unchanged: bool = true
+    while current <= nneigh[source] and unchanged {
+        let other: i32 = neigh[neighbor_index(source, current)]
+        if other > source and other <= nd and node[other].tipus <= 2 {
+            if previous > onneigh[source] or oneigh[old_neighbor_index(source, previous)] != other { unchanged = false }
+            previous = previous + 1
+        }
+        current = current + 1
+    }
+    if unchanged and previous == onneigh[source] + 1 { return true }
     if ensure_old_neighbor_capacity(incoming + nneigh[source] + 1) == false { return false }
     let old_stamp: i32 = next_restore_mark()
     let mut slot: i32 = incoming + 1
@@ -475,12 +751,8 @@ function grow_neighbor_buffers(required: i32) -> bool {
     if new_neigh == null or new_dneigh == null { neighbor_error = 8; return false }
     let mut node_id: i32 = 1
     while node_id <= nd {
-        let mut slot: i32 = 0
-        while slot < old_ld {
-            new_neigh[node_id * new_ld + slot] = neigh[node_id * old_ld + slot]
-            new_dneigh[node_id * new_ld + slot] = dneigh[node_id * old_ld + slot]
-            slot = slot + 1
-        }
+        memcpy(&new_neigh[node_id * new_ld] as ptr<void>, &neigh[node_id * old_ld] as ptr<void>, old_ld as i64 * sizeof<i32>())
+        memcpy(&new_dneigh[node_id * new_ld] as ptr<void>, &dneigh[node_id * old_ld] as ptr<void>, old_ld as i64 * sizeof<f64>())
         node_id = node_id + 1
     }
     if neigh != null { free(neigh as ptr<void>) }
@@ -533,29 +805,31 @@ function restore_neighbors() -> bool {
                     if restore_first_marks[second] != first_stamp {
                         let mut recover: bool = true
                         let pair_stamp: i32 = next_restore_mark()
+                        # The first row already has membership marks. Collect the
+                        # intersection directly while scanning the second row.
+                        let mut shared_count: i32 = 0
                         slot = 1
                         while slot <= nneigh[second] {
-                            restore_pair_marks[neigh[neighbor_index(second, slot)]] = pair_stamp
+                            let shared: i32 = neigh[neighbor_index(second, slot)]
+                            if restore_first_marks[shared] == first_stamp and restore_pair_marks[shared] != pair_stamp {
+                                restore_pair_marks[shared] = pair_stamp
+                                restore_shared[shared_count] = shared
+                                shared_count = shared_count + 1
+                            }
                             slot = slot + 1
                         }
-                        slot = 1
-                        while slot <= nneigh[first] {
-                            let shared: i32 = neigh[neighbor_index(first, slot)]
-                            if restore_pair_marks[shared] == pair_stamp { restore_pair_marks[shared] = 0 - pair_stamp }
-                            slot = slot + 1
-                        }
-                        slot = 1
-                        while slot <= nneigh[first] and recover {
-                            let shared: i32 = neigh[neighbor_index(first, slot)]
-                            if restore_pair_marks[shared] == 0 - pair_stamp {
+                        let mut shared_slot: i32 = 0
+                        if shared_count >= 2 {
+                            while shared_slot < shared_count and recover {
+                                let shared: i32 = restore_shared[shared_slot]
                                 let mut link_slot: i32 = 1
                                 while link_slot <= nneigh[shared] and recover {
                                     let second_shared: i32 = neigh[neighbor_index(shared, link_slot)]
-                                    if restore_pair_marks[second_shared] == 0 - pair_stamp { recover = false }
+                                    if restore_pair_marks[second_shared] == pair_stamp { recover = false }
                                     link_slot = link_slot + 1
                                 }
+                                shared_slot = shared_slot + 1
                             }
-                            slot = slot + 1
                         }
                         if recover {
                             let required: i32 = if nneigh[first] > nneigh[second] { nneigh[first] + 1 } else { nneigh[second] + 1 }
@@ -1331,45 +1605,145 @@ function neighbor_build() -> bool {
     if mnn_dynam < 1 { mnn_dynam = 1 }
     if prepare_neighbor_table(mnn_dynam) == false { return false }
     omnn = 0
-    i = 1
-    while i <= nd {
-        nneigh[i] = 0
-        let zbin: i32 = round(node[i].z * urv) as i32
-        let ybin: i32 = round(node[i].y * urv) as i32
-        let xbin: i32 = round(node[i].x * urv) as i32
-        let mut z_offset: i32 = -1
-        while z_offset <= 1 {
-            let mut y_offset: i32 = -1
-            while y_offset <= 1 {
-                let mut x_offset: i32 = -1
-                while x_offset <= 1 {
-                    let chain: i32 = box_head_at(box_index(xbin + x_offset, ybin + y_offset, zbin + z_offset))
-                    let mut candidate: i32 = chain
-                    while candidate != 0 {
-                        let same_layer: bool = (node[candidate].tipus == 1 and node[i].tipus == 2) or (node[candidate].tipus == 2 and node[i].tipus == 1)
-                        if candidate != i and (ffu[17] != 0 or same_layer == false) {
-                            let distance_squared: f64 = node_distance_squared(candidate, i)
-                            let contact: f64 = node[candidate].add + node[i].add
-                            if distance_squared <= contact * contact {
-                                nneigh[i] = nneigh[i] + 1
-                                if nneigh[i] > mnn_dynam { neighbor_error = 7; return false }
-                                let nidx: i32 = neighbor_index(i, nneigh[i])
-                                neigh[nidx] = candidate
-                                dneigh[nidx] = sqrt(distance_squared)
-                            }
-                        }
-                        candidate = list[candidate]
-                    }
-                    x_offset = x_offset + 1
-                }
-                y_offset = y_offset + 1
-            }
-            z_offset = z_offset + 1
-        }
-        if nneigh[i] > omnn { omnn = nneigh[i] }
-        i = i + 1
+    let gpu_mode: i32 = neighbor_gpu_enabled()
+    if gpu_mode == 2 { return neighbor_scan_rows_verified() }
+    if gpu_mode == 1 and nd >= neighbor_gpu_min_nodes {
+        let gpu_result: i32 = neighbor_scan_rows_gpu()
+        if gpu_result != 0 { return gpu_result > 0 }
+    }
+    if embryo_candidates_enabled() != 0 {
+        if prepare_scan_geometry() == false { neighbor_error = 4; return false }
+        candidate_scan_active = embryo_candidates_prepare(nd, scan_geometry, urv, box_side,
+            boxes, box_epochs, box_generation, list) != 0
+        candidate_offsets = embryo_candidates_offsets()
+        candidate_ends = embryo_candidates_ends()
+        candidate_ids = embryo_candidates_ids()
+    }
+    let result: bool = neighbor_scan_rows()
+    candidate_scan_active = false
+    return result
+}
+
+# The candidate scan over the 27 boxes around each node. One body serves the
+# serial path and the worker pool: each call owns the node ids start + 1
+# through end and writes only those rows. Scalar globals are copied to
+# locals so stores into the integer neighbor rows cannot force the C
+# compiler to reload them. The distance test runs before the layer test, so
+# rejected candidates touch only the position cache line. Per-axis early
+# exits were measured slower here: their branches mispredict, and the full
+# sum is cheap.
+let mut neighbor_thread_error: ptr<i32> = null
+let mut neighbor_thread_max: ptr<i32> = null
+let mut neighbor_thread_capacity: i32 = 0
+
+function ensure_neighbor_thread_slots(threads: i32) -> bool {
+    if neighbor_thread_capacity >= threads { return true }
+    let errors: ptr<i32> = realloc(neighbor_thread_error as ptr<void>, threads as i64 * sizeof<i32>()) as ptr<i32>
+    let maxima: ptr<i32> = realloc(neighbor_thread_max as ptr<void>, threads as i64 * sizeof<i32>()) as ptr<i32>
+    if errors == null or maxima == null { return false }
+    neighbor_thread_error = errors
+    neighbor_thread_max = maxima
+    neighbor_thread_capacity = threads
+    return true
+}
+
+# Compact read-only positions keep the box scan out of the large node records.
+let mut candidate_scan_active: bool = false
+let mut candidate_offsets: ptr<i32> = null
+let mut candidate_ends: ptr<i32> = null
+let mut candidate_ids: ptr<i32> = null
+let mut scan_geometry: ptr<f64> = null
+let mut scan_geometry_capacity: i32 = 0
+
+function prepare_scan_geometry() -> bool {
+    if scan_geometry_capacity < nd + 1 {
+        let grown: ptr<f64> = realloc(scan_geometry as ptr<void>, (nd + 1) as i64 * 4 * sizeof<f64>()) as ptr<f64>
+        if grown == null { return false }
+        scan_geometry = grown
+        scan_geometry_capacity = nd + 1
+    }
+    for i in 1 to nd + 1 {
+        let base: i32 = i * 4
+        scan_geometry[base] = node[i].x
+        scan_geometry[base + 1] = node[i].y
+        scan_geometry[base + 2] = node[i].z
+        scan_geometry[base + 3] = node[i].add
     }
     return true
 }
 
-export boxes, list, box_counts, nboxes, box_side, neighbor_error, triangulation_warning, neighbor_clear_warning, triang_last_ivv, box_index, neighbor_box_head, neighbor_index, fill_co_griders, restore_neighbors, neighbor_build, neighbor_build_node, neighbor_build_old_box, neighbor_reset, neighbor_remove_node
+# Both candidate sources use the same ordered contact test.
+function scan_contact(i: i32, candidate: i32, count: i32) -> i32 {
+    if candidate == i { return count }
+    let dx: f64 = scan_geometry[candidate * 4] - node[i].x
+    let dy: f64 = scan_geometry[candidate * 4 + 1] - node[i].y
+    let dz: f64 = scan_geometry[candidate * 4 + 2] - node[i].z
+    let distance_squared: f64 = ((dx * dx) + (dy * dy)) + (dz * dz)
+    let contact: f64 = scan_geometry[candidate * 4 + 3] + node[i].add
+    if distance_squared <= contact * contact {
+        let source_type: i32 = node[i].tipus
+        let candidate_type: i32 = node[candidate].tipus
+        let crosses_layer: bool = (candidate_type == 1 and source_type == 2) or
+            (candidate_type == 2 and source_type == 1)
+        if ffu[17] != 0 or crosses_layer == false {
+            let next: i32 = count + 1
+            if next <= mnn_dynam {
+                let index: i32 = neighbor_index(i, next)
+                neigh[index] = candidate
+                dneigh[index] = sqrt(distance_squared)
+            }
+            return next
+        }
+    }
+    return count
+}
+
+function neighbor_scan_range(start: i32, end: i32, thread: i32) -> void {
+    let mut largest_row: i32 = 0
+    for i in start + 1 to end + 1 {
+        nneigh[i] = 0
+        let mut count: i32 = 0
+        if candidate_scan_active {
+            for cursor in candidate_offsets[i] to candidate_ends[i] {
+                count = scan_contact(i, candidate_ids[cursor], count)
+            }
+        } else {
+            let xbin: i32 = round(node[i].x * urv) as i32
+            let ybin: i32 = round(node[i].y * urv) as i32
+            let zbin: i32 = round(node[i].z * urv) as i32
+            for z in zbin - 1 to zbin + 2 {
+                for y in ybin - 1 to ybin + 2 {
+                    for x in xbin - 1 to xbin + 2 {
+                        let mut candidate: i32 = box_head_at(box_index(x, y, z))
+                        while candidate != 0 {
+                            count = scan_contact(i, candidate, count)
+                            candidate = list[candidate]
+                        }
+                    }
+                }
+            }
+        }
+        nneigh[i] = count
+        if count > mnn_dynam { neighbor_thread_error[thread] = 7; return }
+        if count > largest_row { largest_row = count }
+    }
+    if largest_row > neighbor_thread_max[thread] { neighbor_thread_max[thread] = largest_row }
+}
+
+function neighbor_scan_rows() -> bool {
+    if prepare_scan_geometry() == false { neighbor_error = 4; return false }
+    let threads: i32 = if use_parallel() { parallel_workers() } else { 1 }
+    if ensure_neighbor_thread_slots(threads) == false { neighbor_error = 4; return false }
+    for t in 0 to threads { neighbor_thread_error[t] = 0; neighbor_thread_max[t] = 0 }
+    if threads > 1 { embryo_pool_run(1, nd, 64) }
+    else { neighbor_scan_range(0, nd, 0) }
+    let mut largest_row: i32 = 0
+    for t in 0 to threads {
+        if neighbor_thread_error[t] != 0 { neighbor_error = neighbor_thread_error[t]; return false }
+        if neighbor_thread_max[t] > largest_row { largest_row = neighbor_thread_max[t] }
+    }
+    omnn = largest_row
+    return true
+}
+
+export neighbor_validate_saved_prefixes, neighbor_gpu_reset, neighbor_scan_range, neighbor_gpu_enabled, neighbor_gpu_calls, neighbor_gpu_fallbacks, boxes, list, box_counts, nboxes, box_side, neighbor_error, triangulation_warning, neighbor_clear_warning, triang_last_ivv, box_index, neighbor_box_head, neighbor_index, fill_co_griders, restore_neighbors, neighbor_build, neighbor_build_node, neighbor_build_old_box, neighbor_reset, neighbor_remove_node

@@ -21,36 +21,28 @@ let mut death_error: i32 = 0
 
 function death_effect(node_id: i32, property_id: i32) -> f64 {
     let mut rate: f64 = 0.0
-    let mut gene_slot: i32 = 1
-    while gene_slot <= npag[property_id] {
+    for gene_slot in 1 to npag[property_id] + 1 {
         let gene_id: i32 = whonpag[property_id * (ng + 1) + gene_slot]
         let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
         if expression > 0.0 {
             rate = rate + expression * gene_effects[gene_effect_index(gene_id, property_id)] * (1.0 - node[node_id].dif)
         }
-        gene_slot = gene_slot + 1
     }
     return rate * delta
 }
 
 function compact_cell(cell_id: i32) -> bool {
     if cell_id < 1 or cell_id > ncels { return false }
-    let mut i: i32 = cell_id
-    while i < ncels {
+    for i in cell_id to ncels {
         cels[i] = cels[i + 1]
-        i = i + 1
     }
     cels[ncels] = cel_zero()
     ncels = ncels - 1
-    let mut current_cell: i32 = cell_id
-    while current_cell <= ncels {
-        let mut slot: i32 = 1
-        while slot <= cels[current_cell].nunodes {
+    for current_cell in cell_id to ncels + 1 {
+        for slot in 1 to cels[current_cell].nunodes + 1 {
             let node_id: i32 = cels[current_cell].node[slot]
             if node[node_id].icel >= cell_id { node[node_id].icel = node[node_id].icel - 1 }
-            slot = slot + 1
         }
-        current_cell = current_cell + 1
     }
     return true
 }
@@ -59,26 +51,20 @@ function remove_one_node(deleted_id: i32) -> bool {
     if deleted_id < 1 or deleted_id > nd { return false }
     let old_count: i32 = nd
     let owner: i32 = node[deleted_id].icel
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
-        let mut source_slot: i32 = 1
+    for cell_id in 1 to ncels + 1 {
         let mut target_slot: i32 = 1
-        while source_slot <= cels[cell_id].nunodes {
+        for source_slot in 1 to cels[cell_id].nunodes + 1 {
             let value: i32 = cels[cell_id].node[source_slot]
             if value != deleted_id {
                 cels[cell_id].node[target_slot] = if value > deleted_id { value - 1 } else { value }
                 target_slot = target_slot + 1
             }
-            source_slot = source_slot + 1
         }
         if cell_id == owner { cels[cell_id].nunodes = cels[cell_id].nunodes - 1 }
-        cell_id = cell_id + 1
     }
-    let mut row: i32 = 1
-    while row <= nd {
+    for row in 1 to nd + 1 {
         if node[row].altre == deleted_id { node[row].altre = 0 }
         if node[row].altre > deleted_id { node[row].altre = node[row].altre - 1 }
-        row = row + 1
     }
     if gene_remove_node_slot(deleted_id, old_count) == false { death_error = 1; return false }
     neighbor_remove_node(deleted_id)
@@ -108,18 +94,16 @@ function should_i_die() -> bool {
     let original_cell_count: i32 = ncels
     let removed_cells: ptr<i32> = calloc((original_cell_count + 1) as i64, sizeof<i32>()) as ptr<i32>
     if removed_cells == null { death_error = 6; return false }
-    let mut cell_id: i32 = 1
-    while cell_id <= original_cell_count {
+    for cell_id in 1 to original_cell_count + 1 {
         if cels[cell_id].nunodes <= 0 { free(removed_cells as ptr<void>); death_error = 3; return false }
         let original_node_count: i32 = cels[cell_id].nunodes
         let first_node: i32 = cels[cell_id].node[1]
         if node[first_node].fix != 1 {
-            let mut slot: i32 = 1
             let mut updated_count: i32 = 0
             let mut fallback_rate: f64 = 0.0
-            while slot <= original_node_count {
+            for slot in 1 to original_node_count + 1 {
                 let node_id: i32 = cels[cell_id].node[slot]
-                if node_id < 1 or node_id > nd { slot = slot + 1; continue }
+                if node_id < 1 or node_id > nd { continue }
                 let rate: f64 = death_effect(node_id, PARAMETER_CELL_DEATH)
                 fallback_rate = rate
                 if rate != 0.0 and node[node_id].grd < mmae {
@@ -130,7 +114,6 @@ function should_i_die() -> bool {
                         if cels[cell_id].nunodes == 0 {
                             removed_cells[cell_id] = 1
                         }
-                        slot = slot + 1
                         continue
                     }
                     node[node_id].grd = next_radius
@@ -144,7 +127,6 @@ function should_i_die() -> bool {
                         }
                     }
                 }
-                slot = slot + 1
             }
             if updated_count == 0 and cels[cell_id].nunodes > 0 {
                 let selected_slot: i32 = (rng_real() * original_node_count as f64) as i32 + 1
@@ -155,9 +137,8 @@ function should_i_die() -> bool {
                 }
             }
         }
-        cell_id = cell_id + 1
     }
-    cell_id = original_cell_count
+    let mut cell_id: i32 = original_cell_count
     while cell_id >= 1 {
         if removed_cells[cell_id] == 1 and compact_cell(cell_id) == false { free(removed_cells as ptr<void>); death_error = 4; return false }
         cell_id = cell_id - 1

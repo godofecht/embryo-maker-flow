@@ -4,7 +4,7 @@ import embryo.general {
 }
 import embryo.genetic {
     ng, npag, whonpag, gex, agex, gene_effects,
-    gene_expression_index, gene_effect_index, gene_resize_nodes
+    gene_expression_index, gene_effect_index, gene_resize_nodes, node_gene_effect
 }
 import embryo.aleas { nvaloq, particions_esfera, partition_index }
 import embryo.neighboring { nneigh, neigh, neighbor_index }
@@ -16,19 +16,6 @@ const PARAMETER_ECM_SECRETION: i32 = 39
 
 let mut ecm_error: i32 = 0
 
-function secretion_effect(node_id: i32, property: i32) -> f64 {
-    let mut value: f64 = 0.0
-    let mut slot: i32 = 1
-    while slot <= npag[property] {
-        let gene_id: i32 = whonpag[property * (ng + 1) + slot]
-        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
-        if expression > 0.0 {
-            value = value + expression * gene_effects[gene_effect_index(gene_id, property)]
-        }
-        slot = slot + 1
-    }
-    return value
-}
 
 function ecm_secretion(source_id: i32) -> bool {
     let old_capacity: i32 = node_capacity
@@ -75,15 +62,13 @@ function ecm_secretion(source_id: i32) -> bool {
             let mut gradient_x: f64 = 0.0
             let mut gradient_y: f64 = 0.0
             let mut gradient_z: f64 = 0.0
-            let mut neighbor_slot: i32 = 1
-            while neighbor_slot <= nneigh[source_id] {
+            for neighbor_slot in 1 to nneigh[source_id] + 1 {
                 let other_id: i32 = neigh[neighbor_index(source_id, neighbor_slot)]
                 let dx: f64 = node[other_id].x - node[source_id].x
                 let dy: f64 = node[other_id].y - node[source_id].y
                 let dz: f64 = node[other_id].z - node[source_id].z
                 let inverse_distance: f64 = 1.0 / sqrt((dx * dx) + (dy * dy) + (dz * dz))
-                let mut gene_slot: i32 = 1
-                while gene_slot <= npag[46] {
+                for gene_slot in 1 to npag[46] + 1 {
                     let gene_id: i32 = whonpag[46 * (ng + 1) + gene_slot]
                     let expression: f64 = gex[gene_expression_index(other_id, gene_id)]
                     if expression > 0.0 {
@@ -92,9 +77,7 @@ function ecm_secretion(source_id: i32) -> bool {
                         gradient_y = gradient_y + dy * influence
                         gradient_z = gradient_z + dz * influence
                     }
-                    gene_slot = gene_slot + 1
                 }
-                neighbor_slot = neighbor_slot + 1
             }
             let gradient_squared: f64 = (gradient_x * gradient_x) + (gradient_y * gradient_y) + (gradient_z * gradient_z)
             let mut polarity_x: f64 = 0.0
@@ -110,11 +93,9 @@ function ecm_secretion(source_id: i32) -> bool {
             # Fortran reads an uninitialized d in the blend. Use zero as the
             # defined baseline and preserve its last-gene assignment behavior.
             let mut blend: f64 = 0.0
-            let mut gene_slot: i32 = 1
-            while gene_slot <= npag[46] {
+            for gene_slot in 1 to npag[46] + 1 {
                 let gene_id: i32 = whonpag[46 * (ng + 1) + gene_slot]
                 blend = gex[gene_expression_index(source_id, gene_id)] * gene_effects[gene_effect_index(gene_id, 46)]
-                gene_slot = gene_slot + 1
             }
             blend = 1.0 / (1.0 + blend)
             let result_x: f64 = ((1.0 - blend) * polarity_x) + (blend * random_x)
@@ -146,8 +127,7 @@ function ecm_secretion(source_id: i32) -> bool {
                 let base_x: f64 = dx
                 let base_y: f64 = dy
                 let base_z: f64 = dz
-                let mut slot: i32 = 1
-                while slot <= cels[cell_id].nunodes {
+                for slot in 1 to cels[cell_id].nunodes + 1 {
                     let other_id: i32 = cels[cell_id].node[slot]
                     let ox: f64 = node[other_id].x - cx
                     let oy: f64 = node[other_id].y - cy
@@ -157,7 +137,6 @@ function ecm_secretion(source_id: i32) -> bool {
                         best_projection = projection
                         best_x = ox; best_y = oy; best_z = oz
                     }
-                    slot = slot + 1
                 }
                 dx = best_x; dy = best_y; dz = best_z
             }
@@ -177,22 +156,18 @@ function ecm_secretion(source_id: i32) -> bool {
     node[nd].eqd = ecmmax; node[nd].grd = ecmmax
     node[nd].dmo = desmax; node[nd].mov = temp; node[nd].marge = 1
     node[nd].orix = x; node[nd].oriy = y; node[nd].oriz = z
-    node[nd].rec = secretion_effect(source_id, 41)
+    node[nd].rec = node_gene_effect(source_id, 41)
     if node[nd].rec <= 0.0 { node[nd].rec = 50.0 }
-    node[nd].add = ecmmax + secretion_effect(source_id, 42)
-    let mut gene_id: i32 = 0
-    while gene_id <= ng {
+    node[nd].add = ecmmax + node_gene_effect(source_id, 42)
+    for gene_id in 0 to ng + 1 {
         agex[gene_expression_index(nd, gene_id)] = 0.0
-        gene_id = gene_id + 1
     }
-    let mut slot: i32 = 1
-    while slot <= npag[40] {
+    for slot in 1 to npag[40] + 1 {
         let gene_id: i32 = whonpag[40 * (ng + 1) + slot]
         let transfer: f64 = gene_effects[gene_effect_index(gene_id, 40)]
         let source_expression: f64 = gex[gene_expression_index(source_id, gene_id)]
         agex[gene_expression_index(source_id, gene_id)] = source_expression * (1.0 - transfer)
         agex[gene_expression_index(nd, gene_id)] = source_expression * transfer
-        slot = slot + 1
     }
     nodeo[nd] = node[nd]
     nneigh[nd] = 0
@@ -204,16 +179,13 @@ function ecm_secretion(source_id: i32) -> bool {
 function should_i_secrete() -> bool {
     ecm_error = 0
     let property: i32 = PARAMETER_ECM_SECRETION
-    let mut node_id: i32 = 1
-    while node_id <= nd {
+    for node_id in 1 to nd + 1 {
         if node[node_id].tipus != 4 and node[node_id].fix != 1 {
             let mut rate: f64 = 0.0
             let factor: f64 = 1.0 - node[node_id].dif
-            let mut gene_slot: i32 = 1
-            while gene_slot <= npag[property] {
+            for gene_slot in 1 to npag[property] + 1 {
                 let gene_id: i32 = whonpag[property * (ng + 1) + gene_slot]
                 rate = rate + gex[gene_expression_index(node_id, gene_id)] * gene_effects[gene_effect_index(gene_id, property)] * factor
-                gene_slot = gene_slot + 1
             }
             rate = rate * delta
             node[node_id].ecm = node[node_id].ecm + rate
@@ -223,7 +195,6 @@ function should_i_secrete() -> bool {
                 if node[node_id].ecm < 0.0 { node[node_id].ecm = 0.0 }
             }
         }
-        node_id = node_id + 1
     }
     return true
 }

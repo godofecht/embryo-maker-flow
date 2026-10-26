@@ -61,8 +61,7 @@ function energia(node_id: i32) -> bool {
     let mut adh_sum: f64 = 0.0
     let mut adhcel_sum: f64 = 0.0
     let mut tor_sum: f64 = 0.0
-    let mut interaction: i32 = 1
-    while interaction <= nneigh[node_id] {
+    for interaction in 1 to nneigh[node_id] + 1 {
         let other: i32 = neigh[energy_neighbor_index(node_id, interaction)]
         if other < 1 or other > nd { energy_error = 5; return false }
         let bx: f64 = node[other].x
@@ -228,20 +227,16 @@ function energia(node_id: i32) -> bool {
                 let mut adhe: f64 = 0.5 * (node[node_id].adh + node[other].adh)
                 let repcele: f64 = 0.5 * (node[node_id].rec + node[other].rec)
                 if npag[1] > 0 {
-                    let mut j: i32 = 1
-                    while j <= npag[1] {
+                    for j in 1 to npag[1] + 1 {
                         let first_gene: i32 = whonpag[1 * (ng + 1) + j]
-                        let mut jj: i32 = 1
-                        while jj <= npag[1] {
+                        for jj in 1 to npag[1] + 1 {
                             let second_gene: i32 = whonpag[1 * (ng + 1) + jj]
                             if gex[gene_expression_index(node_id, first_gene)] > 0.0 and gex[gene_expression_index(other, second_gene)] > 0.0 {
                                 let first_type: i32 = gene_property_type(first_gene)
                                 let second_type: i32 = gene_property_type(second_gene)
                                 adhe = adhe + (gex[gene_expression_index(node_id, first_gene)] * gex[gene_expression_index(other, second_gene)] * kadh[first_type * kadh_ld + second_type])
                             }
-                            jj = jj + 1
                         }
-                        j = j + 1
                     }
                 }
                 let normalized: f64 = (fd - deqe) / deqe
@@ -272,7 +267,6 @@ function energia(node_id: i32) -> bool {
             adhcel_sum = adhcel_sum + adhcel
             tor_sum = tor_sum + tor
         }
-        interaction = interaction + 1
     }
     node[node_id].e = total
     erep[node_id] = rep_sum

@@ -17,6 +17,10 @@ The project page contains the downloadable packages and a Studio preview. The si
 
 Install the Flow compiler and a C compiler, then run `tools/run-ui.sh` from the project root. The browser smoke check is `node tools/ui_smoke.cjs`. The solver parity suite is `tools/run_flow_checks.sh`.
 
+`tools/build-pgo.sh` trains a clang profile that `tools/run-ui.sh` reuses. `tools/build-mlir.sh` and `tools/build-gpu.sh` are the MLIR and Metal lowering pipelines, and `tools/backend_parity.sh` compares any build with the C reference bit for bit. PORTING.md records the measurements.
+
+The solver runs its neighbor scan, gene step and pair forces on a worker pool by default (`EMBRYO_THREADS=1` keeps it serial). `EMBRYO_GPU=exact64` moves the pair forces to the GPU in software binary64, bitwise equal to the CPU; `EMBRYO_GPU=preview` uses float32 there and diverges from the exact run. The Studio's Compute select switches these at run time.
+
 ## Examples and license
 
 The viewer includes the original EmbryoMaker examples and nine saved states from the Morphospace exploration collection. Their source and license details are in [the examples directory](reference/examples/morphospace_exploration/README.md).

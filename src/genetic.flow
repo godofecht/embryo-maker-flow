@@ -1,8 +1,9 @@
-import embryo.general { nd, ng, nda, node, nneigh, neigh, dneigh, neigh_ld, rdiffmax, delta, ffu }
+import embryo.general { nd, ng, nda, node, nneigh, neigh, dneigh, neigh_ld, rdiffmax, delta, ffu, omnn, parallel_workers, use_parallel, embryo_pool_run }
 import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at }
 
 extern {
     function calloc(count: i64, size: i64) -> ptr<void>
+    function realloc(p: ptr<void>, size: i64) -> ptr<void>
     function free(p: ptr<void>)
     function malloc(size: i64) -> ptr<void>
     function sqrt(x: f64) -> f64
@@ -11,6 +12,21 @@ extern {
 
 let mut gex: ptr<f64> = null
 let mut agex: ptr<f64> = null
+# Per-node neighbor facts shared by every gene in genestep: partner id, the
+# inverse distance factor, and the relation flags the kind branches test.
+let mut gene_neighbor_ids: ptr<i32> = null
+let mut gene_neighbor_flags: ptr<i32> = null
+let mut gene_neighbor_inverse: ptr<f64> = null
+let mut gene_neighbor_capacity: i32 = 0
+# Each worker thread owns one block of gene_neighbor_stride entries.
+let mut gene_neighbor_stride: i32 = 0
+let mut gene_has_contact_kind: bool = false
+const GENE_NEIGHBOR_SAME_CELL: i32 = 1
+const GENE_NEIGHBOR_SAME_TYPE: i32 = 2
+const GENE_NEIGHBOR_APICAL_BASAL: i32 = 4
+const GENE_NEIGHBOR_CROSS_LAYER: i32 = 8
+const GENE_NEIGHBOR_IN_CONTACT: i32 = 16
+const GENE_NEIGHBOR_WITHIN_RDIFFMAX: i32 = 32
 let mut dgex: ptr<f64> = null
 let mut checkn: ptr<i32> = null
 let mut gex_ld: i32 = 0
@@ -131,18 +147,14 @@ function gene_resize_nodes(old_capacity: i32, new_capacity: i32) -> bool {
     let new_dgex: ptr<f64> = calloc(((new_capacity + 1) * gex_ld) as i64, sizeof<f64>()) as ptr<f64>
     let new_checkn: ptr<i32> = calloc((new_capacity + 1) as i64, sizeof<i32>()) as ptr<i32>
     if new_gex == null or new_agex == null or new_dgex == null or new_checkn == null { return false }
-    let mut row: i32 = 0
-    while row <= old_capacity {
-        let mut gene_id: i32 = 0
-        while gene_id < gex_ld {
+    for row in 0 to old_capacity + 1 {
+        for gene_id in 0 to gex_ld {
             let old_index: i32 = row * gex_ld + gene_id
             new_gex[old_index] = gex[old_index]
             new_agex[old_index] = agex[old_index]
             new_dgex[old_index] = dgex[old_index]
-            gene_id = gene_id + 1
         }
         new_checkn[row] = checkn[row]
-        row = row + 1
     }
     if gex != null { free(gex as ptr<void>) }
     if agex != null { free(agex as ptr<void>) }
@@ -366,22 +378,107 @@ function gene_reaction_indices_build() -> bool {
 
 # Evaluate one reaction-diffusion derivative using the same expression and
 # neighbor order as genetic.mod.f90.
+function ensure_gene_neighbor_scratch(required: i32) -> bool {
+    if gene_neighbor_capacity >= required { return true }
+    let mut grown_capacity: i32 = gene_neighbor_capacity * 2
+    if grown_capacity < required { grown_capacity = required }
+    if grown_capacity < 256 { grown_capacity = 256 }
+    let grown_ids: ptr<i32> = realloc(gene_neighbor_ids as ptr<void>, grown_capacity as i64 * sizeof<i32>()) as ptr<i32>
+    if grown_ids == null { return false }
+    gene_neighbor_ids = grown_ids
+    let grown_flags: ptr<i32> = realloc(gene_neighbor_flags as ptr<void>, grown_capacity as i64 * sizeof<i32>()) as ptr<i32>
+    if grown_flags == null { return false }
+    gene_neighbor_flags = grown_flags
+    let grown_inverse: ptr<f64> = realloc(gene_neighbor_inverse as ptr<void>, grown_capacity as i64 * sizeof<f64>()) as ptr<f64>
+    if grown_inverse == null { return false }
+    gene_neighbor_inverse = grown_inverse
+    gene_neighbor_capacity = grown_capacity
+    return true
+}
+
 function genestep() -> bool {
     if dgex == null or checkn == null or node == null or nneigh == null { return false }
-    let mut i: i32 = 1
-    while i <= nd {
+    # Only kind 7 genes test node contact, so skip that radius read otherwise.
+    gene_has_contact_kind = false
+    let mut gene_probe: i32 = 1
+    while gene_probe <= ng {
+        if (kindof[gene_probe] as i32) == 7 { gene_has_contact_kind = true }
+        gene_probe = gene_probe + 1
+    }
+    # Scratch per thread, sized once here so no thread allocates. omnn is the
+    # longest neighbor row after the last neighbor build; rows restored
+    # afterwards can be longer, so the widest row is measured directly.
+    let mut widest: i32 = omnn
+    let mut probe: i32 = 1
+    while probe <= nd {
+        if nneigh[probe] > widest { widest = nneigh[probe] }
+        probe = probe + 1
+    }
+    let threads: i32 = if use_parallel() { parallel_workers() } else { 1 }
+    gene_neighbor_stride = widest + 2
+    if ensure_gene_neighbor_scratch(gene_neighbor_stride * threads) == false { return false }
+    if threads > 1 { embryo_pool_run(2, nd, 32) }
+    else { genestep_range(0, nd, 0) }
+    return true
+}
+
+# Gene derivatives for the node ids start + 1 through end. Writes only
+# dgex rows and checkn entries of those nodes, plus this thread's scratch.
+function genestep_range(start: i32, end: i32, thread: i32) -> void {
+    let node_count: i32 = nd
+    let gene_count: i32 = ng
+    let row_stride: i32 = neigh_ld
+    let diffusion_range: f64 = rdiffmax
+    let has_contact_kind: bool = gene_has_contact_kind
+    let scratch_base: i32 = thread * gene_neighbor_stride
+    let neighbor_ids: ptr<i32> = &gene_neighbor_ids[scratch_base]
+    let neighbor_flags: ptr<i32> = &gene_neighbor_flags[scratch_base]
+    let neighbor_inverse: ptr<f64> = &gene_neighbor_inverse[scratch_base]
+    let mut i: i32 = start + 1
+    while i <= end {
         checkn[i] = 0
         let mut j: i32 = 1
-        while j <= ng { dgex[gene_expression_index(i, j)] = 0.0; j = j + 1 }
+        while j <= gene_count { dgex[gene_expression_index(i, j)] = 0.0; j = j + 1 }
+        # Neighbor facts do not depend on the gene, so gather them once per
+        # node. The inverse distance factor is the same expression the gene
+        # loop evaluated before, so the diffusion products are unchanged.
+        let itipus: i32 = node[i].tipus
+        let icell: i32 = node[i].icel
+        let ialtre: i32 = node[i].altre
+        let iadd: f64 = node[i].add
+        let neighbor_count: i32 = nneigh[i]
+        let row_base: i32 = i * row_stride
+        let mut slot: i32 = 1
+        while slot <= neighbor_count {
+            let other: i32 = neigh[row_base + slot]
+            let distance: f64 = dneigh[row_base + slot]
+            let other_tipus: i32 = node[other].tipus
+            let apical_bas: bool = itipus < 3 and other == ialtre
+            let within_range: bool = distance < diffusion_range
+            let mut flags: i32 = 0
+            if icell == node[other].icel { flags = flags + GENE_NEIGHBOR_SAME_CELL }
+            if itipus == other_tipus { flags = flags + GENE_NEIGHBOR_SAME_TYPE }
+            if apical_bas { flags = flags + GENE_NEIGHBOR_APICAL_BASAL }
+            if (itipus == 1 and other_tipus == 2) or (itipus == 2 and other_tipus == 1) { flags = flags + GENE_NEIGHBOR_CROSS_LAYER }
+            if has_contact_kind and distance <= iadd + node[other].add { flags = flags + GENE_NEIGHBOR_IN_CONTACT }
+            if within_range { flags = flags + GENE_NEIGHBOR_WITHIN_RDIFFMAX }
+            neighbor_ids[slot] = other
+            neighbor_flags[slot] = flags
+            # Every diffusion branch below requires the apical partner or a
+            # partner within rdiffmax, so the division is skipped otherwise.
+            neighbor_inverse[slot] = if apical_bas or within_range { 1.0 / (1.0 + distance) } else { 0.0 }
+            slot = slot + 1
+        }
         j = 1
-        while j <= ng {
+        while j <= gene_count {
             let gene: i32 = j
             let kind: i32 = kindof[gene] as i32
             let value: f64 = gex[gene_expression_index(i, gene)]
+            let gene_diffusion: f64 = diffu[gene]
             let mut diffusion: f64 = 0.0
             let mut lateral_reaction: f64 = 0.0
-            let other_apical: i32 = node[i].altre
-            if node[i].tipus < 3 and other_apical >= 1 and other_apical <= nd {
+            let other_apical: i32 = ialtre
+            if itipus < 3 and other_apical >= 1 and other_apical <= node_count {
                 let dx: f64 = node[i].x - node[other_apical].x
                 let dy: f64 = node[i].y - node[other_apical].y
                 let dz: f64 = node[i].z - node[other_apical].z
@@ -399,34 +496,36 @@ function genestep() -> bool {
                 }
             }
             let mut n: i32 = 1
-            while n <= nneigh[i] {
-                let other: i32 = neigh[i * neigh_ld + n]
-                let distance: f64 = dneigh[i * neigh_ld + n]
+            while n <= neighbor_count {
+                let other: i32 = neighbor_ids[n]
+                let flags: i32 = neighbor_flags[n]
+                let inverse_distance: f64 = neighbor_inverse[n]
                 let other_value: f64 = gex[gene_expression_index(other, gene)]
-                let same_cell: bool = node[i].icel == node[other].icel
-                let same_type: bool = node[i].tipus == node[other].tipus
-                let apical_bas: bool = node[i].tipus < 3 and other == node[i].altre
+                let same_cell: bool = (flags & GENE_NEIGHBOR_SAME_CELL) != 0
+                let same_type: bool = (flags & GENE_NEIGHBOR_SAME_TYPE) != 0
+                let apical_bas: bool = (flags & GENE_NEIGHBOR_APICAL_BASAL) != 0
+                let within_range: bool = (flags & GENE_NEIGHBOR_WITHIN_RDIFFMAX) != 0
                 if kind <= 3 {
                     if apical_bas {
-                        if node[i].tipus < 3 {
-                            diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                        if itipus < 3 {
+                            diffusion = diffusion + gene_diffusion * (other_value - value) * inverse_distance
                         }
-                    } elif same_cell and distance < rdiffmax {
-                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    } elif same_cell and within_range {
+                        diffusion = diffusion + gene_diffusion * (other_value - value) * inverse_distance
                     }
                 } elif kind == 4 {
-                    if distance < rdiffmax and not ((node[i].tipus == 1 and node[other].tipus == 2) or (node[i].tipus == 2 and node[other].tipus == 1)) {
-                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    if within_range and (flags & GENE_NEIGHBOR_CROSS_LAYER) == 0 {
+                        diffusion = diffusion + gene_diffusion * (other_value - value) * inverse_distance
                     }
                 } elif kind == 5 or kind == 6 {
-                    if node[i].tipus < 3 and apical_bas {
-                        if node[i].tipus == 2 { diffusion = diffusion - diffu[gene] * value * (1.0 / (1.0 + distance)) }
-                        if node[i].tipus == 1 { diffusion = diffusion + diffu[gene] * other_value * (1.0 / (1.0 + distance)) }
-                    } elif distance < rdiffmax and same_type {
-                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    if itipus < 3 and apical_bas {
+                        if itipus == 2 { diffusion = diffusion - gene_diffusion * value * inverse_distance }
+                        if itipus == 1 { diffusion = diffusion + gene_diffusion * other_value * inverse_distance }
+                    } elif within_range and same_type {
+                        diffusion = diffusion + gene_diffusion * (other_value - value) * inverse_distance
                     }
                 } elif kind == 7 {
-                    if node[i].tipus < 4 and node[i].icel != node[other].icel and same_type and distance <= node[i].add + node[other].add {
+                    if itipus < 4 and same_cell == false and same_type and (flags & GENE_NEIGHBOR_IN_CONTACT) != 0 {
                         checkn[i] = 1
                         let mut form: i32 = 1
                         while form <= npost[gene] {
@@ -459,19 +558,19 @@ function genestep() -> bool {
                             lateral_reaction = lateral_reaction + binding
                             form = form + 1
                         }
-                    } elif same_cell and same_type and distance < rdiffmax {
-                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    } elif same_cell and same_type and within_range {
+                        diffusion = diffusion + gene_diffusion * (other_value - value) * inverse_distance
                     }
                 } elif kind == 8 {
-                    if same_cell and same_type and distance < rdiffmax {
-                        diffusion = diffusion + diffu[gene] * (other_value - value) * (1.0 / (1.0 + distance))
+                    if same_cell and same_type and within_range {
+                        diffusion = diffusion + gene_diffusion * (other_value - value) * inverse_distance
                     }
                 }
                 n = n + 1
             }
 
             let mut transcription: f64 = 0.0
-            if node[i].marge == 0 and node[i].tipus < 4 and (kind == 1 or kind == 2 or kind == 4) {
+            if node[i].marge == 0 and itipus < 4 and (kind == 1 or kind == 2 or kind == 4) {
                 let mut regulator: i32 = 1
                 while regulator <= nw[gene] {
                     let regulator_gene: i32 = w[gene * (ng + 1) + regulator]
@@ -527,7 +626,6 @@ function genestep() -> bool {
         }
         i = i + 1
     }
-    return true
 }
 
 function gene_stuff() -> bool {
@@ -535,39 +633,29 @@ function gene_stuff() -> bool {
     if ffu != null and (ffu[5] == 2 or ffu[12] == 2) {
         if gene_rungekutta4() == false { return false }
     } else {
-        let mut i: i32 = 1
-        while i <= nd {
-            let mut gene: i32 = 1
-            while gene <= ng {
+        for i in 1 to nd + 1 {
+            for gene in 1 to ng + 1 {
                 let index: i32 = gene_expression_index(i, gene)
                 agex[index] = gex[index] + delta * dgex[index]
-                gene = gene + 1
             }
-            i = i + 1
         }
     }
 
-    let mut i: i32 = 1
-    while i <= nd {
-        let mut gene: i32 = 1
-        while gene <= ng {
+    for i in 1 to nd + 1 {
+        for gene in 1 to ng + 1 {
             let index: i32 = gene_expression_index(i, gene)
             if fabs(agex[index]) < 1.1920928955078125e-6 { gex[index] = 0.0 }
-            gene = gene + 1
         }
         if checkn[i] == 0 {
-            let mut n: i32 = 1
-            while n <= kind_count[7] {
+            for n in 1 to kind_count[7] + 1 {
                 let signal_gene: i32 = kind_genes[7 * gene_kind_ld + n]
                 if npre[signal_gene] > 0 {
                     let precursor: i32 = pre[gene_form_index(signal_gene, 1)]
                     agex[gene_expression_index(i, precursor)] = agex[gene_expression_index(i, precursor)] + gex[gene_expression_index(i, signal_gene)]
                     agex[gene_expression_index(i, signal_gene)] = 0.0
                 }
-                n = n + 1
             }
         }
-        i = i + 1
     }
     return true
 }
@@ -580,53 +668,37 @@ function gene_rungekutta4() -> bool {
     let k3: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
     let k4: ptr<f64> = calloc(count as i64, sizeof<f64>()) as ptr<f64>
     if saved == null or k1 == null or k2 == null or k3 == null or k4 == null { return false }
-    let mut i: i32 = 1
-    while i <= nd {
-        let mut gene: i32 = 1
-        while gene <= ng {
+    for i in 1 to nd + 1 {
+        for gene in 1 to ng + 1 {
             let index: i32 = gene_expression_index(i, gene)
             saved[index] = gex[index]
             k1[index] = dgex[index]
             gex[index] = saved[index] + delta * 0.5 * k1[index]
-            gene = gene + 1
         }
-        i = i + 1
     }
     if genestep() == false { return false }
-    i = 1
-    while i <= nd {
-        let mut gene: i32 = 1
-        while gene <= ng {
+    for i in 1 to nd + 1 {
+        for gene in 1 to ng + 1 {
             let index: i32 = gene_expression_index(i, gene)
             k2[index] = dgex[index]
             gex[index] = gex[index] + delta * 0.5 * k2[index]
-            gene = gene + 1
         }
-        i = i + 1
     }
     if genestep() == false { return false }
-    i = 1
-    while i <= nd {
-        let mut gene: i32 = 1
-        while gene <= ng {
+    for i in 1 to nd + 1 {
+        for gene in 1 to ng + 1 {
             let index: i32 = gene_expression_index(i, gene)
             k3[index] = dgex[index]
             gex[index] = gex[index] + delta * k3[index]
-            gene = gene + 1
         }
-        i = i + 1
     }
     if genestep() == false { return false }
-    i = 1
-    while i <= nd {
-        let mut gene: i32 = 1
-        while gene <= ng {
+    for i in 1 to nd + 1 {
+        for gene in 1 to ng + 1 {
             let index: i32 = gene_expression_index(i, gene)
             k4[index] = dgex[index]
             agex[index] = saved[index] + (delta / 6.0) * (k1[index] + 2.0 * k2[index] + 2.0 * k3[index] + k4[index])
-            gene = gene + 1
         }
-        i = i + 1
     }
     free(saved as ptr<void>); free(k1 as ptr<void>); free(k2 as ptr<void>); free(k3 as ptr<void>); free(k4 as ptr<void>)
     return true
@@ -634,40 +706,30 @@ function gene_rungekutta4() -> bool {
 
 function gene_network_indices_build() -> bool {
     if kind_count == null or npag == null or nw == null { return false }
-    let mut i: i32 = 0
-    while i < 9 { kind_count[i] = 0; i = i + 1 }
-    i = 0
-    while i < 53 { npag[i] = 0; i = i + 1 }
-    i = 0
-    while i <= ng {
+    for i in 0 to 9 { kind_count[i] = 0 }
+    for i in 0 to 53 { npag[i] = 0 }
+    for i in 0 to ng + 1 {
         nw[i] = 0
-        i = i + 1
     }
-    let mut gene_id: i32 = 1
-    while gene_id <= ng {
+    for gene_id in 1 to ng + 1 {
         let mut kind: i32 = kindof[gene_id] as i32
         if kind == 0 { kind = 1; kindof[gene_id] = 1.0 }
         if kind < 1 or kind > 8 { return false }
         kind_count[kind] = kind_count[kind] + 1
         kind_genes[kind * gene_kind_ld + kind_count[kind]] = gene_id
-        let mut property: i32 = 1
-        while property <= 52 {
+        for property in 1 to 53 {
             let eff_value: f64 = gene_effects[gene_effect_index(gene_id, property)]
             if eff_value != 0.0 {
                 npag[property] = npag[property] + 1
                 whonpag[property * (ng + 1) + npag[property]] = gene_id
             }
-            property = property + 1
         }
-        let mut source_gene: i32 = 1
-        while source_gene <= ng {
+        for source_gene in 1 to ng + 1 {
             if t[gene_matrix_index(gene_id, source_gene)] != 0.0 {
                 nw[gene_id] = nw[gene_id] + 1
                 w[gene_id * (ng + 1) + nw[gene_id]] = source_gene
             }
-            source_gene = source_gene + 1
         }
-        gene_id = gene_id + 1
     }
     return true
 }
@@ -962,7 +1024,20 @@ function read_gex_matrix(data: string, length: i32) -> bool {
     return ng == 0
 }
 
-export gex, agex, dgex, checkn, gex_ld, gene_expression_index, gene_allocate, gene_resize_nodes, gene_remove_node_slot, read_gex_matrix
+# Positive-expression effects, accumulated in the stored property-gene order.
+function node_gene_effect(node_id: i32, property_id: i32) -> f64 {
+    let mut total: f64 = 0.0
+    for slot in 1 to npag[property_id] + 1 {
+        let gene_id: i32 = whonpag[property_id * (ng + 1) + slot]
+        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+        if expression > 0.0 { total = total + expression * gene_effects[gene_effect_index(gene_id, property_id)] }
+    }
+    return total
+}
+
+export node_gene_effect
+
+export genestep_range, gex, agex, dgex, checkn, gex_ld, gene_expression_index, gene_allocate, gene_resize_nodes, gene_remove_node_slot, read_gex_matrix
 export t, gene_effects, diffu, idiffu, degradation, mich, kindof, npre, npost, pre, post
 export matrix_error, metadata_error, ww_count, ww_source, ww_target, ww_rate, ww_ld
 export kind_count, kind_genes, gene_kind_ld, npag, whonpag, nw, w, gene_network_indices_build

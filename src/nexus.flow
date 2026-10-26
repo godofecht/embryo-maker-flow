@@ -1,7 +1,7 @@
 import embryo.general { ncels, cels, node, nodeo, nd, delta, ffu, reqmin, df_reqmax, fmeanl, ttalone, nneigh, neigh, neigh_ld, dif_req }
 import embryo.mitosis { division, mitosis_error }
 import embryo.genetic {
-    ng, npag, whonpag, gex, gene_effects,
+    ng, npag, whonpag, gex, gene_effects, node_gene_effect,
     gene_expression_index, gene_effect_index
 }
 import embryo.growth { should_i_grow }
@@ -76,26 +76,20 @@ function eliminate_lonely_nodes() -> bool {
 }
 
 function should_i_emt() -> bool {
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
+    for cell_id in 1 to ncels + 1 {
         if cels[cell_id].ctipus != 3 {
             let mut signal: f64 = 0.0
-            let mut slot: i32 = 1
-            while slot <= cels[cell_id].nunodes {
+            for slot in 1 to cels[cell_id].nunodes + 1 {
                 let node_id: i32 = cels[cell_id].node[slot]
-                let mut gene_slot: i32 = 1
-                while gene_slot <= npag[48] {
+                for gene_slot in 1 to npag[48] + 1 {
                     let gene_id: i32 = whonpag[48 * (ng + 1) + gene_slot]
                     signal = signal + gex[gene_expression_index(node_id, gene_id)] * gene_effects[gene_effect_index(gene_id, 48)]
-                    gene_slot = gene_slot + 1
                 }
-                slot = slot + 1
             }
             cels[cell_id].temt = cels[cell_id].temt + signal * delta / (cels[cell_id].nunodes as f32 as f64)
             if cels[cell_id].temt >= 1.0 {
                 cels[cell_id].ctipus = 3
-                slot = 1
-                while slot <= cels[cell_id].nunodes {
+                for slot in 1 to cels[cell_id].nunodes + 1 {
                     let first: i32 = cels[cell_id].node[slot]
                     if node[first].tipus == 1 {
                         let second: i32 = node[first].altre
@@ -117,11 +111,9 @@ function should_i_emt() -> bool {
                         node[first].tipus = 3; node[second].tipus = 3
                         if ffu[1] == 0 { node[first].marge = 0; node[second].marge = 0 }
                     }
-                    slot = slot + 1
                 }
             }
         }
-        cell_id = cell_id + 1
     }
     return true
 }
@@ -129,18 +121,10 @@ function should_i_emt() -> bool {
 # Apply gene controlled node changes after cell behaviors and before movement.
 function update_node_properties() -> bool {
     if ffu[11] == 1 and prepare_diffusion_neighbors() == false { return false }
-    let mut node_id: i32 = 1
-    while node_id <= nd {
+    for node_id in 1 to nd + 1 {
         if node[node_id].fix != 1 and node[node_id].fix != 2 {
             if npag[25] > 0 {
-                let mut signal: f64 = 0.0
-                let mut slot: i32 = 1
-                while slot <= npag[25] {
-                    let gene_id: i32 = whonpag[25 * (ng + 1) + slot]
-                    let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
-                    if expression > 0.0 { signal = signal + expression * gene_effects[gene_effect_index(gene_id, 25)] }
-                    slot = slot + 1
-                }
+                let mut signal: f64 = node_gene_effect(node_id, 25)
                 if ng >= 11 { signal = gene_effects[gene_effect_index(11, 25)] * 0.1 }
                 node[node_id].dif = node[node_id].dif + signal * delta
                 if node[node_id].dif > 1.0 { node[node_id].dif = 1.0 }
@@ -180,7 +164,7 @@ function update_node_properties() -> bool {
                         else { node[node_id].vod = -node[partner].cod * node[node_id].kvol }
                     }
                 } else { node[node_id].vod = 0.0; node[partner].vod = 0.0 }
-                if ffu[11] == 1 and diffusion_apply_prepared() == false { nexus_error = 12; return false }
+                if ffu[11] == 1 and diffusion_apply_prepared(node_id, partner) == false { nexus_error = 12; return false }
                 let old_add_delta_a: f64 = node[node_id].add - node[node_id].eqd
                 let old_add_delta_b: f64 = node[partner].add - node[partner].eqd
                 let old_eqd_a: f64 = node[node_id].eqd
@@ -260,6 +244,7 @@ function update_node_properties() -> bool {
                 if npag[21] > 0 { node[node_id].cod = nodeo[node_id].cod + node_gene_effect(node_id, 21) }
                 else { node[node_id].cod = 0.0 }
                 let old_add_delta: f64 = nodeo[node_id].add - node[node_id].eqd
+                if ffu[11] == 1 and diffusion_field_valid { node[node_id].grd = diffusion_field[node_id] }
                 node[node_id].eqd = node[node_id].grd + node[node_id].cod
                 if node[node_id].eqd > df_reqmax { node[node_id].eqd = df_reqmax }
                 if node[node_id].eqd < reqmin { node[node_id].eqd = reqmin }
@@ -278,7 +263,11 @@ function update_node_properties() -> bool {
                 if npag[16] > 0 { node[node_id].dmo = nodeo[node_id].dmo + node_gene_effect(node_id, 16) * factor; if node[node_id].dmo < 0.0 { node[node_id].dmo = 0.0 } }
             }
         }
-        node_id = node_id + 1
+    }
+    if ffu[11] == 1 and diffusion_field_valid {
+        for current in 1 to nd + 1 {
+            node[current].grd = diffusion_field[current]
+        }
     }
     return true
 }
@@ -292,21 +281,17 @@ function prepare_diffusion_neighbors() -> bool {
         diffusion_offsets_capacity = required_offsets
     }
     diffusion_offsets[1] = 0
-    let mut current: i32 = 1
-    while current <= nd {
+    for current in 1 to nd + 1 {
         let mut count: i32 = 0
         if node[current].tipus <= 2 {
             let current_cell: i32 = node[current].icel
             let current_type: i32 = node[current].tipus
-            let mut slot: i32 = 1
-            while slot <= nneigh[current] {
+            for slot in 1 to nneigh[current] + 1 {
                 let other: i32 = neigh[current * neigh_ld + slot]
                 if current_cell == node[other].icel and current_type == node[other].tipus { count = count + 1 }
-                slot = slot + 1
             }
         }
         diffusion_offsets[current + 1] = diffusion_offsets[current] + count
-        current = current + 1
     }
     let required_neighbors: i32 = diffusion_offsets[nd + 1]
     if required_neighbors > diffusion_neighbors_capacity {
@@ -315,73 +300,102 @@ function prepare_diffusion_neighbors() -> bool {
         diffusion_neighbors = grown_neighbors
         diffusion_neighbors_capacity = required_neighbors
     }
-    current = 1
-    while current <= nd {
+    for current in 1 to nd + 1 {
         if node[current].tipus <= 2 {
             let current_cell: i32 = node[current].icel
             let current_type: i32 = node[current].tipus
             let mut write_index: i32 = diffusion_offsets[current]
-            let mut slot: i32 = 1
-            while slot <= nneigh[current] {
+            for slot in 1 to nneigh[current] + 1 {
                 let other: i32 = neigh[current * neigh_ld + slot]
                 if current_cell == node[other].icel and current_type == node[other].tipus {
                     diffusion_neighbors[write_index] = other
                     write_index = write_index + 1
                 }
-                slot = slot + 1
             }
         }
-        current = current + 1
     }
+    return diffusion_field_refresh()
+}
+
+# Dense copy of every node's grd. The contraction loop in
+# update_node_properties applies one diffusion sweep per epithelial node, so
+# a sweep runs O(nd) times per iteration. Reading grd from this packed field
+# keeps each sweep's gather sequential instead of one 256 byte record per
+# neighbor. The field is filled by prepare_diffusion_neighbors and kept equal
+# to node[i].grd by every sweep; callers pass the ids whose grd they changed
+# since the previous sweep.
+let mut diffusion_field: ptr<f64> = null
+let mut diffusion_field_capacity: i32 = 0
+let mut diffusion_field_valid: bool = false
+
+function diffusion_field_refresh() -> bool {
+    let required: i32 = nd + 1
+    if required > diffusion_field_capacity {
+        let grown: ptr<f64> = realloc(diffusion_field as ptr<void>, required as i64 * sizeof<f64>()) as ptr<f64>
+        if grown == null { return false }
+        diffusion_field = grown
+        diffusion_field_capacity = required
+    }
+    for i in 1 to nd + 1 {
+        diffusion_field[i] = node[i].grd
+    }
+    diffusion_field_valid = true
     return true
 }
 
-function diffusion_apply_prepared() -> bool {
-    let required: i32 = nd + 1
+function diffusion_apply_prepared(changed_a: i32, changed_b: i32) -> bool {
+    let node_count: i32 = nd
+    let required: i32 = node_count + 1
     if required > diffusion_scratch_capacity {
         let grown: ptr<f64> = realloc(diffusion_scratch as ptr<void>, required as i64 * sizeof<f64>()) as ptr<f64>
         if grown == null { return false }
         diffusion_scratch = grown
         diffusion_scratch_capacity = required
     }
+    if diffusion_field_valid == false or diffusion_field_capacity < required {
+        if diffusion_field_refresh() == false { return false }
+    }
+    let field: ptr<f64> = diffusion_field
+    if changed_a >= 1 and changed_a <= node_count { field[changed_a] = node[changed_a].grd }
+    if changed_b >= 1 and changed_b <= node_count { field[changed_b] = node[changed_b].grd }
+    let scratch: ptr<f64> = diffusion_scratch
+    let offsets: ptr<i32> = diffusion_offsets
+    let partners: ptr<i32> = diffusion_neighbors
+    let rate: f64 = dif_req
     let mut current: i32 = 1
-    while current <= nd {
+    while current <= node_count {
         let mut gradient: f64 = 0.0
-        let current_gradient: f64 = node[current].grd
-        let mut edge: i32 = diffusion_offsets[current]
-        let edge_end: i32 = diffusion_offsets[current + 1]
+        let current_gradient: f64 = field[current]
+        let mut edge: i32 = offsets[current]
+        let edge_end: i32 = offsets[current + 1]
         while edge < edge_end {
-            let other: i32 = diffusion_neighbors[edge]
-            gradient = gradient + (node[other].grd - current_gradient)
+            let other: i32 = partners[edge]
+            gradient = gradient + (field[other] - current_gradient)
             edge = edge + 1
         }
-        diffusion_scratch[current] = gradient * dif_req
+        scratch[current] = gradient * rate
         current = current + 1
     }
+    let step: f64 = delta
     current = 1
-    while current <= nd {
-        node[current].grd = node[current].grd + delta * diffusion_scratch[current]
+    while current <= node_count {
+        field[current] = field[current] + step * scratch[current]
         current = current + 1
     }
+    if changed_a >= 1 and changed_a <= node_count { node[changed_a].grd = field[changed_a] }
+    if changed_b >= 1 and changed_b <= node_count { node[changed_b].grd = field[changed_b] }
     return true
 }
 
 function diffusion_of_reqcr() -> bool {
     if prepare_diffusion_neighbors() == false { return false }
-    return diffusion_apply_prepared()
+    if diffusion_apply_prepared(0, 0) == false { return false }
+    for current in 1 to nd + 1 {
+        node[current].grd = diffusion_field[current]
+    }
+    return true
 }
 
-function node_gene_effect(node_id: i32, property_id: i32) -> f64 {
-    let mut total: f64 = 0.0
-    let mut slot: i32 = 1
-    while slot <= npag[property_id] {
-        let gene_id: i32 = whonpag[property_id * (ng + 1) + slot]
-        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
-        if expression > 0.0 { total = total + expression * gene_effects[gene_effect_index(gene_id, property_id)] }
-        slot = slot + 1
-    }
-    return total
-}
 
 function gradual_node_property(current: f64, baseline: f64, change: f64) -> f64 {
     let mut value: f64 = baseline + change
@@ -396,25 +410,20 @@ function gradual_node_property(current: f64, baseline: f64, change: f64) -> f64 
 function should_i_divide() -> bool {
     nexus_error = 0
     let original_cells: i32 = ncels
-    let mut cell_id: i32 = 1
-    while cell_id <= original_cells {
+    for cell_id in 1 to original_cells + 1 {
         let node_count: i32 = cels[cell_id].nunodes
-        if node_count <= 0 { cell_id = cell_id + 1; continue }
+        if node_count <= 0 { continue }
         let mut signal: f64 = 0.0
-        let mut node_slot: i32 = 1
-        while node_slot <= node_count {
+        for node_slot in 1 to node_count + 1 {
             let node_id: i32 = cels[cell_id].node[node_slot]
             let factor: f64 = 1.0 - node[node_id].dif
-            let mut gene_slot: i32 = 1
-            while gene_slot <= npag[PARAMETER_CELL_DIVISION] {
+            for gene_slot in 1 to npag[PARAMETER_CELL_DIVISION] + 1 {
                 let gene_id: i32 = whonpag[PARAMETER_CELL_DIVISION * (ng + 1) + gene_slot]
                 let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
                 if expression > 0.0 {
                     signal = signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_CELL_DIVISION)] * factor
                 }
-                gene_slot = gene_slot + 1
             }
-            node_slot = node_slot + 1
         }
         signal = signal / node_count as f64
         cels[cell_id].fase = cels[cell_id].fase + signal * delta
@@ -426,67 +435,41 @@ function should_i_divide() -> bool {
             if division(cell_id) == false { nexus_error = 10 + mitosis_error; return false }
             cels[cell_id].fase = cels[cell_id].fase - 1.0
         }
-        cell_id = cell_id + 1
+    }
+    return true
+}
+
+function change_division_size(property_id: i32, minimum: bool) -> bool {
+    for cell_id in 1 to ncels + 1 {
+        let node_count: i32 = cels[cell_id].nunodes
+        if node_count <= 0 { return false }
+        let mut signal: f64 = 0.0
+        for node_slot in 1 to node_count + 1 {
+            let node_id: i32 = cels[cell_id].node[node_slot]
+            for gene_slot in 1 to npag[property_id] + 1 {
+                let gene_id: i32 = whonpag[property_id * (ng + 1) + gene_slot]
+                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
+                if expression > 0.0 {
+                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, property_id)]
+                }
+            }
+        }
+        signal = signal * delta
+        signal = signal / node_count as f64
+        let mut size: f64 = if minimum { cels[cell_id].minsize_for_div } else { cels[cell_id].maxsize_for_div }
+        size = size + signal
+        if size < 1.0 { size = 1.0 }
+        if minimum { cels[cell_id].minsize_for_div = size } else { cels[cell_id].maxsize_for_div = size }
     }
     return true
 }
 
 function change_minsize_for_div() -> bool {
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
-        let node_count: i32 = cels[cell_id].nunodes
-        if node_count <= 0 { return false }
-        let mut signal: f64 = 0.0
-        let mut node_slot: i32 = 1
-        while node_slot <= node_count {
-            let node_id: i32 = cels[cell_id].node[node_slot]
-            let mut gene_slot: i32 = 1
-            while gene_slot <= npag[PARAMETER_MINIMUM_DIVISION_SIZE] {
-                let gene_id: i32 = whonpag[PARAMETER_MINIMUM_DIVISION_SIZE * (ng + 1) + gene_slot]
-                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
-                if expression > 0.0 {
-                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_MINIMUM_DIVISION_SIZE)]
-                }
-                gene_slot = gene_slot + 1
-            }
-            node_slot = node_slot + 1
-        }
-        signal = signal * delta
-        signal = signal / node_count as f64
-        cels[cell_id].minsize_for_div = cels[cell_id].minsize_for_div + signal
-        if cels[cell_id].minsize_for_div < 1.0 { cels[cell_id].minsize_for_div = 1.0 }
-        cell_id = cell_id + 1
-    }
-    return true
+    return change_division_size(PARAMETER_MINIMUM_DIVISION_SIZE, true)
 }
 
 function change_maxsize_for_div() -> bool {
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
-        let node_count: i32 = cels[cell_id].nunodes
-        if node_count <= 0 { return false }
-        let mut signal: f64 = 0.0
-        let mut node_slot: i32 = 1
-        while node_slot <= node_count {
-            let node_id: i32 = cels[cell_id].node[node_slot]
-            let mut gene_slot: i32 = 1
-            while gene_slot <= npag[PARAMETER_MAXIMUM_DIVISION_SIZE] {
-                let gene_id: i32 = whonpag[PARAMETER_MAXIMUM_DIVISION_SIZE * (ng + 1) + gene_slot]
-                let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
-                if expression > 0.0 {
-                    signal = signal + expression * gene_effects[gene_effect_index(gene_id, PARAMETER_MAXIMUM_DIVISION_SIZE)]
-                }
-                gene_slot = gene_slot + 1
-            }
-            node_slot = node_slot + 1
-        }
-        signal = signal * delta
-        signal = signal / node_count as f64
-        cels[cell_id].maxsize_for_div = cels[cell_id].maxsize_for_div + signal
-        if cels[cell_id].maxsize_for_div < 1.0 { cels[cell_id].maxsize_for_div = 1.0 }
-        cell_id = cell_id + 1
-    }
-    return true
+    return change_division_size(PARAMETER_MAXIMUM_DIVISION_SIZE, false)
 }
 
 export nexus_error, nexe_gradual, should_i_divide, change_minsize_for_div, change_maxsize_for_div, update_node_properties

@@ -272,6 +272,7 @@ async function main() {
   if (process.env.UI_SMOKE_METAL === '1') {
     launchOptions.args = ['--enable-gpu', '--enable-webgl', '--use-gl=angle', '--use-angle=metal'];
   }
+  if (process.env.UI_SMOKE_SINGLE_PROCESS === '1') launchOptions.args = [...(launchOptions.args || []), '--single-process', '--no-zygote'];
   let browser = null;
   try {
     progress('launching browser');
@@ -300,6 +301,23 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('#status .message')?.textContent?.startsWith('Model ready'));
     progress('initial model ready');
     await page.waitForTimeout(2100);
+    if (process.env.UI_SMOKE_ITERATION_PROGRESS === '1') {
+      await selectOgExample(page, 'sea_urchin');
+      await waitForStatus(page, () => document.querySelector('#status .message')?.textContent.startsWith('Model ready'), 'Loading Sea urchin for iteration progress');
+      await page.locator('#iterationRange').evaluate(range => { range.value = '40'; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true })); });
+      await page.waitForFunction(() => document.querySelector('#iterationProgress')?.classList.contains('active'), null, { timeout });
+      await page.waitForFunction(() => Number(document.querySelector('#iterationProgressBar')?.value) >= 4, null, { timeout });
+      const progressDuringRun = await page.locator('#iterationProgressLabel').textContent();
+      await page.locator('#iterationRange').evaluate(range => { range.value = '12'; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true })); });
+      await page.waitForFunction(() => !document.querySelector('#iterationProgress')?.classList.contains('active') && Number(document.querySelector('#iterationValue')?.textContent) === 12, null, { timeout });
+      const frameBefore = await page.evaluate(() => window.embryomakerRenderer?.lastFrame?.serial || 0);
+      await page.waitForFunction(serial => window.embryomakerRenderer?.lastFrame?.serial > serial, frameBefore, { timeout });
+      const runtimeErrors = await page.evaluate(() => window.__embryomakerRuntimeErrors);
+      for (const error of runtimeErrors) errors.push(`browser runtime error: ${error}`);
+      if (errors.length) throw new Error(errors.join('\n'));
+      console.log(JSON.stringify({ ok: true, experiment: 'sea_urchin', progressDuringRun, seekTarget: 12, finalIteration: 12, consoleErrors: 0, runtimeErrors: 0 }, null, 2));
+      return;
+    }
     if (process.env.UI_SMOKE_CONTROLS_ONLY === '1') {
       await page.locator('#fullscreenBtn').click();
       await page.waitForFunction(() => document.fullscreenElement?.id === 'viewPanel', null, { timeout });
@@ -333,6 +351,9 @@ async function main() {
       console.log(JSON.stringify({ ok: true, fullscreenGeometry, transport: { keyboardRunIteration, rewoundIteration, resetIteration: 0 }, consoleErrors: 0, runtimeErrors: 0 }, null, 2));
       return;
     }
+    if (!(await page.locator('.left-panel').isVisible())) throw new Error('Studio controls must be visible on launch');
+    await page.locator('#workspaceToggle').click();
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#status')).opacity === '0');
     const ogDisplayDefaults = await page.evaluate(() => ({
       colorMode: document.querySelector('#colorMode')?.value,
       palette: document.querySelector('#paletteMode')?.value,
@@ -350,7 +371,7 @@ async function main() {
     await page.locator('#workspaceToggle').click();
     if (!(await page.locator('.left-panel').isVisible()) || !(await page.locator('.right-panel').isVisible())) throw new Error('Studio controls did not open from the parity view');
     const studioGeometry = await page.evaluate(() => ({ viewport: [document.documentElement.clientWidth, document.documentElement.clientHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], panels: ['.left-panel','.view-panel','.right-panel'].map(selector => { const element=document.querySelector(selector),rect=element.getBoundingClientRect();return {selector,height:rect.height,bottom:rect.bottom,scrollHeight:element.scrollHeight,clientHeight:element.clientHeight}; }) }));
-    if (studioGeometry.document[0] > studioGeometry.viewport[0] || studioGeometry.document[1] > studioGeometry.viewport[1] || studioGeometry.panels.some(panel => panel.scrollHeight > panel.clientHeight + 1 || panel.bottom > studioGeometry.viewport[1])) throw new Error(`Studio controls require scrolling or exceed the viewport: ${JSON.stringify(studioGeometry)}`);
+    if (studioGeometry.document[0] > studioGeometry.viewport[0] || studioGeometry.document[1] > studioGeometry.viewport[1] || studioGeometry.panels.some(panel => panel.bottom > studioGeometry.viewport[1] + 1)) throw new Error(`Studio panels exceed the viewport: ${JSON.stringify(studioGeometry)}`);
     await page.locator('#workspaceToggle').click();
     if (await page.locator('.left-panel').isVisible()) throw new Error('Studio controls did not close back to the parity view');
     const configuredPropertyCodes = await page.evaluate(() => [[31,'color'],[33,'color'],[42,'color'],[43,'color'],[44,'color'],[43,'arrow'],[44,'sphere']].map(([code,channel]) => window.embryomakerDisplayConfig.propertyForCode(code,channel)));

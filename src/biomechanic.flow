@@ -1,4 +1,5 @@
 import embryo.general {
+    parallel_workers, use_parallel, embryo_pool_run, gpu_mode, gpu_min_nodes, GPU_MODE_PREVIEW, GPU_MODE_EXACT64,
     nd, node, nneigh, neigh, dneigh, neigh_ld, px, py, pz, dex,
     fmeanl, fmeanv, ffu, angletor, kadh, kadh_ld, maxad,
     delta, deltamin, deltamax, resmax, aut,
@@ -9,6 +10,7 @@ import embryo.genetic {
     gex, gex_ld, ng, npag, whonpag, gene_effects, gene_effect_index
 }
 import embryo.neighboring { neighbor_build }
+import std.process { proc_getenv }
 
 extern {
     function free(p: ptr<void>)
@@ -16,6 +18,19 @@ extern {
     function memset(p: ptr<void>, value: i32, size: i64) -> ptr<void>
     function sqrt(x: f64) -> f64
     function fabs(x: f64) -> f64
+    function memcpy(dst: ptr<void>, src: ptr<void>, size: i64) -> ptr<void>
+    function fprintf(stream: ptr<void>, fmt: string, ...) -> i32
+    function fdopen(fd: i32, mode: string) -> ptr<void>
+    # native/embryo_metal.m
+    function embryo_gpu_available() -> i32
+    function embryo_gpu_shared_alloc(bytes: i64) -> ptr<void>
+    function embryo_gpu_shared_free(p: ptr<void>) -> void
+    function embryo_gpu_force_pairs(exact: i32, nd: i32, ld: i32, stride: i32, active_stride: i32,
+        kadh_ld: i32, kadh_count: i32, generation: i32, ffu3: i32, ffu4: i32, ffu9: i32, ffu23: i32,
+        epsilod: f64, angletor: f64, nodef: ptr<f64>, nodei: ptr<i32>, neigh_full: ptr<i32>, nneigh: ptr<i32>, dneigh_full: ptr<f64>,
+        active_counts: ptr<i32>, active_types: ptr<i32>, active_values: ptr<f64>, kadh: ptr<f64>,
+        records: ptr<f64>, kinds: ptr<i32>, partner: ptr<f64>, partner_kinds: ptr<i32>, partner_stamp: ptr<i32>, partner_reverse: ptr<i32>,
+        spring_out: ptr<f64>, fmeanv_out: ptr<f64>, talone_delta: ptr<i32>, errors: ptr<i32>) -> i32
 }
 
 const EPSILOD: f64 = 2.2204460492503131e-15
@@ -87,38 +102,9 @@ function force_gene_effect_index(gene_id: i32, property_id: i32) -> i32 {
 # changing the order of the accumulated adhesion terms.
 function prepare_force_active_genes() -> bool {
     let active_gene_slots: i32 = npag[1]
-    force_active_gene_stride = active_gene_slots + 1
-    let required_rows: i32 = nd + 1
-    if force_active_gene_count_capacity < required_rows {
-        let grown_counts: ptr<i32> = realloc(force_active_gene_counts as ptr<void>, required_rows as i64 * sizeof<i32>()) as ptr<i32>
-        if grown_counts == null { return false }
-        force_active_gene_counts = grown_counts
-        force_active_gene_count_capacity = required_rows
-    }
-    if active_gene_slots <= 0 {
-        memset(force_active_gene_counts as ptr<void>, 0, required_rows as i64 * sizeof<i32>())
-        return true
-    }
+    if ensure_force_active_genes_capacity() == false { return false }
+    if active_gene_slots <= 0 { return true }
     if gex == null or whonpag == null or gene_effects == null { return false }
-    let required_elements: i64 = required_rows as i64 * force_active_gene_stride as i64
-    if force_active_gene_id_capacity < required_elements {
-        let grown_ids: ptr<i32> = realloc(force_active_gene_ids as ptr<void>, required_elements * sizeof<i32>()) as ptr<i32>
-        if grown_ids == null { return false }
-        force_active_gene_ids = grown_ids
-        force_active_gene_id_capacity = required_elements
-    }
-    if force_active_gene_type_capacity < required_elements {
-        let grown_types: ptr<i32> = realloc(force_active_gene_types as ptr<void>, required_elements * sizeof<i32>()) as ptr<i32>
-        if grown_types == null { return false }
-        force_active_gene_types = grown_types
-        force_active_gene_type_capacity = required_elements
-    }
-    if force_active_gene_value_capacity < required_elements {
-        let grown_values: ptr<f64> = realloc(force_active_gene_values as ptr<void>, required_elements * sizeof<f64>()) as ptr<f64>
-        if grown_values == null { return false }
-        force_active_gene_values = grown_values
-        force_active_gene_value_capacity = required_elements
-    }
 
     let mut node_id: i32 = 1
     while node_id <= nd {
@@ -154,7 +140,7 @@ function force_rk_stage() -> bool {
     return forces_calculating_distances()
 }
 
-function forces() -> bool {
+function forces_serial() -> bool {
     if ensure_force_scratch() == false { return false }
     if force_active_gene_cache_pinned {
         if force_active_gene_cache_valid == false {
@@ -162,46 +148,41 @@ function forces() -> bool {
             force_active_gene_cache_valid = true
         }
     } elif prepare_force_active_genes() == false { return false }
-    let capacity: i32 = force_scratch_capacity
-    let rtorx: ptr<f64> = &force_scratch[0]
-    let rtory: ptr<f64> = &force_scratch[capacity]
-    let rtorz: ptr<f64> = &force_scratch[capacity * 2]
-    let rstorx: ptr<f64> = &force_scratch[capacity * 3]
-    let rstory: ptr<f64> = &force_scratch[capacity * 4]
-    let rstorz: ptr<f64> = &force_scratch[capacity * 5]
-    let adhx: ptr<f64> = &force_scratch[capacity * 6]
-    let adhy: ptr<f64> = &force_scratch[capacity * 7]
-    let adhz: ptr<f64> = &force_scratch[capacity * 8]
-    let repx: ptr<f64> = &force_scratch[capacity * 9]
-    let repy: ptr<f64> = &force_scratch[capacity * 10]
-    let repz: ptr<f64> = &force_scratch[capacity * 11]
+    # Pair accumulators live in one row of twelve doubles per node:
+    # adhesion xyz, repulsion xyz, parallel torsion xyz, vertical torsion xyz.
+    # A scatter into the partner node then touches one or two adjacent cache
+    # lines instead of six separate arrays. The sums keep their source order.
+    let acc: ptr<f64> = force_scratch
     let epinveins: ptr<i32> = force_epi_scratch
-    let model_bytes: i64 = nd as i64 * sizeof<f64>()
-    memset(&px[1] as ptr<void>, 0, model_bytes)
-    memset(&py[1] as ptr<void>, 0, model_bytes)
-    memset(&pz[1] as ptr<void>, 0, model_bytes)
+    let node_count: i32 = nd
+    let row_stride: i32 = neigh_ld
+    let torsion_on: bool = ffu[3] == 0
+    let adhesion_capped: bool = ffu[20] == 0
+    let model_bytes: i64 = node_count as i64 * sizeof<f64>()
+    # In the capped mode px, py and pz are only read after each node has
+    # overwritten them, so they need no clearing there.
+    if adhesion_capped == false {
+        memset(&px[1] as ptr<void>, 0, model_bytes)
+        memset(&py[1] as ptr<void>, 0, model_bytes)
+        memset(&pz[1] as ptr<void>, 0, model_bytes)
+    }
     memset(&fmeanl[1] as ptr<void>, 0, model_bytes)
     memset(&fmeanv[1] as ptr<void>, 0, model_bytes)
-    # Torsion and adhesion scratch are only read in their enabled modes.
-    # Clear only the active regions, while keeping the common path to one memset.
-    if ffu[3] == 0 and ffu[20] == 0 {
-        memset(force_scratch as ptr<void>, 0, (capacity as i64) * 12 * sizeof<f64>())
-    } elif ffu[3] == 0 {
-        memset(force_scratch as ptr<void>, 0, (capacity as i64) * 6 * sizeof<f64>())
-    } elif ffu[20] == 0 {
-        memset(&force_scratch[capacity * 6] as ptr<void>, 0, (capacity as i64) * 6 * sizeof<f64>())
-    }
-    memset(epinveins as ptr<void>, 0, ((nd + 1) as i64) * sizeof<i32>())
-    if aut == 0 {
-        memset(&vcilx[1] as ptr<void>, 0, model_bytes); memset(&vcily[1] as ptr<void>, 0, model_bytes); memset(&vcilz[1] as ptr<void>, 0, model_bytes)
-        memset(&vtorx[1] as ptr<void>, 0, model_bytes); memset(&vtory[1] as ptr<void>, 0, model_bytes); memset(&vtorz[1] as ptr<void>, 0, model_bytes)
-        memset(&vstorx[1] as ptr<void>, 0, model_bytes); memset(&vstory[1] as ptr<void>, 0, model_bytes); memset(&vstorz[1] as ptr<void>, 0, model_bytes)
-        memset(&vsprx[1] as ptr<void>, 0, model_bytes); memset(&vspry[1] as ptr<void>, 0, model_bytes); memset(&vsprz[1] as ptr<void>, 0, model_bytes)
-    }
+    memset(acc as ptr<void>, 0, ((node_count + 1) as i64) * 12 * sizeof<f64>())
+    memset(epinveins as ptr<void>, 0, ((node_count + 1) as i64) * sizeof<i32>())
+    let interactive: bool = aut == 0
     let mut nod: i32 = 1
-    while nod <= nd {
+    while nod <= node_count {
         if node[nod].fix == 2 {
             px[nod] = 0.0; py[nod] = 0.0; pz[nod] = 0.0; dex[nod] = 0.0
+            if interactive {
+                # Fixed nodes keep zero display vectors. Every other node
+                # writes its own below, so the arrays need no bulk clearing.
+                vcilx[nod] = 0.0; vcily[nod] = 0.0; vcilz[nod] = 0.0
+                vtorx[nod] = 0.0; vtory[nod] = 0.0; vtorz[nod] = 0.0
+                vstorx[nod] = 0.0; vstory[nod] = 0.0; vstorz[nod] = 0.0
+                vsprx[nod] = 0.0; vspry[nod] = 0.0; vsprz[nod] = 0.0
+            }
             let mut fixed_column: i32 = 1
             while fixed_column <= nneigh[nod] {
                 let fixed_other: i32 = neigh[force_neighbor_index(nod, fixed_column)]
@@ -215,6 +196,7 @@ function forces() -> bool {
             nod = nod + 1
             continue
         }
+        let nrow: i32 = nod * 12
         let ix: f64 = node[nod].x
         let iy: f64 = node[nod].y
         let iz: f64 = node[nod].z
@@ -246,14 +228,17 @@ function forces() -> bool {
         let mut tz: f64 = 0.0
         let mut alone: i32 = 0
         let mut column: i32 = 1
-        while column <= nneigh[nod] {
-            let other: i32 = neigh[force_neighbor_index(nod, column)]
-            if other < 1 or other > nd { return false }
+        let row_base: i32 = nod * row_stride
+        let neighbor_count: i32 = nneigh[nod]
+        while column <= neighbor_count {
+            let other: i32 = neigh[row_base + column]
+            if other < 1 or other > node_count { return false }
+            let orow: i32 = other * 12
             let dx: f64 = node[other].x - ix
             let dy: f64 = node[other].y - iy
             let dz: f64 = node[other].z - iz
             let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
-            dneigh[force_neighbor_index(nod, column)] = distance
+            dneigh[row_base + column] = distance
             if other < nod and node[other].fix != 2 {
                 alone = 1
                 column = column + 1
@@ -403,13 +388,13 @@ function forces() -> bool {
                 }
                 force = 2.0 * adhesion * (fd - deqe)
             }
-            if ffu[20] == 0 {
+            if adhesion_capped {
                 if force > 0.0 {
-                    adhx[nod] = adhx[nod] + force * ux; adhy[nod] = adhy[nod] + force * uy; adhz[nod] = adhz[nod] + force * uz
-                    adhx[other] = adhx[other] - force * ux; adhy[other] = adhy[other] - force * uy; adhz[other] = adhz[other] - force * uz
+                    acc[nrow + 0] = acc[nrow + 0] + force * ux; acc[nrow + 1] = acc[nrow + 1] + force * uy; acc[nrow + 2] = acc[nrow + 2] + force * uz
+                    acc[orow + 0] = acc[orow + 0] - force * ux; acc[orow + 1] = acc[orow + 1] - force * uy; acc[orow + 2] = acc[orow + 2] - force * uz
                 } else {
-                    repx[nod] = repx[nod] + force * ux; repy[nod] = repy[nod] + force * uy; repz[nod] = repz[nod] + force * uz
-                    repx[other] = repx[other] - force * ux; repy[other] = repy[other] - force * uy; repz[other] = repz[other] - force * uz
+                    acc[nrow + 3] = acc[nrow + 3] + force * ux; acc[nrow + 4] = acc[nrow + 4] + force * uy; acc[nrow + 5] = acc[nrow + 5] + force * uz
+                    acc[orow + 3] = acc[orow + 3] - force * ux; acc[orow + 4] = acc[orow + 4] - force * uy; acc[orow + 5] = acc[orow + 5] - force * uz
                 }
             } else {
                 tx = tx + force * ux; ty = ty + force * uy; tz = tz + force * uz
@@ -420,7 +405,7 @@ function forces() -> bool {
             fmeanl[nod] = fmeanl[nod] + mean_force
             fmeanl[other] = fmeanl[other] + mean_force
 
-            if ffu[3] == 0 and twoep == 1 {
+            if torsion_on and twoep == 1 {
                 let mx: f64 = (node[node[other].altre].x - node[other].x) + cx
                 let my: f64 = (node[node[other].altre].y - node[other].y) + cy
                 let mz: f64 = (node[node[other].altre].z - node[other].z) + cz
@@ -431,28 +416,28 @@ function forces() -> bool {
                 let angle_projection: f64 = projection * inverse_m
                 if fabs(angle_projection) - angletor * distance > EPSILOD {
                     let vertical_force: f64 = (node[nod].est + node[other].est) * angle_projection
-                    rstorx[nod] = rstorx[nod] + vertical_force * mx * inverse_m
-                    rstory[nod] = rstory[nod] + vertical_force * my * inverse_m
-                    rstorz[nod] = rstorz[nod] + vertical_force * mz * inverse_m
-                    rstorx[other] = rstorx[other] - vertical_force * mx * inverse_m
-                    rstory[other] = rstory[other] - vertical_force * my * inverse_m
-                    rstorz[other] = rstorz[other] - vertical_force * mz * inverse_m
+                    acc[nrow + 9] = acc[nrow + 9] + vertical_force * mx * inverse_m
+                    acc[nrow + 10] = acc[nrow + 10] + vertical_force * my * inverse_m
+                    acc[nrow + 11] = acc[nrow + 11] + vertical_force * mz * inverse_m
+                    acc[orow + 9] = acc[orow + 9] - vertical_force * mx * inverse_m
+                    acc[orow + 10] = acc[orow + 10] - vertical_force * my * inverse_m
+                    acc[orow + 11] = acc[orow + 11] - vertical_force * mz * inverse_m
 
                     let parallel_projection: f64 = ((cx * dx) + (cy * dy) + (cz * dz)) / spring_length
                     let parallel_force: f64 = (node[nod].erp + node[other].erp) * parallel_projection
                     let pair_x: f64 = dx / distance
                     let pair_y: f64 = dy / distance
                     let pair_z: f64 = dz / distance
-                    rtorx[nod] = rtorx[nod] + parallel_force * pair_x
-                    rtory[nod] = rtory[nod] + parallel_force * pair_y
-                    rtorz[nod] = rtorz[nod] + parallel_force * pair_z
+                    acc[nrow + 6] = acc[nrow + 6] + parallel_force * pair_x
+                    acc[nrow + 7] = acc[nrow + 7] + parallel_force * pair_y
+                    acc[nrow + 8] = acc[nrow + 8] + parallel_force * pair_z
                     let other_spring_length: f64 = sqrt(((node[node[other].altre].x - node[other].x) * (node[node[other].altre].x - node[other].x)) + ((node[node[other].altre].y - node[other].y) * (node[node[other].altre].y - node[other].y)) + ((node[node[other].altre].z - node[other].z) * (node[node[other].altre].z - node[other].z)))
                     if other_spring_length == 0.0 { return false }
                     let opposite_projection: f64 = -(((node[node[other].altre].x - node[other].x) * dx) + ((node[node[other].altre].y - node[other].y) * dy) + ((node[node[other].altre].z - node[other].z) * dz)) / other_spring_length
                     let opposite_force: f64 = (node[nod].erp + node[other].erp) * opposite_projection
-                    rtorx[other] = rtorx[other] - opposite_force * pair_x
-                    rtory[other] = rtory[other] - opposite_force * pair_y
-                    rtorz[other] = rtorz[other] - opposite_force * pair_z
+                    acc[orow + 6] = acc[orow + 6] - opposite_force * pair_x
+                    acc[orow + 7] = acc[orow + 7] - opposite_force * pair_y
+                    acc[orow + 8] = acc[orow + 8] - opposite_force * pair_z
                 }
             }
             column = column + 1
@@ -463,14 +448,14 @@ function forces() -> bool {
         let mut torsion_x: f64 = 0.0
         let mut torsion_y: f64 = 0.0
         let mut torsion_z: f64 = 0.0
-        if ffu[3] == 0 {
-            torsion_x = rtorx[nod] + rstorx[nod]
-            torsion_y = rtory[nod] + rstory[nod]
-            torsion_z = rtorz[nod] + rstorz[nod]
+        if torsion_on {
+            torsion_x = acc[nrow + 6] + acc[nrow + 9]
+            torsion_y = acc[nrow + 7] + acc[nrow + 10]
+            torsion_z = acc[nrow + 8] + acc[nrow + 11]
         }
         if epinveins[nod] > 0 {
             let divisor: f64 = epinveins[nod] as f64
-            if ffu[3] == 0 {
+            if torsion_on {
                 torsion_x = torsion_x / divisor
                 torsion_y = torsion_y / divisor
                 torsion_z = torsion_z / divisor
@@ -480,22 +465,22 @@ function forces() -> bool {
         let mut contact_x: f64 = tx + px[nod]
         let mut contact_y: f64 = ty + py[nod]
         let mut contact_z: f64 = tz + pz[nod]
-        if ffu[20] == 0 {
-            let adhesion_magnitude: f64 = sqrt((adhx[nod] * adhx[nod]) + (adhy[nod] * adhy[nod]) + (adhz[nod] * adhz[nod]))
+        if adhesion_capped {
+            let adhesion_magnitude: f64 = sqrt((acc[nrow + 0] * acc[nrow + 0]) + (acc[nrow + 1] * acc[nrow + 1]) + (acc[nrow + 2] * acc[nrow + 2]))
             let mut cap_scale: f64 = 1.0
             if adhesion_magnitude > maxad { cap_scale = maxad / adhesion_magnitude }
-            contact_x = (adhx[nod] * cap_scale) + repx[nod]
-            contact_y = (adhy[nod] * cap_scale) + repy[nod]
-            contact_z = (adhz[nod] * cap_scale) + repz[nod]
+            contact_x = (acc[nrow + 0] * cap_scale) + acc[nrow + 3]
+            contact_y = (acc[nrow + 1] * cap_scale) + acc[nrow + 4]
+            contact_z = (acc[nrow + 2] * cap_scale) + acc[nrow + 5]
         }
-        if aut == 0 {
+        if interactive {
             vsprx[nod] = sx; vspry[nod] = sy; vsprz[nod] = sz
-            if ffu[20] == 0 {
+            if adhesion_capped {
                 vcilx[nod] = contact_x; vcily[nod] = contact_y; vcilz[nod] = contact_z
             }
-            if ffu[3] == 0 {
-                vtorx[nod] = rtorx[nod]; vtory[nod] = rtory[nod]; vtorz[nod] = rtorz[nod]
-                vstorx[nod] = rstorx[nod]; vstory[nod] = rstory[nod]; vstorz[nod] = rstorz[nod]
+            if torsion_on {
+                vtorx[nod] = acc[nrow + 6]; vtory[nod] = acc[nrow + 7]; vtorz[nod] = acc[nrow + 8]
+                vstorx[nod] = acc[nrow + 9]; vstory[nod] = acc[nrow + 10]; vstorz[nod] = acc[nrow + 11]
             } else {
                 vtorx[nod] = 0.0; vtory[nod] = 0.0; vtorz[nod] = 0.0
                 vstorx[nod] = 0.0; vstory[nod] = 0.0; vstorz[nod] = 0.0
@@ -517,6 +502,899 @@ function forces() -> bool {
         px[nod] = fx; py[nod] = fy; pz[nod] = fz
         dex[nod] = sqrt((fx * fx) + (fy * fy) + (fz * fz))
         nod = nod + 1
+    }
+    return true
+}
+
+
+# ---------------------------------------------------------------------------
+# Two-phase parallel forces. The serial routine above updates both ends of a
+# pair when it visits the pair from its lower index (or from the moving node
+# when the partner is fixed), so each node's sums are formed in a fixed
+# order: partner terms from lower ids in ascending id order, then its own
+# pairs in column order, then (fixed nodes only) partner terms from higher
+# ids. Phase 1 computes every pair term in parallel and records it on the
+# visiting side. Phase 2 replays each node's terms in exactly that order, so
+# every sum is bitwise equal to the serial result.
+#
+# EMBRYO_PARALLEL_VERIFY=1 runs the serial routine after every parallel
+# call and compares the outputs; a difference stops the run.
+# ---------------------------------------------------------------------------
+const PAIR_FIELDS: i32 = 12
+# Own-side record layout, indexed by the visiting node's row and column:
+# 0..2 force along the unit vector, 3 force magnitude, 4 mean force,
+# 5..7 vertical torsion terms, 8..10 own parallel torsion, 11 unused.
+# The partner-side record uses the same slots 0..7 and 8..10 for the
+# partner's parallel torsion, and is written into the partner's own row
+# (its column for the visiting node) so phase 2 reads rows contiguously.
+let mut pair_records: ptr<f64> = null
+let mut pair_kind: ptr<i32> = null
+let mut partner_records: ptr<f64> = null
+let mut partner_kind: ptr<i32> = null
+# Stamps replace per-call clearing: an entry counts only when its stamp
+# equals the current call's generation. partner_reverse caches the partner's
+# column for this node; a cached value is checked before use and recomputed
+# by a row scan when the rows changed.
+let mut partner_stamp: ptr<i32> = null
+let mut partner_reverse: ptr<i32> = null
+let mut force_generation: i32 = 0
+let mut pair_records_shared: bool = false
+# GPU phase 1 staging: node field blocks (13 doubles and 4 ints per node)
+# and the small per-node outputs the kernel returns by copy.
+let mut gpu_nodef: ptr<f64> = null
+let mut gpu_nodei: ptr<i32> = null
+let mut gpu_talone: ptr<i32> = null
+let mut gpu_errors: ptr<i32> = null
+let mut force_gpu_node_capacity: i32 = 0
+let mut force_gpu_calls: i32 = 0
+let mut force_gpu_fallbacks: i32 = 0
+let mut pair_capacity: i64 = 0
+let mut pair_stride: i32 = 0
+let mut node_spring: ptr<f64> = null
+let mut node_spring_capacity: i32 = 0
+let mut force_thread_error: ptr<i32> = null
+let mut force_sort_keys: ptr<i32> = null
+let mut force_sort_refs: ptr<i32> = null
+let mut force_thread_capacity: i32 = 0
+let mut force_sort_stride: i32 = 0
+let mut force_verify_mode: i32 = -1
+# Diagnostics for EMBRYO_PARALLEL_STATS: parallel force calls and the calls
+# that fell back to the serial routine because a neighbor row was one-sided.
+let mut force_parallel_calls: i32 = 0
+let mut force_parallel_fallbacks: i32 = 0
+let mut force_verify_scratch: ptr<f64> = null
+let mut force_verify_capacity: i64 = 0
+
+function ensure_pair_records(stride: i32, threads: i32) -> bool {
+    let rows: i64 = (nd + 1) as i64
+    let cells: i64 = rows * stride as i64
+    if pair_capacity < cells {
+        if pair_records_shared {
+            # Shared Metal buffers: the kernel writes them in place. Stale
+            # stamps are harmless because phase 1 restamps every live entry.
+            if pair_records != null { embryo_gpu_shared_free(pair_records as ptr<void>) }
+            if pair_kind != null { embryo_gpu_shared_free(pair_kind as ptr<void>) }
+            if partner_records != null { embryo_gpu_shared_free(partner_records as ptr<void>) }
+            if partner_kind != null { embryo_gpu_shared_free(partner_kind as ptr<void>) }
+            if partner_stamp != null { embryo_gpu_shared_free(partner_stamp as ptr<void>) }
+            if partner_reverse != null { embryo_gpu_shared_free(partner_reverse as ptr<void>) }
+            pair_records = embryo_gpu_shared_alloc(cells * PAIR_FIELDS as i64 * sizeof<f64>()) as ptr<f64>
+            pair_kind = embryo_gpu_shared_alloc(cells * sizeof<i32>()) as ptr<i32>
+            partner_records = embryo_gpu_shared_alloc(cells * PAIR_FIELDS as i64 * sizeof<f64>()) as ptr<f64>
+            partner_kind = embryo_gpu_shared_alloc(cells * sizeof<i32>()) as ptr<i32>
+            partner_stamp = embryo_gpu_shared_alloc(cells * sizeof<i32>()) as ptr<i32>
+            partner_reverse = embryo_gpu_shared_alloc(cells * sizeof<i32>()) as ptr<i32>
+            if pair_records == null or pair_kind == null or partner_records == null or partner_kind == null or partner_stamp == null or partner_reverse == null { return false }
+        } else {
+            let records: ptr<f64> = realloc(pair_records as ptr<void>, cells * PAIR_FIELDS as i64 * sizeof<f64>()) as ptr<f64>
+            let kinds: ptr<i32> = realloc(pair_kind as ptr<void>, cells * sizeof<i32>()) as ptr<i32>
+            let partner: ptr<f64> = realloc(partner_records as ptr<void>, cells * PAIR_FIELDS as i64 * sizeof<f64>()) as ptr<f64>
+            let partner_kinds: ptr<i32> = realloc(partner_kind as ptr<void>, cells * sizeof<i32>()) as ptr<i32>
+            let stamps: ptr<i32> = realloc(partner_stamp as ptr<void>, cells * sizeof<i32>()) as ptr<i32>
+            let reverse: ptr<i32> = realloc(partner_reverse as ptr<void>, cells * sizeof<i32>()) as ptr<i32>
+            if records == null or kinds == null or partner == null or partner_kinds == null or stamps == null or reverse == null { return false }
+            pair_records = records; pair_kind = kinds; partner_records = partner; partner_kind = partner_kinds
+            partner_stamp = stamps; partner_reverse = reverse
+            memset(stamps as ptr<void>, 0, cells * sizeof<i32>())
+            memset(reverse as ptr<void>, 0, cells * sizeof<i32>())
+        }
+        force_generation = 0
+        pair_capacity = cells
+    }
+    if node_spring_capacity < rows as i32 {
+        let spring: ptr<f64> = realloc(node_spring as ptr<void>, rows * 3 * sizeof<f64>()) as ptr<f64>
+        if spring == null { return false }
+        node_spring = spring
+        node_spring_capacity = rows as i32
+    }
+    if force_thread_capacity < threads or force_sort_stride < stride {
+        let errors: ptr<i32> = realloc(force_thread_error as ptr<void>, threads as i64 * sizeof<i32>()) as ptr<i32>
+        let keys: ptr<i32> = realloc(force_sort_keys as ptr<void>, threads as i64 * stride as i64 * sizeof<i32>()) as ptr<i32>
+        let refs2: ptr<i32> = realloc(force_sort_refs as ptr<void>, threads as i64 * stride as i64 * sizeof<i32>()) as ptr<i32>
+        if errors == null or keys == null or refs2 == null { return false }
+        force_thread_error = errors; force_sort_keys = keys; force_sort_refs = refs2
+        force_thread_capacity = threads
+        force_sort_stride = stride
+    }
+    pair_stride = stride
+    return true
+}
+
+function force_active_genes_range(start: i32, end: i32, thread: i32) -> void {
+    let active_gene_slots: i32 = npag[1]
+    let mut node_id: i32 = start + 1
+    while node_id <= end {
+        let mut active_count: i32 = 0
+        let mut slot: i32 = 1
+        while slot <= active_gene_slots {
+            let gene_id: i32 = whonpag[(ng + 1) + slot]
+            let expression: f64 = gex[force_expression_index(node_id, gene_id)]
+            if expression > 0.0 {
+                active_count = active_count + 1
+                let active_index: i32 = node_id * force_active_gene_stride + active_count
+                force_active_gene_ids[active_index] = gene_id
+                force_active_gene_types[active_index] = gene_effects[force_gene_effect_index(gene_id, 1)] as i32
+                force_active_gene_values[active_index] = expression
+            }
+            slot = slot + 1
+        }
+        force_active_gene_counts[node_id] = active_count
+        node_id = node_id + 1
+    }
+}
+
+# Phase 1: pair terms for the node ids start + 1 through end, recorded on
+# the visiting side, with a back reference written into the partner's row.
+function force_pairs_range(start: i32, end: i32, thread: i32) -> void {
+    let node_count: i32 = nd
+    let row_stride: i32 = neigh_ld
+    let stride: i32 = pair_stride
+    let torsion_on: bool = ffu[3] == 0
+    let records: ptr<f64> = pair_records
+    let kinds: ptr<i32> = pair_kind
+    let partner: ptr<f64> = partner_records
+    let partner_kinds: ptr<i32> = partner_kind
+    let generation: i32 = force_generation
+    let mut nod: i32 = start + 1
+    while nod <= end {
+        let row_base: i32 = nod * row_stride
+        let neighbor_count: i32 = nneigh[nod]
+        let ix: f64 = node[nod].x
+        let iy: f64 = node[nod].y
+        let iz: f64 = node[nod].z
+        if node[nod].fix == 2 {
+            let mut fixed_column: i32 = 1
+            while fixed_column <= neighbor_count {
+                let fixed_other: i32 = neigh[row_base + fixed_column]
+                if fixed_other < 1 or fixed_other > node_count { force_thread_error[thread] = 1; return }
+                kinds[nod * stride + fixed_column] = 0
+                let fixed_dx: f64 = node[fixed_other].x - ix
+                let fixed_dy: f64 = node[fixed_other].y - iy
+                let fixed_dz: f64 = node[fixed_other].z - iz
+                dneigh[row_base + fixed_column] = sqrt((fixed_dx * fixed_dx) + (fixed_dy * fixed_dy) + (fixed_dz * fixed_dz))
+                fixed_column = fixed_column + 1
+            }
+            nod = nod + 1
+            continue
+        }
+        let mut sx: f64 = 0.0
+        let mut sy: f64 = 0.0
+        let mut sz: f64 = 0.0
+        let mut cx: f64 = 0.0
+        let mut cy: f64 = 0.0
+        let mut cz: f64 = 0.0
+        let mut spring_length: f64 = 0.0
+        if node[nod].tipus < 3 {
+            let other: i32 = node[nod].altre
+            if other < 1 or other > node_count { force_thread_error[thread] = 1; return }
+            cx = node[other].x - ix
+            cy = node[other].y - iy
+            cz = node[other].z - iz
+            spring_length = sqrt((cx * cx) + (cy * cy) + (cz * cz))
+            if spring_length == 0.0 { force_thread_error[thread] = 1; return }
+            let unit: f64 = 1.0 / spring_length
+            let stretch: f64 = spring_length - node[nod].eqs - node[other].eqs
+            let spring_force: f64 = 2.0 * node[nod].hoo * stretch
+            sx = spring_force * cx * unit
+            sy = spring_force * cy * unit
+            sz = spring_force * cz * unit
+            fmeanv[nod] = stretch
+        }
+        node_spring[nod * 3] = sx
+        node_spring[nod * 3 + 1] = sy
+        node_spring[nod * 3 + 2] = sz
+        let mut alone: i32 = 0
+        let mut column: i32 = 1
+        while column <= neighbor_count {
+            let other: i32 = neigh[row_base + column]
+            if other < 1 or other > node_count { force_thread_error[thread] = 1; return }
+            let dx: f64 = node[other].x - ix
+            let dy: f64 = node[other].y - iy
+            let dz: f64 = node[other].z - iz
+            let distance: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+            dneigh[row_base + column] = distance
+            kinds[nod * stride + column] = 0
+            if other < nod and node[other].fix != 2 {
+                alone = 1
+                column = column + 1
+                continue
+            }
+            alone = 1
+            if distance == 0.0 { force_thread_error[thread] = 1; return }
+            let mut fd: f64 = distance
+            let mut twoep: i32 = 0
+            let mut ux: f64 = dx / distance
+            let mut uy: f64 = dy / distance
+            let mut uz: f64 = dz / distance
+            let mut skip: bool = false
+            if node[nod].tipus < 3 or node[other].tipus < 3 {
+                if node[nod].tipus < 3 and node[other].tipus < 3 {
+                    let other_apical: i32 = node[other].altre
+                    if other_apical < 1 or other_apical > node_count { force_thread_error[thread] = 1; return }
+                    let icx: f64 = node[other_apical].x - node[other].x
+                    let icy: f64 = node[other_apical].y - node[other].y
+                    let icz: f64 = node[other_apical].z - node[other].z
+                    let posca: f64 = (icx * cx) + (icy * cy) + (icz * cz)
+                    if node[nod].tipus == node[other].tipus and posca > EPSILOD {
+                        let mx: f64 = icx + cx
+                        let my: f64 = icy + cy
+                        let mz: f64 = icz + cz
+                        let ml: f64 = sqrt((mx * mx) + (my * my) + (mz * mz))
+                        if ml == 0.0 { force_thread_error[thread] = 1; return }
+                        let md: f64 = 1.0 / ml
+                        let projection: f64 = (mx * dx) + (my * dy) + (mz * dz)
+                        let vertical: f64 = fabs(projection) * md
+                        let lateral2: f64 = (distance * distance) - (vertical * vertical)
+                        let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                        if ffu[23] == 1 and lateral - node[nod].add - node[other].add > EPSILOD { skip = true }
+                        else {
+                            let along: f64 = projection * md * md
+                            ux = (dx - mx * along) / lateral
+                            uy = (dy - my * along) / lateral
+                            uz = (dz - mz * along) / lateral
+                            fd = lateral
+                            twoep = 1
+                        }
+                    } elif node[nod].tipus == node[other].tipus {
+                        let mx: f64 = icx + cx
+                        let my: f64 = icy + cy
+                        let mz: f64 = icz + cz
+                        let ml2: f64 = (mx * mx) + (my * my) + (mz * mz)
+                        let projection: f64 = (cx * dx) + (cy * dy) + (cz * dz)
+                        let radii: f64 = node[nod].add + node[other].add
+                        if ml2 < EPSILOD {
+                            if projection >= EPSILOD { skip = true }
+                            else {
+                                let vertical: f64 = -projection / spring_length
+                                if vertical - radii >= EPSILOD { skip = true }
+                                else {
+                                    let lateral2: f64 = distance * distance
+                                    let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                                    if fd - radii > EPSILOD { skip = true }
+                                    else {
+                                        ux = -cx / spring_length; uy = -cy / spring_length; uz = -cz / spring_length
+                                        fd = lateral
+                                        twoep = 2
+                                    }
+                                }
+                            }
+                        } else {
+                            let inverse_m: f64 = 1.0 / sqrt(ml2)
+                            let vertical: f64 = fabs((mx * dx) + (my * dy) + (mz * dz)) * inverse_m
+                            if vertical - radii >= EPSILOD { skip = true }
+                            else {
+                                let lateral2: f64 = (distance * distance) - (vertical * vertical)
+                                let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                                if lateral - radii > EPSILOD { skip = true }
+                                else {
+                                    let along: f64 = ((mx * dx) + (my * dy) + (mz * dz)) * inverse_m * inverse_m
+                                    ux = (dx - mx * along) / lateral
+                                    uy = (dy - my * along) / lateral
+                                    uz = (dz - mz * along) / lateral
+                                    fd = lateral
+                                }
+                            }
+                        }
+                    } elif posca < 0.0 {
+                        let projection: f64 = (cx * dx) + (cy * dy) + (cz * dz)
+                        if projection >= EPSILOD { skip = true }
+                        else {
+                            let vertical: f64 = -projection / spring_length
+                            let radii: f64 = node[nod].add + node[other].add
+                            if vertical - radii >= EPSILOD { skip = true }
+                            else {
+                                let lateral2: f64 = (distance * distance) - (vertical * vertical)
+                                let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                                if lateral - radii > EPSILOD { skip = true }
+                                else {
+                                    ux = cx / spring_length; uy = cy / spring_length; uz = cz / spring_length
+                                    fd = vertical
+                                    twoep = 2
+                                }
+                            }
+                        }
+                    } else {
+                        skip = true
+                    }
+                } elif node[nod].tipus < 3 and node[other].tipus >= 3 {
+                    let sxv: f64 = node[node[nod].altre].x - ix
+                    let syv: f64 = node[node[nod].altre].y - iy
+                    let szv: f64 = node[node[nod].altre].z - iz
+                    let sl: f64 = sqrt((sxv * sxv) + (syv * syv) + (szv * szv))
+                    if sl == 0.0 { force_thread_error[thread] = 1; return }
+                    let projection: f64 = (sxv * dx) + (syv * dy) + (szv * dz)
+                    if projection >= 0.0 { skip = true }
+                    else {
+                        fd = fabs(projection / sl)
+                        let lateral2: f64 = (distance * distance) - (fd * fd)
+                        let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                        if fd - node[nod].add - node[other].add >= 0.0 or lateral - node[nod].add - node[other].add > EPSILOD { skip = true }
+                        else { ux = -sxv / sl; uy = -syv / sl; uz = -szv / sl }
+                    }
+                } elif node[nod].tipus >= 3 and node[other].tipus < 3 {
+                    let ox: f64 = node[node[other].altre].x - node[other].x
+                    let oy: f64 = node[node[other].altre].y - node[other].y
+                    let oz: f64 = node[node[other].altre].z - node[other].z
+                    let ol: f64 = sqrt((ox * ox) + (oy * oy) + (oz * oz))
+                    if ol == 0.0 { force_thread_error[thread] = 1; return }
+                    let projection: f64 = (ox * dx) + (oy * dy) + (oz * dz)
+                    if projection <= 0.0 { skip = true }
+                    else {
+                        fd = projection / ol
+                        let lateral2: f64 = (distance * distance) - (fd * fd)
+                        let lateral: f64 = sqrt(if lateral2 < EPSILOD { EPSILOD } else { lateral2 })
+                        if fd - node[nod].add - node[other].add >= 0.0 or lateral - node[nod].add - node[other].add > EPSILOD { skip = true }
+                        else { ux = ox / ol; uy = oy / ol; uz = oz / ol }
+                    }
+                } else {
+                    skip = true
+                }
+            } elif fd - node[nod].add - node[other].add > EPSILOD {
+                skip = true
+            }
+            if skip {
+                column = column + 1
+                continue
+            }
+            let mut force: f64 = 0.0
+            let deqe: f64 = node[nod].eqd + node[other].eqd
+            if node[nod].icel == node[other].icel {
+                if fd - deqe < -EPSILOD {
+                    force = (node[nod].rep + node[other].rep) * (fd - deqe)
+                } else {
+                    force = (node[nod].you + node[other].you) * (fd - deqe)
+                }
+            } elif fd - deqe < -EPSILOD {
+                force = (node[nod].rec + node[other].rec) * (fd - deqe)
+            } else {
+                let mut adhesion: f64 = 0.5 * (node[nod].adh + node[other].adh)
+                let mut a: i32 = 1
+                while a <= force_active_gene_counts[nod] {
+                    let active_a_index: i32 = nod * force_active_gene_stride + a
+                    let expression_a: f64 = force_active_gene_values[active_a_index]
+                    let ta: i32 = force_active_gene_types[active_a_index]
+                    let mut b: i32 = 1
+                    while b <= force_active_gene_counts[other] {
+                        let active_b_index: i32 = other * force_active_gene_stride + b
+                        let expression_b: f64 = force_active_gene_values[active_b_index]
+                        let tb: i32 = force_active_gene_types[active_b_index]
+                        adhesion = adhesion + expression_a * expression_b * kadh[ta * kadh_ld + tb]
+                        b = b + 1
+                    }
+                    a = a + 1
+                }
+                force = 2.0 * adhesion * (fd - deqe)
+            }
+            let pk: i32 = nod * stride + column
+            let rec: i32 = pk * PAIR_FIELDS
+            records[rec] = force * ux
+            records[rec + 1] = force * uy
+            records[rec + 2] = force * uz
+            records[rec + 3] = force
+            let mut mean_force: f64 = force
+            if ffu[9] == 1 { mean_force = fd - deqe }
+            records[rec + 4] = mean_force
+            # bit 1: contributed; bit 2: epithelial pair (counts toward the
+            # mean divisor); bit 4: torsion terms recorded.
+            let mut kind: i32 = 1
+            if twoep == 1 { kind = 3 }
+            let mut partner_x: f64 = 0.0
+            let mut partner_y: f64 = 0.0
+            let mut partner_z: f64 = 0.0
+            if torsion_on and twoep == 1 {
+                let mx: f64 = (node[node[other].altre].x - node[other].x) + cx
+                let my: f64 = (node[node[other].altre].y - node[other].y) + cy
+                let mz: f64 = (node[node[other].altre].z - node[other].z) + cz
+                let ml: f64 = sqrt((mx * mx) + (my * my) + (mz * mz))
+                if ml == 0.0 { force_thread_error[thread] = 1; return }
+                let inverse_m: f64 = 1.0 / ml
+                let projection: f64 = (mx * dx) + (my * dy) + (mz * dz)
+                let angle_projection: f64 = projection * inverse_m
+                if fabs(angle_projection) - angletor * distance > EPSILOD {
+                    kind = kind + 4
+                    let vertical_force: f64 = (node[nod].est + node[other].est) * angle_projection
+                    records[rec + 5] = vertical_force * mx * inverse_m
+                    records[rec + 6] = vertical_force * my * inverse_m
+                    records[rec + 7] = vertical_force * mz * inverse_m
+                    let parallel_projection: f64 = ((cx * dx) + (cy * dy) + (cz * dz)) / spring_length
+                    let parallel_force: f64 = (node[nod].erp + node[other].erp) * parallel_projection
+                    let pair_x: f64 = dx / distance
+                    let pair_y: f64 = dy / distance
+                    let pair_z: f64 = dz / distance
+                    records[rec + 8] = parallel_force * pair_x
+                    records[rec + 9] = parallel_force * pair_y
+                    records[rec + 10] = parallel_force * pair_z
+                    let other_spring_length: f64 = sqrt(((node[node[other].altre].x - node[other].x) * (node[node[other].altre].x - node[other].x)) + ((node[node[other].altre].y - node[other].y) * (node[node[other].altre].y - node[other].y)) + ((node[node[other].altre].z - node[other].z) * (node[node[other].altre].z - node[other].z)))
+                    if other_spring_length == 0.0 { force_thread_error[thread] = 1; return }
+                    let opposite_projection: f64 = -(((node[node[other].altre].x - node[other].x) * dx) + ((node[node[other].altre].y - node[other].y) * dy) + ((node[node[other].altre].z - node[other].z) * dz)) / other_spring_length
+                    let opposite_force: f64 = (node[nod].erp + node[other].erp) * opposite_projection
+                    records[rec + 11] = opposite_force * pair_x
+                    partner_x = opposite_force * pair_x
+                    partner_y = opposite_force * pair_y
+                    partner_z = opposite_force * pair_z
+                }
+            }
+            kinds[pk] = kind
+            # Partner-side copy in the partner's row. Rows are symmetric after
+            # a neighbor build; a missing entry means this call cannot be
+            # replayed and the serial routine runs instead. The cached
+            # reverse column is checked first, then the row is scanned.
+            let partner_base: i32 = other * row_stride
+            let partner_count: i32 = nneigh[other]
+            let mut partner_column: i32 = partner_reverse[pk]
+            if partner_column < 1 or partner_column > partner_count or neigh[partner_base + partner_column] != nod {
+                partner_column = 0
+                let mut scan: i32 = 1
+                while scan <= partner_count {
+                    if neigh[partner_base + scan] == nod { partner_column = scan; scan = partner_count }
+                    scan = scan + 1
+                }
+                partner_reverse[pk] = partner_column
+            }
+            if partner_column == 0 { force_thread_error[thread] = 2 }
+            else {
+                let pslot: i32 = other * stride + partner_column
+                let pp: i32 = pslot * PAIR_FIELDS
+                partner[pp] = records[rec]; partner[pp + 1] = records[rec + 1]; partner[pp + 2] = records[rec + 2]
+                partner[pp + 3] = force; partner[pp + 4] = mean_force
+                if (kind & 4) != 0 {
+                    partner[pp + 5] = records[rec + 5]; partner[pp + 6] = records[rec + 6]; partner[pp + 7] = records[rec + 7]
+                    partner[pp + 8] = partner_x; partner[pp + 9] = partner_y; partner[pp + 10] = partner_z
+                }
+                partner_kinds[pslot] = kind
+                partner_stamp[pslot] = generation
+            }
+            column = column + 1
+        }
+        if ffu[4] == 1 {
+            if alone == 0 { node[nod].talone = node[nod].talone + 1 } else { node[nod].talone = 0 }
+        }
+        nod = nod + 1
+    }
+}
+
+# Phase 2: replay each node's terms in the serial order and finish the node.
+function force_reduce_range(start: i32, end: i32, thread: i32) -> void {
+    let node_count: i32 = nd
+    let row_stride: i32 = neigh_ld
+    let stride: i32 = pair_stride
+    let torsion_on: bool = ffu[3] == 0
+    let adhesion_capped: bool = ffu[20] == 0
+    let interactive: bool = aut == 0
+    let acc: ptr<f64> = force_scratch
+    let epinveins: ptr<i32> = force_epi_scratch
+    let keys: ptr<i32> = &force_sort_keys[thread * force_sort_stride]
+    let refs_sorted: ptr<i32> = &force_sort_refs[thread * force_sort_stride]
+    let mut n: i32 = start + 1
+    while n <= end {
+        let nrow: i32 = n * 12
+        let mut k: i32 = 0
+        while k < 12 { acc[nrow + k] = 0.0; k = k + 1 }
+        fmeanl[n] = 0.0
+        epinveins[n] = 0
+        let fixed: bool = node[n].fix == 2
+        if adhesion_capped == false or fixed { px[n] = 0.0; py[n] = 0.0; pz[n] = 0.0 }
+        let row_base: i32 = n * row_stride
+        let neighbor_count: i32 = nneigh[n]
+        # (a) partner terms from lower ids, ascending by id
+        let partner_row: i32 = n * stride
+        let generation: i32 = force_generation
+        let mut lower: i32 = 0
+        let mut c: i32 = 1
+        while c <= neighbor_count {
+            if partner_stamp[partner_row + c] == generation {
+                let m: i32 = neigh[row_base + c]
+                if m < n {
+                    let mut pos: i32 = lower
+                    while pos > 0 and keys[pos - 1] > m { keys[pos] = keys[pos - 1]; refs_sorted[pos] = refs_sorted[pos - 1]; pos = pos - 1 }
+                    keys[pos] = m
+                    refs_sorted[pos] = c
+                    lower = lower + 1
+                }
+            }
+            c = c + 1
+        }
+        let mut s: i32 = 0
+        while s < lower {
+            let pc: i32 = partner_row + refs_sorted[s]
+            let rec: i32 = pc * PAIR_FIELDS
+            let force: f64 = partner_records[rec + 3]
+            if adhesion_capped {
+                if force > 0.0 {
+                    acc[nrow + 0] = acc[nrow + 0] - partner_records[rec]; acc[nrow + 1] = acc[nrow + 1] - partner_records[rec + 1]; acc[nrow + 2] = acc[nrow + 2] - partner_records[rec + 2]
+                } else {
+                    acc[nrow + 3] = acc[nrow + 3] - partner_records[rec]; acc[nrow + 4] = acc[nrow + 4] - partner_records[rec + 1]; acc[nrow + 5] = acc[nrow + 5] - partner_records[rec + 2]
+                }
+            } else {
+                px[n] = px[n] - partner_records[rec]; py[n] = py[n] - partner_records[rec + 1]; pz[n] = pz[n] - partner_records[rec + 2]
+            }
+            fmeanl[n] = fmeanl[n] + partner_records[rec + 4]
+            let kind: i32 = partner_kind[pc]
+            if (kind & 2) != 0 { epinveins[n] = epinveins[n] + 1 }
+            if (kind & 4) != 0 {
+                acc[nrow + 9] = acc[nrow + 9] - partner_records[rec + 5]
+                acc[nrow + 10] = acc[nrow + 10] - partner_records[rec + 6]
+                acc[nrow + 11] = acc[nrow + 11] - partner_records[rec + 7]
+                acc[nrow + 6] = acc[nrow + 6] - partner_records[rec + 8]
+                acc[nrow + 7] = acc[nrow + 7] - partner_records[rec + 9]
+                acc[nrow + 8] = acc[nrow + 8] - partner_records[rec + 10]
+            }
+            s = s + 1
+        }
+        let mut tx: f64 = 0.0
+        let mut ty: f64 = 0.0
+        let mut tz: f64 = 0.0
+        if fixed {
+            # The serial loop resets a fixed node here, then later pairs from
+            # higher ids may still add to it.
+            px[n] = 0.0; py[n] = 0.0; pz[n] = 0.0; dex[n] = 0.0
+            let mut higher: i32 = 0
+            c = 1
+            while c <= neighbor_count {
+                if partner_stamp[partner_row + c] == generation {
+                    let m: i32 = neigh[row_base + c]
+                    if m > n {
+                        let mut pos: i32 = higher
+                        while pos > 0 and keys[pos - 1] > m { keys[pos] = keys[pos - 1]; refs_sorted[pos] = refs_sorted[pos - 1]; pos = pos - 1 }
+                        keys[pos] = m
+                        refs_sorted[pos] = c
+                        higher = higher + 1
+                    }
+                }
+                c = c + 1
+            }
+            s = 0
+            while s < higher {
+                let pc: i32 = partner_row + refs_sorted[s]
+                let rec: i32 = pc * PAIR_FIELDS
+                let force: f64 = partner_records[rec + 3]
+                if adhesion_capped {
+                    if force > 0.0 {
+                        acc[nrow + 0] = acc[nrow + 0] - partner_records[rec]; acc[nrow + 1] = acc[nrow + 1] - partner_records[rec + 1]; acc[nrow + 2] = acc[nrow + 2] - partner_records[rec + 2]
+                    } else {
+                        acc[nrow + 3] = acc[nrow + 3] - partner_records[rec]; acc[nrow + 4] = acc[nrow + 4] - partner_records[rec + 1]; acc[nrow + 5] = acc[nrow + 5] - partner_records[rec + 2]
+                    }
+                } else {
+                    px[n] = px[n] - partner_records[rec]; py[n] = py[n] - partner_records[rec + 1]; pz[n] = pz[n] - partner_records[rec + 2]
+                }
+                fmeanl[n] = fmeanl[n] + partner_records[rec + 4]
+                let kind: i32 = partner_kind[pc]
+                if (kind & 2) != 0 { epinveins[n] = epinveins[n] + 1 }
+                if (kind & 4) != 0 {
+                    acc[nrow + 9] = acc[nrow + 9] - partner_records[rec + 5]
+                    acc[nrow + 10] = acc[nrow + 10] - partner_records[rec + 6]
+                    acc[nrow + 11] = acc[nrow + 11] - partner_records[rec + 7]
+                    acc[nrow + 6] = acc[nrow + 6] - partner_records[rec + 8]
+                    acc[nrow + 7] = acc[nrow + 7] - partner_records[rec + 9]
+                    acc[nrow + 8] = acc[nrow + 8] - partner_records[rec + 10]
+                }
+                s = s + 1
+            }
+            if interactive {
+                vcilx[n] = 0.0; vcily[n] = 0.0; vcilz[n] = 0.0
+                vtorx[n] = 0.0; vtory[n] = 0.0; vtorz[n] = 0.0
+                vstorx[n] = 0.0; vstory[n] = 0.0; vstorz[n] = 0.0
+                vsprx[n] = 0.0; vspry[n] = 0.0; vsprz[n] = 0.0
+            }
+            n = n + 1
+            continue
+        }
+        # (b) own pairs in column order
+        c = 1
+        while c <= neighbor_count {
+            let pk: i32 = n * stride + c
+            let kind: i32 = pair_kind[pk]
+            if kind != 0 {
+                let rec: i32 = pk * PAIR_FIELDS
+                let force: f64 = pair_records[rec + 3]
+                if adhesion_capped {
+                    if force > 0.0 {
+                        acc[nrow + 0] = acc[nrow + 0] + pair_records[rec]; acc[nrow + 1] = acc[nrow + 1] + pair_records[rec + 1]; acc[nrow + 2] = acc[nrow + 2] + pair_records[rec + 2]
+                    } else {
+                        acc[nrow + 3] = acc[nrow + 3] + pair_records[rec]; acc[nrow + 4] = acc[nrow + 4] + pair_records[rec + 1]; acc[nrow + 5] = acc[nrow + 5] + pair_records[rec + 2]
+                    }
+                } else {
+                    tx = tx + pair_records[rec]; ty = ty + pair_records[rec + 1]; tz = tz + pair_records[rec + 2]
+                }
+                fmeanl[n] = fmeanl[n] + pair_records[rec + 4]
+                if (kind & 2) != 0 { epinveins[n] = epinveins[n] + 1 }
+                if (kind & 4) != 0 {
+                    acc[nrow + 9] = acc[nrow + 9] + pair_records[rec + 5]
+                    acc[nrow + 10] = acc[nrow + 10] + pair_records[rec + 6]
+                    acc[nrow + 11] = acc[nrow + 11] + pair_records[rec + 7]
+                    acc[nrow + 6] = acc[nrow + 6] + pair_records[rec + 8]
+                    acc[nrow + 7] = acc[nrow + 7] + pair_records[rec + 9]
+                    acc[nrow + 8] = acc[nrow + 8] + pair_records[rec + 10]
+                }
+            }
+            c = c + 1
+        }
+        let sx: f64 = node_spring[n * 3]
+        let sy: f64 = node_spring[n * 3 + 1]
+        let sz: f64 = node_spring[n * 3 + 2]
+        let mut torsion_x: f64 = 0.0
+        let mut torsion_y: f64 = 0.0
+        let mut torsion_z: f64 = 0.0
+        if torsion_on {
+            torsion_x = acc[nrow + 6] + acc[nrow + 9]
+            torsion_y = acc[nrow + 7] + acc[nrow + 10]
+            torsion_z = acc[nrow + 8] + acc[nrow + 11]
+        }
+        if epinveins[n] > 0 {
+            let divisor: f64 = epinveins[n] as f64
+            if torsion_on {
+                torsion_x = torsion_x / divisor
+                torsion_y = torsion_y / divisor
+                torsion_z = torsion_z / divisor
+            }
+            fmeanl[n] = fmeanl[n] / divisor
+        }
+        let mut contact_x: f64 = tx + px[n]
+        let mut contact_y: f64 = ty + py[n]
+        let mut contact_z: f64 = tz + pz[n]
+        if adhesion_capped {
+            let adhesion_magnitude: f64 = sqrt((acc[nrow + 0] * acc[nrow + 0]) + (acc[nrow + 1] * acc[nrow + 1]) + (acc[nrow + 2] * acc[nrow + 2]))
+            let mut cap_scale: f64 = 1.0
+            if adhesion_magnitude > maxad { cap_scale = maxad / adhesion_magnitude }
+            contact_x = (acc[nrow + 0] * cap_scale) + acc[nrow + 3]
+            contact_y = (acc[nrow + 1] * cap_scale) + acc[nrow + 4]
+            contact_z = (acc[nrow + 2] * cap_scale) + acc[nrow + 5]
+        }
+        if interactive {
+            vsprx[n] = sx; vspry[n] = sy; vsprz[n] = sz
+            if adhesion_capped {
+                vcilx[n] = contact_x; vcily[n] = contact_y; vcilz[n] = contact_z
+            }
+            if torsion_on {
+                vtorx[n] = acc[nrow + 6]; vtory[n] = acc[nrow + 7]; vtorz[n] = acc[nrow + 8]
+                vstorx[n] = acc[nrow + 9]; vstory[n] = acc[nrow + 10]; vstorz[n] = acc[nrow + 11]
+            } else {
+                vtorx[n] = 0.0; vtory[n] = 0.0; vtorz[n] = 0.0
+                vstorx[n] = 0.0; vstory[n] = 0.0; vstorz[n] = 0.0
+            }
+        }
+        let mut fx: f64 = sx + contact_x + torsion_x
+        let mut fy: f64 = sy + contact_y + torsion_y
+        let mut fz: f64 = sz + contact_z + torsion_z
+        if node[n].fix == 1 {
+            let bx: f64 = node[n].orix - node[n].x
+            let by: f64 = node[n].oriy - node[n].y
+            let bz: f64 = node[n].oriz - node[n].z
+            let d2: f64 = (bx * bx) + (by * by) + (bz * bz)
+            if d2 > EPSILOD {
+                let scale: f64 = node[n].kfi / sqrt(d2)
+                fx = fx + bx * scale; fy = fy + by * scale; fz = fz + bz * scale
+            }
+        }
+        px[n] = fx; py[n] = fy; pz[n] = fz
+        dex[n] = sqrt((fx * fx) + (fy * fy) + (fz * fz))
+        n = n + 1
+    }
+}
+
+function forces_parallel() -> bool {
+    if ensure_force_scratch() == false { return false }
+    let threads: i32 = parallel_workers()
+    let mut widest: i32 = 0
+    let mut probe: i32 = 1
+    while probe <= nd {
+        if nneigh[probe] > widest { widest = nneigh[probe] }
+        probe = probe + 1
+    }
+    if ensure_pair_records(widest + 1, threads) == false { return false }
+    # Active adhesion genes per node, as the serial path prepares them.
+    if not (force_active_gene_cache_pinned and force_active_gene_cache_valid) {
+        if ensure_force_active_genes_capacity() == false { return false }
+        if npag[1] > 0 { embryo_pool_run(5, nd, 64) }
+        if force_active_gene_cache_pinned { force_active_gene_cache_valid = true }
+    }
+    force_generation = force_generation + 1
+    if force_generation >= 2000000000 {
+        memset(partner_stamp as ptr<void>, 0, (nd + 1) as i64 * pair_stride as i64 * sizeof<i32>())
+        force_generation = 1
+    }
+    # Phase 1 writes fmeanv for epithelial nodes, so clear it first.
+    memset(&fmeanv[1] as ptr<void>, 0, nd as i64 * sizeof<f64>())
+    let mut t: i32 = 0
+    while t < threads { force_thread_error[t] = 0; t = t + 1 }
+    embryo_pool_run(3, nd, 32)
+    force_parallel_calls = force_parallel_calls + 1
+    t = 0
+    while t < threads {
+        if force_thread_error[t] == 1 { return false }
+        if force_thread_error[t] == 2 { force_parallel_fallbacks = force_parallel_fallbacks + 1; return forces_serial() }
+        t = t + 1
+    }
+    embryo_pool_run(4, nd, 32)
+    return true
+}
+
+# Capacity for the active gene rows without filling them (the fill runs
+# per node on the pool).
+function ensure_force_active_genes_capacity() -> bool {
+    let active_gene_slots: i32 = npag[1]
+    force_active_gene_stride = active_gene_slots + 1
+    let required_rows: i32 = nd + 1
+    if force_active_gene_count_capacity < required_rows {
+        let grown_counts: ptr<i32> = realloc(force_active_gene_counts as ptr<void>, required_rows as i64 * sizeof<i32>()) as ptr<i32>
+        if grown_counts == null { return false }
+        force_active_gene_counts = grown_counts
+        force_active_gene_count_capacity = required_rows
+    }
+    if active_gene_slots <= 0 {
+        memset(force_active_gene_counts as ptr<void>, 0, required_rows as i64 * sizeof<i32>())
+        return true
+    }
+    if gex == null or whonpag == null or gene_effects == null { return false }
+    let required_elements: i64 = required_rows as i64 * force_active_gene_stride as i64
+    if force_active_gene_id_capacity < required_elements {
+        let grown_ids: ptr<i32> = realloc(force_active_gene_ids as ptr<void>, required_elements * sizeof<i32>()) as ptr<i32>
+        if grown_ids == null { return false }
+        force_active_gene_ids = grown_ids
+        force_active_gene_id_capacity = required_elements
+    }
+    if force_active_gene_type_capacity < required_elements {
+        let grown_types: ptr<i32> = realloc(force_active_gene_types as ptr<void>, required_elements * sizeof<i32>()) as ptr<i32>
+        if grown_types == null { return false }
+        force_active_gene_types = grown_types
+        force_active_gene_type_capacity = required_elements
+    }
+    if force_active_gene_value_capacity < required_elements {
+        let grown_values: ptr<f64> = realloc(force_active_gene_values as ptr<void>, required_elements * sizeof<f64>()) as ptr<f64>
+        if grown_values == null { return false }
+        force_active_gene_values = grown_values
+        force_active_gene_value_capacity = required_elements
+    }
+    return true
+}
+
+function force_verify_enabled() -> bool {
+    if force_verify_mode < 0 {
+        force_verify_mode = if proc_getenv("EMBRYO_PARALLEL_VERIFY") == "1" { 1 } else { 0 }
+    }
+    return force_verify_mode == 1
+}
+
+# Outputs compared in verify mode: px, py, pz, dex, fmeanl, fmeanv and
+# every dneigh row.
+function force_outputs_snapshot(target: ptr<f64>) -> void {
+    let rows: i32 = nd + 1
+    let mut i: i32 = 0
+    while i < rows {
+        target[i * 6] = px[i]; target[i * 6 + 1] = py[i]; target[i * 6 + 2] = pz[i]
+        target[i * 6 + 3] = dex[i]; target[i * 6 + 4] = fmeanl[i]; target[i * 6 + 5] = fmeanv[i]
+        i = i + 1
+    }
+    memcpy(&target[rows * 6] as ptr<void>, dneigh as ptr<void>, rows as i64 * neigh_ld as i64 * sizeof<f64>())
+}
+
+# GPU variant: phase 1 on the GPU (software binary64 or float32 preview),
+# phase 2 on the CPU pool. 1 success, 0 fall back to the CPU path, -1 error.
+function forces_gpu(exact: bool) -> i32 {
+    if ensure_force_scratch() == false { return -1 }
+    let threads: i32 = parallel_workers()
+    let mut widest: i32 = 0
+    let mut probe: i32 = 1
+    while probe <= nd {
+        if nneigh[probe] > widest { widest = nneigh[probe] }
+        probe = probe + 1
+    }
+    pair_records_shared = true
+    if ensure_pair_records(widest + 1, threads) == false { return -1 }
+    let required: i32 = nd + 1
+    if force_gpu_node_capacity < required {
+        let nf: ptr<f64> = realloc(gpu_nodef as ptr<void>, required as i64 * 13 * sizeof<f64>()) as ptr<f64>
+        let ni: ptr<i32> = realloc(gpu_nodei as ptr<void>, required as i64 * 4 * sizeof<i32>()) as ptr<i32>
+        let ta: ptr<i32> = realloc(gpu_talone as ptr<void>, required as i64 * sizeof<i32>()) as ptr<i32>
+        let er: ptr<i32> = realloc(gpu_errors as ptr<void>, required as i64 * sizeof<i32>()) as ptr<i32>
+        if nf == null or ni == null or ta == null or er == null { return -1 }
+        gpu_nodef = nf; gpu_nodei = ni; gpu_talone = ta; gpu_errors = er
+        force_gpu_node_capacity = required
+    }
+    if not (force_active_gene_cache_pinned and force_active_gene_cache_valid) {
+        if ensure_force_active_genes_capacity() == false { return -1 }
+        if npag[1] > 0 {
+            if threads > 1 and use_parallel() { embryo_pool_run(5, nd, 64) } else { force_active_genes_range(0, nd, 0) }
+        }
+        if force_active_gene_cache_pinned { force_active_gene_cache_valid = true }
+    }
+    let mut i: i32 = 1
+    while i <= nd {
+        let f: i32 = i * 13
+        gpu_nodef[f] = node[i].x; gpu_nodef[f + 1] = node[i].y; gpu_nodef[f + 2] = node[i].z
+        gpu_nodef[f + 3] = node[i].add; gpu_nodef[f + 4] = node[i].eqd; gpu_nodef[f + 5] = node[i].you
+        gpu_nodef[f + 6] = node[i].adh; gpu_nodef[f + 7] = node[i].rep; gpu_nodef[f + 8] = node[i].rec
+        gpu_nodef[f + 9] = node[i].erp; gpu_nodef[f + 10] = node[i].est; gpu_nodef[f + 11] = node[i].eqs
+        gpu_nodef[f + 12] = node[i].hoo
+        let k: i32 = i * 4
+        gpu_nodei[k] = node[i].tipus; gpu_nodei[k + 1] = node[i].altre; gpu_nodei[k + 2] = node[i].icel; gpu_nodei[k + 3] = node[i].fix
+        i = i + 1
+    }
+    force_generation = force_generation + 1
+    if force_generation >= 2000000000 {
+        memset(partner_stamp as ptr<void>, 0, (nd + 1) as i64 * pair_stride as i64 * sizeof<i32>())
+        force_generation = 1
+    }
+    let kadh_count: i32 = kadh_ld * kadh_ld
+    force_gpu_calls = force_gpu_calls + 1
+    let status: i32 = embryo_gpu_force_pairs(if exact { 1 } else { 0 }, nd, neigh_ld, pair_stride, force_active_gene_stride,
+        kadh_ld, kadh_count, force_generation, ffu[3], ffu[4], ffu[9], ffu[23], EPSILOD, angletor,
+        gpu_nodef, gpu_nodei, neigh, nneigh, dneigh,
+        force_active_gene_counts, force_active_gene_types, force_active_gene_values, kadh,
+        pair_records, pair_kind, partner_records, partner_kind, partner_stamp, partner_reverse,
+        node_spring, fmeanv, gpu_talone, gpu_errors)
+    if status != 0 { force_gpu_fallbacks = force_gpu_fallbacks + 1; return 0 }
+    i = 1
+    while i <= nd {
+        if gpu_errors[i] == 1 { return -1 }
+        if gpu_errors[i] == 2 { force_gpu_fallbacks = force_gpu_fallbacks + 1; return 0 }
+        if ffu[4] == 1 and node[i].fix != 2 {
+            if gpu_talone[i] > 0 { node[i].talone = node[i].talone + 1 } else { node[i].talone = 0 }
+        }
+        i = i + 1
+    }
+    if threads > 1 and use_parallel() { embryo_pool_run(4, nd, 32) }
+    else { force_reduce_range(0, nd, 0) }
+    return 1
+}
+
+function forces() -> bool {
+    let mode: i32 = gpu_mode()
+    if (mode == GPU_MODE_PREVIEW or mode == GPU_MODE_EXACT64) and nd >= gpu_min_nodes and embryo_gpu_available() != 0 {
+        let gpu_result: i32 = forces_gpu(mode == GPU_MODE_EXACT64)
+        if gpu_result < 0 { return false }
+        if gpu_result == 1 {
+            if force_verify_enabled() == false { return true }
+            return forces_verify_against_serial()
+        }
+    }
+    if use_parallel() == false { return forces_serial() }
+    if forces_parallel() == false { return false }
+    if force_verify_enabled() == false { return true }
+    return forces_verify_against_serial()
+}
+
+function forces_verify_against_serial() -> bool {
+    let rows: i64 = (nd + 1) as i64
+    let needed: i64 = rows * 6 + rows * neigh_ld as i64
+    if force_verify_capacity < needed * 2 {
+        let grown: ptr<f64> = realloc(force_verify_scratch as ptr<void>, needed * 2 * sizeof<f64>()) as ptr<f64>
+        if grown == null { return false }
+        force_verify_scratch = grown
+        force_verify_capacity = needed * 2
+    }
+    force_outputs_snapshot(force_verify_scratch)
+    if forces_serial() == false { return false }
+    force_outputs_snapshot(&force_verify_scratch[needed as i32])
+    let mut mismatches: i32 = 0
+    let mut k: i64 = 0
+    while k < needed {
+        if force_verify_scratch[k as i32] != force_verify_scratch[(needed + k) as i32] { mismatches = mismatches + 1 }
+        k = k + 1
+    }
+    if mismatches > 0 {
+        fprintf(fdopen(2, "w"), "EmbryoMaker: parallel forces differ from serial in %d value(s) of %lld\n", mismatches, needed)
+        return false
     }
     return true
 }
@@ -613,55 +1491,43 @@ function ensure_adaptive_scratch() -> bool {
     return true
 }
 
+function release_force_gene_cache() -> void {
+    force_active_gene_cache_pinned = false
+    force_active_gene_cache_valid = false
+}
+
 function adaptive_rungekutta() -> bool {
     if ensure_adaptive_scratch() == false { return false }
     force_active_gene_cache_pinned = true
     force_active_gene_cache_valid = false
+    defer release_force_gene_cache()
     let capacity: i32 = adaptive_scratch_capacity
     let old: ptr<ForcePosition> = &adaptive_scratch[0]
     let full: ptr<ForcePosition> = &adaptive_scratch[capacity]
     let mut retry: bool = true
     while retry {
-        let mut i: i32 = 1
-        while i <= nd {
+        for i in 1 to nd + 1 {
             old[i].x = node[i].x; old[i].y = node[i].y; old[i].z = node[i].z
-            i = i + 1
         }
         let half_step: f64 = 0.5 * delta
         let inverse_step: f64 = 1.0 / delta
-        if rungekutta4(delta) == false {
-            force_active_gene_cache_pinned = false
-            force_active_gene_cache_valid = false
-            return false
-        }
-        i = 1
-        while i <= nd {
+        if rungekutta4(delta) == false { return false }
+        for i in 1 to nd + 1 {
             full[i].x = node[i].x; full[i].y = node[i].y; full[i].z = node[i].z
             node[i].x = old[i].x; node[i].y = old[i].y; node[i].z = old[i].z
-            i = i + 1
         }
-        if rungekutta4(half_step) == false {
-            force_active_gene_cache_pinned = false
-            force_active_gene_cache_valid = false
-            return false
-        }
-        if rungekutta4(half_step) == false {
-            force_active_gene_cache_pinned = false
-            force_active_gene_cache_valid = false
-            return false
-        }
+        if rungekutta4(half_step) == false { return false }
+        if rungekutta4(half_step) == false { return false }
         let mut max_x: f64 = 0.0
         let mut max_y: f64 = 0.0
         let mut max_z: f64 = 0.0
-        i = 1
-        while i <= nd {
+        for i in 1 to nd + 1 {
             let dx: f64 = fabs(full[i].x - node[i].x) * inverse_step
             let dy: f64 = fabs(full[i].y - node[i].y) * inverse_step
             let dz: f64 = fabs(full[i].z - node[i].z) * inverse_step
             if dx > max_x { max_x = dx }
             if dy > max_y { max_y = dy }
             if dz > max_z { max_z = dz }
-            i = i + 1
         }
         let mut error: f64 = max_x
         if max_x >= max_y and max_x >= max_z { error = max_x }
@@ -673,9 +1539,7 @@ function adaptive_rungekutta() -> bool {
             retry = false
         }
     }
-    force_active_gene_cache_pinned = false
-    force_active_gene_cache_valid = false
     return true
 }
 
-export forces, forces_calculating_distances, iterdiferencial, rungekutta4, adaptive_rungekutta
+export force_gpu_calls, force_gpu_fallbacks, force_parallel_calls, force_parallel_fallbacks, force_pairs_range, force_reduce_range, force_active_genes_range, forces, forces_calculating_distances, iterdiferencial, rungekutta4, adaptive_rungekutta

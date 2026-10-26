@@ -19,8 +19,7 @@ const SINGLE_NODE_POLARIZATION_PARAM: i32 = 43
 const SINGLE_NODE_EPSILON: f64 = 2.2204460492503131e-15
 
 function polarization_single() -> bool {
-    let mut node_id: i32 = 1
-    while node_id <= nd {
+    for node_id in 1 to nd + 1 {
         if node[node_id].tipus == 2 {
             let partner: i32 = node[node_id].altre
             if partner < 1 or partner > nd { single_node_error = 7; return false }
@@ -28,18 +27,14 @@ function polarization_single() -> bool {
             let mut vx: f64 = 0.0; let mut vy: f64 = 0.0; let mut vz: f64 = 0.0
             if ffu[9] == 0 {
                 let mut center_signal: f64 = 0.0
-                let mut gene_slot: i32 = 1
-                while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                for gene_slot in 1 to npag[SINGLE_NODE_POLARIZATION_PARAM] + 1 {
                     let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
                     let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
                     if expression > 0.0 { center_signal = center_signal + expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)] }
-                    gene_slot = gene_slot + 1
                 }
-                let mut side: i32 = 0
-                while side < 2 {
+                for side in 0 to 2 {
                     let origin: i32 = if side == 0 { node_id } else { partner }
-                    let mut slot: i32 = 1
-                    while slot <= nneigh[origin] {
+                    for slot in 1 to nneigh[origin] + 1 {
                         let other: i32 = neigh[origin * neigh_ld + slot]
                         if node[other].tipus == node[origin].tipus {
                             let dx: f64 = node[other].x - node[origin].x
@@ -49,8 +44,7 @@ function polarization_single() -> bool {
                             if distance >= SINGLE_NODE_EPSILON {
                                 let inverse_distance: f64 = 1.0 / distance
                                 let mut signal: f64 = 0.0
-                                gene_slot = 1
-                                while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                                for gene_slot in 1 to npag[SINGLE_NODE_POLARIZATION_PARAM] + 1 {
                                     let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
                                     let expression: f64 = gex[gene_expression_index(other, gene_id)]
                                     if expression > 0.0 {
@@ -61,40 +55,31 @@ function polarization_single() -> bool {
                                         vy = (vy + ((node[other].y - node[origin].y) * inverse_distance) * (signal - center_signal)) as i32 as f64
                                         vz = (vz + ((node[other].z - node[origin].z) * inverse_distance) * (signal - center_signal)) as i32 as f64
                                     }
-                                    gene_slot = gene_slot + 1
                                 }
                             }
                         }
-                        slot = slot + 1
                     }
-                    side = side + 1
                 }
             } else {
-                let mut side: i32 = 0
-                while side < 2 {
+                for side in 0 to 2 {
                     let origin: i32 = if side == 0 { node_id } else { partner }
-                    let mut slot: i32 = 1
-                    while slot <= nneigh[origin] {
+                    for slot in 1 to nneigh[origin] + 1 {
                         let other: i32 = neigh[origin * neigh_ld + slot]
                         if node[other].tipus == node[origin].tipus {
                             let dx: f64 = node[other].x - node[origin].x
                             let dy: f64 = node[other].y - node[origin].y
                             let dz: f64 = node[other].z - node[origin].z
                             let inverse_distance: f64 = 1.0 / dneigh[origin * neigh_ld + slot]
-                            let mut gene_slot: i32 = 1
-                            while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                            for gene_slot in 1 to npag[SINGLE_NODE_POLARIZATION_PARAM] + 1 {
                                 let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
                                 let expression: f64 = gex[gene_expression_index(other, gene_id)]
                                 if expression > 0.0 {
                                     let weight: f64 = expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)] * inverse_distance
                                     vx = vx + dx * weight; vy = vy + dy * weight; vz = vz + dz * weight
                                 }
-                                gene_slot = gene_slot + 1
                             }
                         }
-                        slot = slot + 1
                     }
-                    side = side + 1
                 }
             }
             let mut magnitude_squared: f64 = (vx * vx) + (vy * vy) + (vz * vz)
@@ -106,24 +91,20 @@ function polarization_single() -> bool {
         } elif node[node_id].tipus == 3 {
             let cell_id: i32 = node[node_id].icel
             let mut vx: f64 = 0.0; let mut vy: f64 = 0.0; let mut vz: f64 = 0.0
-            let mut slot: i32 = 1
-            while slot <= nneigh[node_id] {
+            for slot in 1 to nneigh[node_id] + 1 {
                 let other: i32 = neigh[node_id * neigh_ld + slot]
                 let dx: f64 = node[other].x - node[node_id].x
                 let dy: f64 = node[other].y - node[node_id].y
                 let dz: f64 = node[other].z - node[node_id].z
                 let inverse_distance: f64 = 1.0 / dneigh[node_id * neigh_ld + slot]
-                let mut gene_slot: i32 = 1
-                while gene_slot <= npag[SINGLE_NODE_POLARIZATION_PARAM] {
+                for gene_slot in 1 to npag[SINGLE_NODE_POLARIZATION_PARAM] + 1 {
                     let gene_id: i32 = whonpag[SINGLE_NODE_POLARIZATION_PARAM * (ng + 1) + gene_slot]
                     let expression: f64 = gex[gene_expression_index(other, gene_id)]
                     if expression > 0.0 {
                         let weight: f64 = expression * gene_effects[gene_effect_index(gene_id, SINGLE_NODE_POLARIZATION_PARAM)] * inverse_distance
                         vx = vx + dx * weight; vy = vy + dy * weight; vz = vz + dz * weight
                     }
-                    gene_slot = gene_slot + 1
                 }
-                slot = slot + 1
             }
             let mut magnitude_squared: f64 = (vx * vx) + (vy * vy) + (vz * vz)
             if vx == 0.0 and vy == 0.0 and vz == 0.0 { magnitude_squared = 0.0 }
@@ -132,7 +113,6 @@ function polarization_single() -> bool {
             cels[cell_id].poly = vy * inverse_magnitude
             cels[cell_id].polz = vz * inverse_magnitude
         }
-        node_id = node_id + 1
     }
     return true
 }
@@ -143,37 +123,31 @@ function should_i_divide_single() -> bool {
     let increments: ptr<f64> = calloc((original_cells + 1) as i64, sizeof<f64>()) as ptr<f64>
     if increments == null { single_node_error = 6; return false }
     let mut total: f64 = 0.0
-    let mut cell_id: i32 = 1
-    while cell_id <= original_cells {
+    for cell_id in 1 to original_cells + 1 {
         let primary: i32 = cels[cell_id].node[1]
         if node[primary].fix < 1 {
             let epithelial: bool = cels[cell_id].ctipus < 3
             let paired: i32 = if epithelial { node[primary].altre } else { 0 }
             let factor: f64 = if epithelial { 1.0 - 0.5 * (node[primary].dif + node[paired].dif) } else { 1.0 - node[primary].dif }
             let mut signal: f64 = 0.0
-            let mut gene_slot: i32 = 1
-            while gene_slot <= npag[37] {
+            for gene_slot in 1 to npag[37] + 1 {
                 let gene_id: i32 = whonpag[37 * (ng + 1) + gene_slot]
                 let first_expression: f64 = gex[gene_expression_index(primary, gene_id)]
                 let second_expression: f64 = if epithelial { gex[gene_expression_index(paired, gene_id)] } else { 0.0 }
                 if first_expression > 0.0 or second_expression > 0.0 {
                     signal = signal + (first_expression + second_expression) * gene_effects[gene_effect_index(gene_id, 37)] * factor
                 }
-                gene_slot = gene_slot + 1
             }
             if epithelial { signal = signal * 0.5 }
             increments[cell_id] = signal * delta
             total = total + increments[cell_id]
         }
-        cell_id = cell_id + 1
     }
     if ffu[25] == 0 and total > maxcycl and total > 0.0 {
         let scale: f64 = maxcycl / total
-        cell_id = 1
-        while cell_id <= original_cells { increments[cell_id] = increments[cell_id] * scale; cell_id = cell_id + 1 }
+        for cell_id in 1 to original_cells + 1 { increments[cell_id] = increments[cell_id] * scale }
     }
-    cell_id = 1
-    while cell_id <= original_cells {
+    for cell_id in 1 to original_cells + 1 {
         let primary: i32 = cels[cell_id].node[1]
         if node[primary].fix < 1 {
             cels[cell_id].fase = cels[cell_id].fase + increments[cell_id]
@@ -186,7 +160,6 @@ function should_i_divide_single() -> bool {
                 cels[ncels].fase = rng_real() * newfase
             }
         }
-        cell_id = cell_id + 1
     }
     free(increments as ptr<void>)
     return true
@@ -206,14 +179,12 @@ function divide_single_node(cell_id: i32) -> bool {
     let mut bx: f64 = 0.0; let mut by: f64 = 0.0; let mut bz: f64 = 0.0
     let mut longest: f64 = 0.0
     let mut valid_pairs: i32 = 0
-    let mut i: i32 = 1
-    while i < nneigh[primary] {
+    for i in 1 to nneigh[primary] {
         let first: i32 = neigh[primary * neigh_ld + i]
         let first_contact: bool = dneigh[primary * neigh_ld + i] < node[primary].add + node[first].add
         let first_type: bool = epithelial == false or node[first].tipus == node_kind
         if first_contact and first_type {
-            let mut j: i32 = i + 1
-            while j <= nneigh[primary] {
+            for j in i + 1 to nneigh[primary] + 1 {
                 let second: i32 = neigh[primary * neigh_ld + j]
                 let second_contact: bool = dneigh[primary * neigh_ld + j] < node[primary].add + node[second].add
                 let second_type: bool = epithelial == false or node[second].tipus == node_kind
@@ -227,10 +198,8 @@ function divide_single_node(cell_id: i32) -> bool {
                     let length: f64 = sqrt(pow(dx, 2.0) + pow(dy, 2.0) + pow(dz, 2.0))
                     if length > longest { longest = length; bx = dx; by = dy; bz = dz }
                 }
-                j = j + 1
             }
         }
-        i = i + 1
     }
     if (epithelial and ((nneigh[primary] <= 2) or (ffu[9] == 0 and valid_pairs < 2))) or (epithelial == false and nneigh[primary] <= 1) {
         bx = rng_real(); by = rng_real(); bz = rng_real()
@@ -249,15 +218,13 @@ function divide_single_node(cell_id: i32) -> bool {
     }
     let property: i32 = if ffu[19] == 0 { 43 } else { 46 }
     let mut chemical: f64 = 0.0
-    let mut gene_slot: i32 = 1
-    while gene_slot <= npag[property] {
+    for gene_slot in 1 to npag[property] + 1 {
         let gene_id: i32 = whonpag[property * (ng + 1) + gene_slot]
         if epithelial {
             chemical = chemical + (gex[gene_expression_index(primary, gene_id)] + gex[gene_expression_index(paired, gene_id)]) * gene_effects[gene_effect_index(gene_id, property)]
         } else {
             chemical = chemical + gex[gene_expression_index(primary, gene_id)] * gene_effects[gene_effect_index(gene_id, property)]
         }
-        gene_slot = gene_slot + 1
     }
     let physical_weight: f64 = 1.0 / (1.0 + chemical)
     let mut ax: f64 = (1.0 - physical_weight) * cels[cell_id].polx + physical_weight * bx

@@ -1,192 +1,86 @@
-# GFortran 15 random_number uses xoshiro256**. The four 64-bit words are
-# represented as low and high 32-bit halves so Flow does not depend on signed
-# 64-bit overflow behaviour.
+# GFortran 15 random_number uses xoshiro256**. Unsigned words make the
+# generator's wraparound arithmetic explicit in Flow.
+let mut state0_low: i32 = 0
+let mut state0_high: i32 = 0
+let mut state1_low: i32 = 0
+let mut state1_high: i32 = 0
+let mut state2_low: i32 = 0
+let mut state2_high: i32 = 0
+let mut state3_low: i32 = 0
+let mut state3_high: i32 = 0
 
-struct U64 {
-    lo: i32,
-    hi: i32
+function state_word(index: i32) -> u64 {
+    let mut low: i32 = state3_low
+    let mut high: i32 = state3_high
+    if index == 0 { low = state0_low; high = state0_high }
+    elif index == 1 { low = state1_low; high = state1_high }
+    elif index == 2 { low = state2_low; high = state2_high }
+    return ((high as u32 as u64) << 32) | (low as u32 as u64)
 }
 
-let mut s0_lo: i32 = 0
-let mut s0_hi: i32 = 0
-let mut s1_lo: i32 = 0
-let mut s1_hi: i32 = 0
-let mut s2_lo: i32 = 0
-let mut s2_hi: i32 = 0
-let mut s3_lo: i32 = 0
-let mut s3_hi: i32 = 0
-
-function get_s0() -> U64 { return U64 { lo: s0_lo, hi: s0_hi } }
-function get_s1() -> U64 { return U64 { lo: s1_lo, hi: s1_hi } }
-function get_s2() -> U64 { return U64 { lo: s2_lo, hi: s2_hi } }
-function get_s3() -> U64 { return U64 { lo: s3_lo, hi: s3_hi } }
-function set_s0(v: U64) -> void { s0_lo = v.lo; s0_hi = v.hi }
-function set_s1(v: U64) -> void { s1_lo = v.lo; s1_hi = v.hi }
-function set_s2(v: U64) -> void { s2_lo = v.lo; s2_hi = v.hi }
-function set_s3(v: U64) -> void { s3_lo = v.lo; s3_hi = v.hi }
-
-function to_u32(x: i32) -> i64 {
-    if x < 0 { return (x as i64) + 4294967296 }
-    return x as i64
+function set_state_word(index: i32, value: u64) -> void {
+    let low: i32 = value as u32 as i32
+    let high: i32 = (value >> 32) as u32 as i32
+    if index == 0 { state0_low = low; state0_high = high }
+    elif index == 1 { state1_low = low; state1_high = high }
+    elif index == 2 { state2_low = low; state2_high = high }
+    else { state3_low = low; state3_high = high }
 }
 
-function from_u32(x: i64) -> i32 {
-    let mut r: i64 = x % 4294967296
-    if r >= 2147483648 { r = r - 4294967296 }
-    return r as i32
+function seed_key(index: i32) -> u64 {
+    if index == 0 { return 0xbd0c5b6e50c2df49 }
+    if index == 1 { return 0xd46061cd46e1df38 }
+    if index == 2 { return 0xbb4f4d4ed6103544 }
+    return 0x114a583d0756ad39
 }
 
-function shr32(x: i32, n: i32) -> i32 {
-    if n == 0 { return x }
-    let mask: i32 = (1 << (32 - n)) - 1
-    return (x >> n) & mask
+function rotl64(value: u64, shift: i32) -> u64 {
+    return (value << shift) | (value >> (64 - shift))
 }
 
-function shl32(x: i32, n: i32) -> i32 {
-    if n == 0 { return x }
-    return from_u32((to_u32(x) * (1 << n)) as i64)
-}
-
-function add64(a: U64, b: U64) -> U64 {
-    let low_sum: i64 = to_u32(a.lo) + to_u32(b.lo)
-    let carry: i32 = if low_sum >= 4294967296 { 1 } else { 0 }
-    let high_sum: i64 = to_u32(a.hi) + to_u32(b.hi) + (carry as i64)
-    return U64 { lo: from_u32(low_sum), hi: from_u32(high_sum) }
-}
-
-function xor64(a: U64, b: U64) -> U64 {
-    return U64 { lo: a.lo ^ b.lo, hi: a.hi ^ b.hi }
-}
-
-function mul64_small(a: U64, n: i32) -> U64 {
-    let low_product: i64 = to_u32(a.lo) * (n as i64)
-    let carry: i64 = low_product / 4294967296
-    let high_product: i64 = to_u32(a.hi) * (n as i64) + carry
-    return U64 { lo: from_u32(low_product), hi: from_u32(high_product) }
-}
-
-function rotl64(a: U64, n: i32) -> U64 {
-    if n == 0 { return a }
-    if n < 32 {
-        let low: i32 = shl32(a.lo, n) | shr32(a.hi, 32 - n)
-        let high: i32 = shl32(a.hi, n) | shr32(a.lo, 32 - n)
-        return U64 { lo: low, hi: high }
-    }
-    if n == 32 { return U64 { lo: a.hi, hi: a.lo } }
-    let m: i32 = n - 32
-    let low: i32 = shl32(a.hi, m) | shr32(a.lo, 32 - m)
-    let high: i32 = shl32(a.lo, m) | shr32(a.hi, 32 - m)
-    return U64 { lo: low, hi: high }
-}
-
-function next_u64() -> U64 {
-    let result: U64 = mul64_small(rotl64(mul64_small(get_s1(), 5), 7), 9)
-    let current1: U64 = get_s1()
-    let t: U64 = U64 { lo: shl32(current1.lo, 17), hi: shl32(current1.hi, 17) | shr32(current1.lo, 15) }
-    let st0: U64 = get_s0()
-    let st1: U64 = get_s1()
-    let st2: U64 = get_s2()
-    let st3: U64 = get_s3()
-    set_s2(xor64(st2, st0))
-    set_s3(xor64(st3, st1))
-    set_s1(xor64(st1, get_s2()))
-    set_s0(xor64(st0, get_s3()))
-    set_s2(xor64(get_s2(), t))
-    set_s3(rotl64(get_s3(), 45))
+function next_u64() -> u64 {
+    let s0: u64 = state_word(0)
+    let s1: u64 = state_word(1)
+    let s2: u64 = state_word(2)
+    let s3: u64 = state_word(3)
+    let result: u64 = rotl64(s1 * 5, 7) * 9
+    let t: u64 = s1 << 17
+    set_state_word(2, s2 ^ s0)
+    set_state_word(3, s3 ^ s1)
+    set_state_word(1, s1 ^ state_word(2))
+    set_state_word(0, s0 ^ state_word(3))
+    set_state_word(2, state_word(2) ^ t)
+    set_state_word(3, rotl64(state_word(3), 45))
     return result
 }
 
-# Apply the same 2^128-step jump used by GFortran when installing a seed.
-function jump_rng() -> void {
-    let j0: U64 = U64 { lo: 0x3cfd0aba, hi: 0x180ec6d3 }
-    let j1: U64 = U64 { lo: 0xf0c9392c, hi: 0xd5a61266 }
-    let j2: U64 = U64 { lo: 0xe03fc9aa, hi: 0xa9582618 }
-    let j3: U64 = U64 { lo: 0x29b1661c, hi: 0x39abdc45 }
-    let mut a0: U64 = U64 { lo: 0, hi: 0 }
-    let mut a1: U64 = U64 { lo: 0, hi: 0 }
-    let mut a2: U64 = U64 { lo: 0, hi: 0 }
-    let mut a3: U64 = U64 { lo: 0, hi: 0 }
-    let mut w: i32 = 0
-    while w < 4 {
-        let mut word: U64 = j3
-        if w == 0 { word = j0 }
-        elif w == 1 { word = j1 }
-        elif w == 2 { word = j2 }
-        let mut b: i32 = 0
-        while b < 64 {
-            let bit: i32 = if b < 32 { (word.lo >> b) & 1 } else { (word.hi >> (b - 32)) & 1 }
-            if bit != 0 {
-                a0 = xor64(a0, get_s0())
-                a1 = xor64(a1, get_s1())
-                a2 = xor64(a2, get_s2())
-                a3 = xor64(a3, get_s3())
-            }
-            next_u64()
-            b = b + 1
-        }
-        w = w + 1
-    }
-    set_s0(a0)
-    set_s1(a1)
-    set_s2(a2)
-    set_s3(a3)
-}
-
-# GFortran's integer seed array stores each 64-bit word in reversed 32-bit
-# element order, then XORs four fixed scrambling words.
+# GFortran stores each word as high then low 32-bit seed elements. The input
+# order is reversed, and each word is XORed with its fixed initialization key.
 function rng_seed(seed: ptr<i32>, count: i32) -> void {
-    let mut w: i32 = 0
-    while w < 4 {
-        let lo_index: i32 = 7 - w * 2
-        let hi_index: i32 = 6 - w * 2
-        let mut lo: i32 = 0
-        let mut hi: i32 = 0
-        if lo_index < count { lo = seed[lo_index] }
-        if hi_index < count { hi = seed[hi_index] }
-        let mut key: U64 = U64 { lo: 0x0756ad39, hi: 0x114a583d }
-        if w == 0 { key = U64 { lo: 0x50c2df49, hi: 0xbd0c5b6e } }
-        elif w == 1 { key = U64 { lo: 0x46e1df38, hi: 0xd46061cd } }
-        elif w == 2 { key = U64 { lo: 0xd6103544, hi: 0xbb4f4d4e } }
-        let value: U64 = xor64(U64 { lo: lo, hi: hi }, key)
-        if w == 0 { set_s0(value) }
-        elif w == 1 { set_s1(value) }
-        elif w == 2 { set_s2(value) }
-        else { set_s3(value) }
-        w = w + 1
+    for word in 0 to 4 {
+        let low_index: i32 = 7 - word * 2
+        let high_index: i32 = 6 - word * 2
+        let mut low: i32 = 0
+        let mut high: i32 = 0
+        if low_index < count { low = seed[low_index] }
+        if high_index < count { high = seed[high_index] }
+        let bits: u64 = ((high as u32 as u64) << 32) | (low as u32 as u64)
+        set_state_word(word, bits ^ seed_key(word))
     }
-    let thread0: U64 = get_s0()
-    let thread1: U64 = get_s1()
-    let thread2: U64 = get_s2()
-    let thread3: U64 = get_s3()
-    jump_rng()
-    set_s0(thread0)
-    set_s1(thread1)
-    set_s2(thread2)
-    set_s3(thread3)
 }
 
 function rng_real() -> f64 {
-    let r: U64 = next_u64()
-    let upper: i64 = to_u32(r.hi)
-    let lower_21: i64 = to_u32(r.lo) / 2048
-    return ((upper * 2097152 + lower_21) as f64) * 1.1102230246251565e-16
+    return ((next_u64() >> 11) as f64) * 1.1102230246251565e-16
 }
 
 function rng_get(seed: ptr<i32>, count: i32) -> void {
-    let mut w: i32 = 0
-    while w < 4 {
-        let mut key: U64 = U64 { lo: 0x0756ad39, hi: 0x114a583d }
-        let mut value: U64 = get_s3()
-        if w == 0 { key = U64 { lo: 0x50c2df49, hi: 0xbd0c5b6e }; value = get_s0() }
-        elif w == 1 { key = U64 { lo: 0x46e1df38, hi: 0xd46061cd }; value = get_s1() }
-        elif w == 2 { key = U64 { lo: 0xd6103544, hi: 0xbb4f4d4e }; value = get_s2() }
-        let plain: U64 = xor64(value, key)
-        let low_index: i32 = 7 - w * 2
-        let high_index: i32 = 6 - w * 2
-        if low_index < count { seed[low_index] = plain.lo }
-        if high_index < count { seed[high_index] = plain.hi }
-        w = w + 1
+    for word in 0 to 4 {
+        let bits: u64 = state_word(word) ^ seed_key(word)
+        let low_index: i32 = 7 - word * 2
+        let high_index: i32 = 6 - word * 2
+        if low_index < count { seed[low_index] = bits as u32 as i32 }
+        if high_index < count { seed[high_index] = (bits >> 32) as u32 as i32 }
     }
 }
 
-export U64, rng_seed, rng_real, rng_get
+export rng_seed, rng_real, rng_get

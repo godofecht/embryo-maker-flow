@@ -8,8 +8,7 @@ import embryo.general {
     nvarglobal_out, varglobal_out, itacc,
     rtime, mnn, ramax, deltamin, dif_req, screen_radius, df_reqmax, angletor, ldi
 }
-import embryo.rng { rng_seed }
-import embryo.rng { rng_get }
+import embryo.rng { rng_get, rng_seed }
 import embryo.neighboring { neighbor_reset }
 import embryo.genetic {
     gene_allocate, read_gex_matrix, read_gene_network_matrices,
@@ -24,11 +23,6 @@ import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at, str_
 let mut param: array<f64, 36> = []
 let mut snapshot_error: i32 = 0
 let mut cleaned_length: i32 = 0
-
-extern {
-    function calloc(count: i64, size: i64) -> ptr<void>
-    function free(p: ptr<void>)
-}
 
 extern {
     function malloc(size: i64) -> ptr<void>
@@ -89,25 +83,24 @@ function copy_span(data: string, start: i32, end: i32) -> string {
     let source: ptr<u8> = data as ptr<u8>
     let length: i32 = end - start
     let result: ptr<u8> = malloc((length + 1) as i64) as ptr<u8>
-    let mut i: i32 = 0
-    while i < length { result[i] = source[start + i]; i = i + 1 }
+    for i in 0 to length { result[i] = source[start + i] }
     result[length] = 0
     return result as string
 }
 
 function parse_i64_span(data: string, start: i32, end: i32) -> ParseI64 {
     let line: string = copy_span(data, start, end)
+    defer free(line as ptr<void>)
     let mut parsed: ParseI64 = str_parse_i64_at(line, 0)
     if parsed.ok and parsed.end > end - start { parsed.ok = false }
-    free(line as ptr<void>)
     return parsed
 }
 
 function parse_f64_span(data: string, start: i32, end: i32) -> ParseF64 {
     let line: string = copy_span(data, start, end)
+    defer free(line as ptr<void>)
     let mut parsed: ParseF64 = str_parse_f64_at(line, 0)
     if parsed.ok and parsed.end > end - start { parsed.ok = false }
-    free(line as ptr<void>)
     return parsed
 }
 
@@ -121,10 +114,8 @@ function line_is(data: string, start: i32, end: i32, needle: string) -> bool {
     let mut n: i32 = 0
     while q[n] != 0 { n = n + 1 }
     if last - first != n { return false }
-    let mut i: i32 = 0
-    while i < n {
+    for i in 0 to n {
         if p[first + i] != q[i] { return false }
-        i = i + 1
     }
     return true
 }
@@ -143,22 +134,18 @@ function node_from_line(line: string) -> Nod {
     let mut out: Nod = nod_zero()
     let mut pos: i32 = 0
     let mut v: array<f64, 28> = []
-    let mut n: i32 = 0
-    while n < 28 {
+    for n in 0 to 28 {
         let value: ParseF64 = str_parse_f64_at(line, pos)
         if value.ok == false { snapshot_error = 4; return out }
         v[n] = value.value
         pos = value.end
-        n = n + 1
     }
     let mut integers: array<i32, 7> = []
-    n = 0
-    while n < 7 {
+    for n in 0 to 7 {
         let value: ParseI64 = str_parse_i64_at(line, pos)
         if value.ok == false { snapshot_error = 4; return out }
         integers[n] = value.value as i32
         pos = value.end
-        n = n + 1
     }
     out.x = v[0]; out.y = v[1]; out.z = v[2]; out.e = v[3]
     out.eqd = v[4]; out.add = v[5]; out.you = v[6]; out.adh = v[7]
@@ -185,8 +172,8 @@ function read_node_section(data: string, length: i32, marker: string, destinatio
     while row <= count and cursor >= 0 {
         let line_end: i32 = bounded_line_end(data, cursor, length)
         let line: string = copy_span(data, cursor, line_end)
+        defer free(line as ptr<void>)
         let record: Nod = node_from_line(line)
-        free(line as ptr<void>)
         if snapshot_error != 0 { return false }
         destination[row] = record
         cursor = bounded_line_next(data, line_end, length)
@@ -198,16 +185,14 @@ function read_node_section(data: string, length: i32, marker: string, destinatio
 function parse_f64_line(data: string, length: i32, start: i32, count: i32, values: ptr<f64>) -> bool {
     let end: i32 = bounded_line_end(data, start, length)
     let line: string = copy_span(data, start, end)
+    defer free(line as ptr<void>)
     let mut pos: i32 = 0
-    let mut i: i32 = 0
-    while i < count {
+    for i in 0 to count {
         let parsed: ParseF64 = str_parse_f64_at(line, pos)
-        if parsed.ok == false { free(line as ptr<void>); return false }
+        if parsed.ok == false { return false }
         values[i] = parsed.value
         pos = parsed.end
-        i = i + 1
     }
-    free(line as ptr<void>)
     return true
 }
 
@@ -436,10 +421,10 @@ function read_snapshot_parameters(path: string) -> i32 {
     neighbor_reset()
     let input: FileRead = io_read_file(path)
     if input.ok == false { snapshot_error = 1; return 1 }
+    defer free(input.data as ptr<void>)
     let data: string = clean_nuls(input.data, input.len as i32)
+    defer free(data as ptr<void>)
     let status: i32 = parse_snapshot_data(data, cleaned_length)
-    free(data as ptr<void>)
-    free(input.data as ptr<void>)
     return status
 }
 

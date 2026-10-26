@@ -2,6 +2,10 @@
 
 This file is the contract every porter follows. Read it before writing code.
 
+Follow [the Flow idiom guideline](FLOW_IDIOMS.md) when choosing Flow
+constructs. The [reduction stages](docs/flow-idioms.md) record how the port
+has reduced scaffolding while preserving simulator behavior.
+
 ## Source and scope
 
 - Original: https://github.com/HugoCanoFernandez/EmbryoMaker at commit
@@ -74,14 +78,435 @@ browser exposes it. Set
 headless runs may select SwiftShader, so they check drawing behavior and WebGL
 errors without proving Metal selection.
 
-On the M4 Max, a 50,000-iteration migration profile placed most sampled time in
-`forces` and `neighbor_build`, followed by `genestep`. The force pass updates
-both ends of each neighbor pair in source order, so parallelizing that loop
-would introduce races and change accumulation order. An OpenMP build that
-parallelized independent gene rows took 15.94 seconds for the same migration
-run. The serial O3 build took 9.23 seconds. Keep that workload serial. MLX
-`float64` operations run on CPU, so MLX does not add GPU acceleration while the
-simulation keeps its double-precision parity contract.
+### CPU profile and measured changes (2026-10-20, M4 Max)
+
+Serial cost per model iteration with the C backend at `-O3`:
+
+| Example | Nodes | Genes | Per iteration |
+| --- | ---: | ---: | ---: |
+| migration | 364 | 3 | 0.16 ms |
+| Figure_7A (morphospace) | 1144 | 22 | 1.2 ms |
+| ecm_secretion | 1073 | 4 | 1.6 ms |
+| apical_contraction (triangulation) | 1274 | 2 | 12 ms |
+| sea_urchin (triangulation) | 3534 | 5 | 59 ms |
+
+Sampled time on the box grid examples sits in `neighbor_build` (30 to 40
+percent), `forces` (25 to 35 percent) and `genestep` (8 to 20 percent). The
+ECM example spends a third of its time in `diffusion_apply_prepared`, because
+`update_node_properties` runs one diffusion sweep per epithelial node, as the
+Fortran does. The triangulation examples add `restore_neighbors`,
+`sync_old_neighbor_row`, `neighbor_build_node` and `energia`.
+
+Compiler flags, all producing bitwise identical snapshots on 19 inputs:
+`-mcpu=apple-m4`, `-mcpu=native` and `-flto` changed nothing measurable.
+Homebrew clang 22 was about 5 percent faster than Apple clang 17.
+Profile guided optimisation gave 15 percent on the previous source and 2 to
+10 percent on the current source. `tools/build-pgo.sh` trains a profile on
+the bundled examples and writes `build/pgo/embryomaker.profdata`;
+`tools/run-ui.sh` reuses that file when it exists. The profile changes code
+layout and inlining only, and the parity harness confirms the output.
+
+Source changes kept, each verified bitwise identical on all 19 inputs and
+timed back to back against the previous build:
+
+- `neighbor_build`: the candidate scan reads scalar globals through locals,
+  tests the distance before the layer types, and writes the row count once.
+  13 to 17 percent on the box grid examples.
+- `forces`: the twelve pair accumulators are one row per node, so a scatter
+  into the partner touches adjacent cache lines. `px`, `py` and `pz` are
+  cleared only in the uncapped adhesion mode, and the display vectors are
+  zeroed per fixed node instead of twelve bulk clears per call. A further
+  10 to 20 percent.
+- `genestep`: neighbor facts and the `1 / (1 + distance)` factor are gathered
+  once per node and shared by every gene. Neutral with 3 to 5 genes, 4 percent
+  with 22 genes.
+- `diffusion_apply_prepared`: a packed copy of `grd` persists across the
+  sweeps of one iteration; callers pass the two ids they changed. 19 percent
+  on ecm_secretion, 5 percent on sea_urchin.
+
+Changes measured slower and removed: per-axis early exits in the neighbor
+scan (40 percent slower on migration, the extra branches mispredict), and a
+packed copy of the hot node fields refreshed at each force and neighbor call
+(5 percent slower, the refresh costs more than the record reads save). The
+node records stay in L2 on this machine, so the remaining cost is instruction
+count and dependent loads rather than cache misses.
+
+### Worker pool and deterministic parallel passes
+
+Flow's `parallel for` lowers to OpenMP only when the toolchain probe links
+`-fopenmp`. Apple clang 17 rejects that flag, and the
+`-Xpreprocessor -fopenmp -lomp` form only links when Homebrew libomp is on
+the library path, so on this machine the probe fails and `parallel for` falls
+back to `flow_parallel_for_i32`, which creates and joins one pthread per
+worker on every call. That was the build measured at 15.94 seconds against
+9.23 serial.
+
+`native/embryo_pool.c` is the replacement: persistent workers that spin for
+the next job and park after a few milliseconds, one atomic counter handing
+out index ranges, and the calling thread working as thread 0. A fork and
+join costs 3 microseconds with 8 threads (`EMBRYO_POOL_SPINS` sets the spin
+budget). Jobs call `embryo_parallel_entry` in `src/workers.flow`, registered
+at start by `parallel_init`, which dispatches to a range body in the owning
+module. `EMBRYO_THREADS` sets the count (default: performance cores minus
+two, 8 here; 1 keeps everything serial) and `EMBRYO_PARALLEL_MIN_NODES`
+(default 512) keeps small models serial. `EMBRYO_PARALLEL_STATS=1` prints
+wall time per pass at exit.
+
+Four passes run on the pool, each bitwise equal to its serial form:
+
+- `neighbor_scan_range`: the box candidate scan, one node per thread, rows
+  written in place.
+- `genestep_range`: gene derivatives, with per-thread neighbor scratch.
+- `force_pairs_range` and `force_reduce_range`: the pair forces in two
+  phases. The serial routine updates both ends of a pair when it visits the
+  pair from its lower index (or from the moving node when the partner is
+  fixed), so a node's sums form in a fixed order: partner terms from lower
+  ids ascending, its own pairs in column order, then partner terms from
+  higher ids (fixed nodes only). Phase 1 computes every pair term in
+  parallel and writes it twice, into the visiting node's row and into the
+  partner's row at the partner's column; phase 2 replays each node's terms
+  in that order. Generation stamps replace per-call clearing, and the
+  partner column is cached and checked before use.
+
+`EMBRYO_PARALLEL_VERIFY=1` runs the serial force routine after every
+parallel or GPU call and compares px, py, pz, dex, fmeanl, fmeanv and every
+dneigh row; a difference stops the run. It caught two ordering mistakes
+during development. `tools/backend_parity.sh` runs the reference serial and
+compares snapshots bitwise, which all 19 inputs pass with 8 threads.
+
+Measured headless, best of three, other apps running (M4 Max, 8 threads):
+
+| Input | Nodes | Start of day | Serial now | 8 threads | GPU exact64 | GPU preview |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Figure_7A, 400 it | 1144 | 0.56 s | 0.44 s | 0.21 s | 3.60 s | 1.04 s |
+| blastula with mesenchyme, 400 it | 1144 | 0.45 s | 0.36 s | 0.19 s | 3.32 s | 1.24 s |
+| ecm_secretion, 300 it | 1073 | 0.58 s | 0.50 s | 0.34 s | 5.55 s | 2.12 s |
+| apical_contraction, 100 it | 1274 | 0.89 s | 0.85 s | 0.79 s | 2.66 s | 1.31 s |
+| sea_urchin, 40 it | 3534 | 2.61 s | 2.45 s | 2.31 s | 8.52 s | 3.16 s |
+| migration, 3000 it | 364 | 0.62 s | 0.50 s | 0.52 s | serial | serial |
+
+The box grid inputs run 2.7 times faster than at the start of the day and
+2.1 times faster than serial. On Figure_7A the pool passes take about 120
+of the 210 ms (neighbor scan 57 us per call, gene step 45, force pairs
+17, force reduce 21). The rest is serial by the model's structure: growth,
+noise, cell behaviours, the Runge-Kutta position loops and the
+per-iteration bookkeeping, each a few percent. Two serial costs were
+removed on the way: node buffers now grow geometrically instead of ten
+slots at a time (a full copy of every buffer was 12 percent of an
+iteration), and the neighbor table is no longer cleared on every build
+(another 12 percent at a 540 column stride). The triangulation inputs gain
+little, apical contraction 7 percent and sea urchin 6 percent, because
+their time is in `restore_neighbors`, the Delaunay rebuild and the energy
+routine, which are sequential in the reference. The ECM input is bounded
+by its per-node diffusion sweeps, which are sequential by construction.
+The Delaunay face and boundary tables now start at capacities estimated from
+the point count. This avoids repeated growth and copying on every rebuild. In
+three 40-iteration Sea urchin runs, median time fell from 2.65 to 2.48 seconds
+serial and from 2.20 to 2.06 seconds with eight threads. All six resulting
+snapshots matched their corresponding baseline bitwise.
+The saved neighbor graph also reuses its buffers between rebuilds. Its row
+counts reset each iteration, and active entries are rewritten in place. On
+the same input, median time fell from 2.48 to 2.35 seconds serial and from
+2.06 to 1.92 seconds with eight threads. Three snapshots per mode remained
+bitwise identical.
+
+The CPU box scan now copies positions and contact radii into a compact
+read-only buffer before dispatch. Candidate traversal and floating-point
+operation order stay unchanged. Three paired Sea urchin runs at 40 iterations
+measured median serial times of 2.515 seconds before and 2.441 seconds after.
+Eight-thread medians were 1.976 and 1.975 seconds. This is a small serial gain;
+the threaded result is within timing noise. All six snapshots matched bitwise.
+The complete 19-example suite also matched bitwise against the saved serial
+baseline with the candidate using eight threads.
+
+The candidate reuse cache is enabled by default in `native/embryo_candidates.c`.
+Candidate sets up to 32 items use an inlined insertion sort with the box
+ordering comparator, avoiding indirect function calls from `qsort`.
+In `src/neighboring.flow`, `grow_neighbor_buffers` and `ensure_old_neighbor_capacity`
+copy active rows using `memcpy`. `restore_neighbors` skips mutual-link checks
+when fewer than two shared neighbors exist.
+In `src/nexus.flow`, `diffusion_apply_prepared` writes intermediate sweeps
+into the packed field buffer and updates `node[i].grd` only for touched nodes,
+flushing all nodes in one pass at the exit of `update_node_properties`.
+`src/dynamics.flow` declares continuous dynamics through native Flow `flow`
+blocks with compiler-generated RK4 integrators, verified in
+`tests/test_flow_dynamics.flow`. All 19 benchmark inputs retain bitwise parity.
+
+### Dynamic 3D Delaunay update experiment
+
+`native/delaunay_update_cgal.cpp` is an isolated CGAL moving-vertex prototype.
+It remains outside the simulator. Generate raw geometry with
+`tools/delaunay_trace.flow`, then compare it using
+`tools/cgal_dynamic_parity.py --library <shared-library> --trace-prefix <prefix> --steps <count>`.
+The checker compares raw Flow edges, fresh CGAL edges and moving CGAL edges
+at identical coordinates. Missing frames, invalid updates and mismatches fail
+the check. Edge equality alone does not establish force or trajectory parity.
+
+The earlier Studio comparison was invalid. Studio displays filtered and
+restored neighbors after positions have advanced. Sea urchin also has
+`ffu[8] = 0`: it uses box neighbors. Its performance does not depend on the
+Delaunay builder. The previous Jaccard measurements cannot establish a
+triangulation tie-policy difference.
+
+With the corrected check, moving CGAL matches fresh CGAL on all 41 Sea urchin
+frames and all six apical contraction frames. Raw Flow edges match on 16
+Sea urchin frames and zero apical frames. The Flow builder fails on 11 and
+five frames respectively. Both initial frames differ. These results
+keep the CGAL prototype outside the parity-preserving simulation path.
+The cause of Flow's differences needs a separate predicate and topology audit.
+On Sea urchin, 40 CGAL moves took 1.586 seconds, while 41 fresh builds
+took 0.552 seconds. On apical contraction, five moves took 0.110 seconds
+and six fresh builds took 0.026 seconds. These measurements exclude validity
+checks and edge extraction. Moving every vertex sequentially costs more than
+rebuilding on these traces.
+
+The C interface rejects nonfinite coordinates and marks partially failed
+updates unusable. Callers must destroy and rebuild failed contexts. Edge
+extraction uses finite edges, including lower-dimensional triangulations,
+and provides an output-size query.
+
+### GPU verification
+
+`EMBRYO_GPU_REQUIRED=neighbors`, `forces`, or `any` requires completed work
+from the selected GPU pass. The CLI returns status 6 when that work did not
+execute. `tools/build-gpu.sh` uses this gate for verification and parity.
+`tools/backend_parity.sh` requires bitwise snapshot equality; its tolerance
+report is diagnostic and a differing snapshot fails.
+
+### Offline Metal compilation
+
+The local MTLCompilerService lookup returns error 141. GPU execution now works
+through offline libraries and native GPU binary archives. A `.metallib` alone
+still requires driver compilation. The matching archive supplies the compiled
+pipeline, and `MTLPipelineOptionFailOnBinaryArchiveMiss` prevents an archive
+miss from silently requesting runtime compilation.
+
+`tools/build-metal-offline.py` uses Apple's `metal`, `metallib` and `metal-tt`
+tools. It targets the local GPU architecture and macOS version. On this Mac,
+the compiler was recovered from an existing cached Metal toolchain image under
+`/System/Library/AssetsV2/com_apple_MobileAsset_MetalToolchain/`. Extracting the
+image with 7-Zip avoided the failing installer and image-mount services.
+The extracted toolchain is in `build/gpu/toolchain/Metal.xctoolchain`.
+
+Run the normal build:
+
+```sh
+tools/build-gpu.sh --verify
+```
+
+For a toolchain at another location:
+
+```sh
+EMBRYO_METAL_TOOLCHAIN=/path/to/Metal.xctoolchain tools/build-gpu.sh --verify
+```
+
+The build installs the libraries and archives in `embryomaker-metal` beside
+the executable. The runtime finds that directory automatically.
+`EMBRYO_METAL_LIBRARY_DIR` can select another directory. Missing or incompatible
+explicit assets fail GPU initialization. Rebuild the archives when changing
+GPU architecture, target OS or kernel sources. Source compilation remains
+available when no offline asset directory is present.
+
+The installed build passed the million-pair binary64 check with zero
+mismatches for addition, subtraction, multiplication, division, square root
+and comparison. Sea urchin at 40 steps completed 40 GPU neighbor passes and
+711 GPU force passes, with a bitwise-identical snapshot. All 19 examples in
+the full parity suite matched bitwise with GPU execution required and
+`EMBRYO_GPU_MIN_NODES=0`. Each log confirms completed GPU dispatches.
+The missing-archive regression returns status 6 under required-GPU mode.
+
+Exact GPU force evaluation is slower on this workload. The full-suite Sea
+urchin case at 100 steps took 24.969 seconds on exact GPU mode and 8.052
+seconds on the serial reference during concurrent benchmark work. CPU mode
+remains the default. The GPU path is available for verification and further
+optimization.
+
+### Sea urchin at 10,000 steps
+
+A full eight-thread CPU run completed in 4865.712 seconds, or 81 minutes
+6 seconds. The earlier estimate of eight minutes extrapolated from the first
+40 steps and was too low. Iteration cost changes substantially during the run.
+The first 500 steps took 35.3 seconds; steps 3501 through 4000 took 593.1
+seconds; the final 500 took 226.9 seconds.
+
+This run wrote a checkpoint every 500 iterations. Build and GPU verification
+work overlapped its early portion, so it is an observed end-to-end duration
+rather than an isolated benchmark. Allow roughly 80 minutes for the same
+10,000-step run on this machine, with variation from system load.
+[Recorded timings](docs/benchmarks/sea-urchin-10000.json) include each checkpoint,
+the final node count and binary and snapshot hashes. The final snapshot is
+`build/timing/sea.dat` and its iteration field is 10000.
+
+### Neighbor restoration optimization
+
+The slower portion of Sea urchin spends substantial main-thread time in
+`restore_neighbors`, including saved-row synchronization during noise updates.
+Restoration now collects shared neighbors directly from the existing membership
+marks. Saved rows retain their storage when membership and order are unchanged.
+Each saved row also keeps its incoming-edge count, maintained through insertion,
+removal, capacity growth and node deletion.
+
+Three paired eight-thread runs measured these median times:
+
+| Starting state | Steps | Before | After | Time reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Initial Sea urchin | 40 | 2.075 s | 1.938 s | 6.6% |
+| Sea urchin checkpoint at step 10000 | 20 | 8.436 s | 7.879 s | 6.6% |
+
+All six snapshot pairs were bitwise identical. The full 19-example suite also
+matched the saved baseline bitwise. The suite compares the serial baseline
+with an eight-thread candidate, so its timings include the existing threading
+gain. The paired timings above use eight threads for both binaries.
+
+`tests/test_neighbor_restore_graphs.flow` checks 10,240 graph and row-order
+combinations against an independent restoration implementation, including
+asymmetric rows. It also checks the saved-prefix invariant after 512 local
+rebuilds and three node deletions. The existing restoration fixtures pass.
+[Raw paired timings](docs/benchmarks/neighbor-restoration.json) record each run.
+The complete 10,000-step duration has not been remeasured after this change.
+
+The 5 times target therefore holds only for the passes themselves; the
+remaining serial parts cap the whole iteration near 2 to 2.5 times on the
+box grid inputs under the parity contract.
+
+In the viewer on Figure_7A at maximum playback, fresh session each time:
+serial 260 to 300 iterations per second, 8 threads 430 to 455, GPU preview
+113. The server runs with a short worker spin budget
+(`EMBRYO_POOL_SPINS=20000` in `tools/run-ui.sh`); with the headless
+default the spinning workers took cores from the browser and threads came
+out slower than serial there.
+
+### GPU modes
+
+`EMBRYO_GPU` selects the GPU path; `EMBRYO_GPU_MIN_NODES` (default 1000)
+keeps smaller models on the CPU. The viewer switches modes at run time
+through `/api/compute` and the Compute select.
+
+| Mode | What runs on the GPU | Result |
+| --- | --- | --- |
+| `exact` (or `1`) | box neighbor candidate prefilter, float32 with a widened test; CPU repeats the exact test | bitwise |
+| `exact64` | prefilter plus the pair forces in software binary64 | bitwise |
+| `preview` | prefilter plus the pair forces in float32 | diverges |
+| `verify` | exact prefilter checked against the serial scan on every call | check |
+
+Apple GPUs have no double type, so `gpu/metal/softdouble.metal` implements
+IEEE 754 binary64 on 64 bit integers: add, sub, mul (128 bit product from
+32 bit halves), div (restoring long division) and sqrt (digit by digit on
+128 bits), all rounding to nearest even, with subnormals, zeros, infinities
+and NaN. `tools/softdouble_check.flow` runs 1,000,000 random operand pairs
+drawn from several magnitude ranges through the GPU and the CPU; every
+result matches bit for bit.
+
+`gpu/metal/force_pairs.metal` is phase 1 of the two-phase force
+computation as a kernel, one thread per node, written once as a template
+over the arithmetic type: `float` for the preview and the software double
+for `exact64`. It writes the same records the CPU phase 2 replays, through
+shared-storage buffers that both sides address without copies
+(`embryo_gpu_shared_alloc`). Node fields and compacted neighbor rows go in
+by copy, a few hundred kilobytes per call.
+
+Measured on Figure_7A (1144 nodes), one force call: 17 us for the CPU
+pool, 363 us for the float32 kernel, 1,266 us for the binary64 kernel.
+Most of the float32 time is Metal's command submission and completion
+latency; the binary64 kernel is bound by its division and square root
+loops. At this model size the GPU modes are slower than the CPU pool; they
+are exact (or an honest preview) and they scale with node count, so they
+pay only for models well past ten thousand nodes. The preview's deviation
+from the exact trajectory on Figure_7A: 5e-8 after one iteration, 2.6e-6
+after ten, 0.23 after four hundred, which is the model's own sensitivity to
+rounding rather than a defect.
+
+
+The viewer used to request one iteration per HTTP round trip, with a 140 ms
+timer between steps and the whole model as 2.6 MB of JSON per response.
+Measured on apical contraction (1274 nodes, 12 ms per solver iteration) that
+played at 5.7 iterations per second. The play loop now has four modes in the
+speed select: slow (300 ms between single steps), smooth (one iteration per
+screen update), fast (batches sized to about 40 ms per request) and maximum
+(about 200 ms per request). Batch sizes adapt to the measured time per
+iteration. Measured in Chrome on the same input: 19, 34 and 53 iterations
+per second for smooth, fast and maximum.
+
+Model responses are a packed frame when the request body carries
+`"binary": true`, which `sendSession` in `ui/index.html` always sends. The
+layout is documented above `make_model_binary` in `ui/server.flow`: a JSON
+header without the node and edge arrays, then little endian f64 and i32
+matrices and the edge triples. Figure_7A drops from 2.57 MB of JSON to
+0.95 MB, and a single-step request from 6 ms to 3 ms server side, of which
+the solver is about 1.2 ms. The JSON form still answers requests without the
+flag, so `tools/ui_smoke.cjs` and other callers keep working.
+
+The iteration slider moved from the left panel to a bar across the top of
+the model view. It scrubs while dragging, runs the model when the thumb
+rests, steps with the arrow keys, and shows the run target as an editable
+number. Playback extends that target by half when it reaches it unless the
+user typed one.
+
+## MLIR lowering pipeline
+
+`tools/build-mlir.sh` lowers `src/embryomaker.flow` through MLIR and links
+`build/mlir/embryomaker`:
+
+1. `flow flow-to-mlir --lenient` writes `build/mlir/embryomaker.mlir`.
+2. `tools/mlir_unfuse.py` splits every `llvm.intr.fmuladd` into `llvm.fmul`
+   and `llvm.fadd`. flowc contracts `a * b + c` the way clang does with
+   contraction on, while the C build runs with `-ffp-contract=off`. Before
+   this step every example differed from the C build; the rewrite is exact
+   for each form the emitter produces.
+3. `flow mlir-optimize --opt-level O1|O2|O3` when `MLIR_OPT_LEVEL` is set.
+4. `flow mlir-lower` runs the mlir-opt conversion pipeline and
+   `mlir-translate --mlir-to-llvmir`.
+5. Homebrew clang links the IR with the Flow runtime archive. Apple clang 17
+   rejects the `captures(none)` syntax that LLVM 22 emits.
+
+`tools/build-mlir.sh --parity` runs `tools/backend_parity.sh`, which builds
+the C reference, runs both binaries over the 19 bundled inputs, compares the
+snapshots bitwise and runs `tools/snapdiff.flow` on any that differ. Result
+on this machine: 16 inputs bitwise identical, and migration, differential
+adhesion and figure 6 within the 1e-9 tolerance with a largest relative
+difference of 5.4e-16 (four node rows in the last bit on migration; the
+remaining source has not been isolated). The MLIR binary runs 2 to 10
+percent slower than the C build. The MCP tool's `backend: "mlir"` uses this
+script.
+
+## GPU lowering pipeline
+
+`tools/build-gpu.sh` lowers the candidate scan of the box neighbor search to
+Metal and links it into the ordinary simulator binary:
+
+1. `flow gpu gpu/kernels/neighbor_prefilter.flow` emits the `@gpu` kernel as
+   `build/gpu/neighbor_prefilter.metal`.
+2. `tools/gen_metal_header.py` embeds that source in
+   `native/embryo_metal_kernels.h`.
+3. `native/embryo_metal.m` compiles the kernel once, keeps shared-storage
+   buffers, and dispatches one thread per node. The `[native]` table in
+   `flow.toml` compiles and links it, with the Metal and Foundation
+   frameworks, into every build. Other platforms get stubs.
+4. `flow compile src/embryomaker.flow` as usual.
+
+The kernel walks the same 27 boxes in the same order as the serial scan,
+reading a compressed row copy of the box chains, with single precision and a
+contact test widened by 0.1 percent. `neighbor_scan_rows_gpu` in
+`src/neighboring.flow` then repeats the exact double precision test on the
+survivors in that order, so the neighbor rows match the serial scan bit for
+bit. Any kernel failure or row overflow falls back to the serial scan.
+
+`EMBRYO_GPU=1` enables the path for models with at least 1000 nodes
+(`EMBRYO_GPU_MIN_NODES` changes the threshold); `EMBRYO_GPU=verify` runs the
+serial scan after every GPU scan and stops on any row difference.
+`tools/build-gpu.sh --verify --parity` runs that check on migration and
+Figure_7A and then the parity table with `EMBRYO_GPU=1`. All 19 inputs match
+the C build bitwise. Timing is the honest part: at 1144 nodes the GPU scan
+is level with the serial scan, and below the threshold it was 2.3 times
+slower on migration because the input rebuilds neighbors at every
+Runge-Kutta stage and each dispatch costs more than the 364 node scan. The
+path exists for larger models and for the MCP tool's `backend: "gpu"`, and
+it keeps the parity contract; it does not speed up the bundled examples.
+
+The `--mlir-gpu` flag of `flow flow-to-mlir` emitted no `gpu` dialect ops for
+a `parallel for` loop on this machine, and `flow mlir-spirv msl` needs
+`spirv-cross`, which is not installed, so the MLIR GPU dialect route was not
+used.
 
 ## Layout
 

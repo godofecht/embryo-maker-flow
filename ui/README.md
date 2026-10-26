@@ -38,3 +38,25 @@ tools/run_flow_checks.sh
 
 The runner changes to `tests/` before starting each check because the example
 paths are relative to that directory.
+
+## Workspace and accessibility
+
+Studio opens with experiment controls, a model viewport, and an inspector.
+Use Focus view to hide the panels. Desktop panels scroll independently;
+narrow screens place the model above the controls. The timeline separates
+the current iteration from the editable target. Pause remains available
+while a simulation request is in flight and takes effect between batches.
+
+Cache and video dialogs support keyboard focus, Tab containment, Escape,
+and focus restoration. Controls have visible focus indicators. Reduced-motion
+preferences disable decorative animation.
+
+Run `node tools/ui_design_smoke.cjs` against the local server for responsive
+layout, transport, dialog, and scrolling checks. Set `EMBRYOMAKER_URL` for a
+nondefault port. `UI_SMOKE_SINGLE_PROCESS=1` is a diagnostic workaround for
+macOS environments that cannot register Chromium child-process services.
+The broader regression suite is `node tools/ui_smoke.cjs`.
+
+The packaged trajectory is `ui/sea_urchin_project.json.gz`. The JSON endpoint
+serves that same file with HTTP gzip encoding. The expanded JSON is generated
+locally and excluded from Git. The preview video lives in `ui/assets/`.

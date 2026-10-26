@@ -5,3 +5,7 @@ entry = "src/embryomaker.flow"
 
 [paths]
 embryo = "src"
+
+[native]
+sources = ["native/embryo_metal.m", "native/embryo_pool.c", "native/embryo_candidates.c"]
+frameworks = ["Metal", "Foundation"]

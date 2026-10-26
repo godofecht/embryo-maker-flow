@@ -21,18 +21,14 @@ let mut editor_error: i32 = 0
 function recount_editor_model() -> void {
     ndepi = 0; ndmes = 0; ndx = 0
     ncelsepi = 0; ncelsmes = 0
-    let mut node_id: i32 = 1
-    while node_id <= nd {
+    for node_id in 1 to nd + 1 {
         if node[node_id].tipus < 3 { ndepi = ndepi + 1 }
         elif node[node_id].tipus == 3 { ndmes = ndmes + 1 }
         elif node[node_id].tipus == 4 { ndx = ndx + 1 }
-        node_id = node_id + 1
     }
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
+    for cell_id in 1 to ncels + 1 {
         if cels[cell_id].ctipus < 3 { ncelsepi = ncelsepi + 1 }
         elif cels[cell_id].ctipus == 3 { ncelsmes = ncelsmes + 1 }
-        cell_id = cell_id + 1
     }
 }
 
@@ -139,8 +135,7 @@ function editor_paste_node(node_id: i32, x: f64, y: f64, z: f64) -> bool {
     let offset_z: f64 = if epithelial { node[anchor_pair].z - node[anchor].z } else { 0.0 }
     let count: i32 = if epithelial { 2 } else { 1 }
     if append_growth_nodes(cell_id, count) == false { editor_error = 7; return false }
-    let mut slot: i32 = 0
-    while slot < count {
+    for slot in 0 to count {
         let destination: i32 = old_nd + slot + 1
         let source_id: i32 = if slot == 0 { node_id } else { source_pair }
         let record: Nod = if slot == 0 { source } else { pair_record }
@@ -152,15 +147,12 @@ function editor_paste_node(node_id: i32, x: f64, y: f64, z: f64) -> bool {
         node[destination].z = if slot == 0 { z } else { z + offset_z }
         node[destination].altre = if epithelial { old_nd + (if slot == 0 { 2 } else { 1 }) } else { 0 }
         nodeo[destination] = original
-        let mut gene_id: i32 = 0
-        while gene_id <= ng {
+        for gene_id in 0 to ng + 1 {
             gex[gene_expression_index(destination, gene_id)] = gex[gene_expression_index(source_id, gene_id)]
             agex[gene_expression_index(destination, gene_id)] = agex[gene_expression_index(source_id, gene_id)]
             dgex[gene_expression_index(destination, gene_id)] = 0.0
-            gene_id = gene_id + 1
         }
         checkn[destination] = 0
-        slot = slot + 1
     }
     recount_editor_model()
     if neighbor_build() == false and fill_co_griders() == false { editor_error = 5; return false }
@@ -179,10 +171,8 @@ function editor_add_basic_cell(x: f64, y: f64, z: f64, mesenchymal: bool) -> boo
     let base_cell: i32 = 1
     let original_count: i32 = cels[base_cell].nunodes
     let first_new_node: i32 = nd + 1
-    let mut pair: i32 = 0
-    while pair < 7 {
+    for pair in 0 to 7 {
         if append_growth_nodes(base_cell, 2) == false { editor_error = 7; return false }
-        pair = pair + 1
     }
 
     ncels = ncels + 1
@@ -202,10 +192,8 @@ function editor_add_basic_cell(x: f64, y: f64, z: f64, mesenchymal: bool) -> boo
     cels[new_cell].cez = z + 0.25
     cels[base_cell].nunodes = original_count
 
-    let mut layer: i32 = 0
-    while layer < 2 {
-        let mut ring: i32 = 0
-        while ring < 7 {
+    for layer in 0 to 2 {
+        for ring in 0 to 7 {
             let node_id: i32 = first_new_node + layer * 7 + ring
             let angle: f64 = if ring == 0 { 0.0 } else { (ring - 1) as f64 * PI / 3.0 }
             let nx: f64 = if ring == 0 { x } else { x + 0.5 + 0.5 * cos(angle) }
@@ -220,23 +208,18 @@ function editor_add_basic_cell(x: f64, y: f64, z: f64, mesenchymal: bool) -> boo
             nodeo[node_id].icel = new_cell
             nodeo[node_id].tipus = node[node_id].tipus
             nodeo[node_id].altre = node[node_id].altre
-            ring = ring + 1
         }
-        layer = layer + 1
     }
 
     cels[new_cell].cex = 0.0; cels[new_cell].cey = 0.0; cels[new_cell].cez = 0.0
-    let mut ring: i32 = 1
-    while ring <= 7 {
+    for ring in 1 to 8 {
         let node_id: i32 = members[ring + 7]
         cels[new_cell].cex = cels[new_cell].cex + node[node_id].x / 7.0
         cels[new_cell].cey = cels[new_cell].cey + node[node_id].y / 7.0
         cels[new_cell].cez = cels[new_cell].cez + node[node_id].z / 7.0
-        ring = ring + 1
     }
     if mesenchymal {
-        let mut ring: i32 = 1
-        while ring <= 7 {
+        for ring in 1 to 8 {
             let lower: i32 = members[ring]
             let upper: i32 = members[ring + 7]
             let dx: f64 = node[lower].x - node[upper].x
@@ -261,7 +244,6 @@ function editor_add_basic_cell(x: f64, y: f64, z: f64, mesenchymal: bool) -> boo
             node[upper].tipus = 3; node[upper].altre = 0
             nodeo[lower].tipus = 3; nodeo[lower].altre = 0
             nodeo[upper].tipus = 3; nodeo[upper].altre = 0
-            ring = ring + 1
         }
     }
     recount_editor_model()
@@ -289,18 +271,15 @@ function editor_paste_cell(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
         editor_error = 9
         return false
     }
-    let mut slot: i32 = 1
-    while slot <= count {
+    for slot in 1 to count + 1 {
         source_ids[slot] = cels[cell_id].node[slot]
-        slot = slot + 1
     }
     let first_source: i32 = source_ids[1]
     let dx: f64 = x - node[first_source].x
     let dy: f64 = y - node[first_source].y
     let dz: f64 = z - node[first_source].z
 
-    slot = 1
-    while slot <= count {
+    for slot in 1 to count + 1 {
         if destination_ids[slot] == 0 {
             let source_id: i32 = source_ids[slot]
             let old_nd: i32 = nd
@@ -334,7 +313,6 @@ function editor_paste_cell(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
                 destination_ids[slot] = old_nd + 1
             }
         }
-        slot = slot + 1
     }
 
     ncels = ncels + 1
@@ -345,8 +323,7 @@ function editor_paste_cell(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
     cels[new_cell].nunodes = count
     cels[new_cell].nodela = count
     cels[cell_id].nunodes = count
-    slot = 1
-    while slot <= count {
+    for slot in 1 to count + 1 {
         let source_id: i32 = source_ids[slot]
         let destination: i32 = destination_ids[slot]
         members[slot] = destination
@@ -363,21 +340,17 @@ function editor_paste_cell(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
             while partner_slot <= count and source_ids[partner_slot] != source_record.altre { partner_slot = partner_slot + 1 }
             node[destination].altre = if partner_slot <= count { destination_ids[partner_slot] } else { 0 }
         } else { node[destination].altre = 0 }
-        let mut gene_id: i32 = 0
-        while gene_id <= ng {
+        for gene_id in 0 to ng + 1 {
             gex[gene_expression_index(destination, gene_id)] = gex[gene_expression_index(source_id, gene_id)]
             agex[gene_expression_index(destination, gene_id)] = agex[gene_expression_index(source_id, gene_id)]
             dgex[gene_expression_index(destination, gene_id)] = 0.0
-            gene_id = gene_id + 1
         }
         checkn[destination] = 0
-        slot = slot + 1
     }
     cels[cell_id].nunodes = count
     cels[new_cell].cex = 0.0; cels[new_cell].cey = 0.0; cels[new_cell].cez = 0.0
     let mut centroid_count: i32 = 0
-    slot = 1
-    while slot <= count {
+    for slot in 1 to count + 1 {
         let node_id: i32 = members[slot]
         if (epithelial and node[node_id].tipus == 1) or (epithelial == false and node[node_id].tipus == 3) {
             cels[new_cell].cex = cels[new_cell].cex + node[node_id].x
@@ -385,7 +358,6 @@ function editor_paste_cell(cell_id: i32, x: f64, y: f64, z: f64) -> bool {
             cels[new_cell].cez = cels[new_cell].cez + node[node_id].z
             centroid_count = centroid_count + 1
         }
-        slot = slot + 1
     }
     if centroid_count > 0 {
         cels[new_cell].cex = cels[new_cell].cex / centroid_count as f64

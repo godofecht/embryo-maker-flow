@@ -6,3 +6,8 @@ runs/
 output/
 images/
 dist/
+
+# Generated Python caches and expanded trajectory data.
+__pycache__/
+*.pyc
+ui/sea_urchin_project.json

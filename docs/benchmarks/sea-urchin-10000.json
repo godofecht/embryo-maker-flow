@@ -1,0 +1,119 @@
+{
+  "input": "reference/examples/sea_urchin_gastrulation/sea_urchin.txt",
+  "device": "Apple M4 Max",
+  "macos": "26.2",
+  "threads": 8,
+  "backend": "CPU",
+  "iterations": 10000,
+  "final_nodes": 5225,
+  "elapsed_seconds": 4865.711587083002,
+  "binary_sha256": "b138847027ee6c8a05905785e060434fb02026954d0702ff8c9ed3d7c2a09ce9",
+  "snapshot_sha256": "094ed96d024378aab4b0b7936705d9a9642e7913f498ae8ccb133abe8b8f13e0",
+  "measurement_notes": [
+    "Persistent CLI worker; snapshots written every 500 iterations.",
+    "Elapsed time includes checkpoint writes.",
+    "Build and GPU verification work overlapped the early portion of this run."
+  ],
+  "chunks": [
+    {
+      "iteration": 500,
+      "chunk_seconds": 35.27710220802692,
+      "total_seconds": 35.27710887498688
+    },
+    {
+      "iteration": 1000,
+      "chunk_seconds": 52.015219416993205,
+      "total_seconds": 87.29243800000404
+    },
+    {
+      "iteration": 1500,
+      "chunk_seconds": 59.83656691701617,
+      "total_seconds": 147.12905324998428
+    },
+    {
+      "iteration": 2000,
+      "chunk_seconds": 83.88468795802328,
+      "total_seconds": 231.01379529200494
+    },
+    {
+      "iteration": 2500,
+      "chunk_seconds": 110.06848687501042,
+      "total_seconds": 341.08234112500213
+    },
+    {
+      "iteration": 3000,
+      "chunk_seconds": 235.17586166699766,
+      "total_seconds": 576.2582381250104
+    },
+    {
+      "iteration": 3500,
+      "chunk_seconds": 344.7942858749884,
+      "total_seconds": 921.0525607079908
+    },
+    {
+      "iteration": 4000,
+      "chunk_seconds": 593.070550458011,
+      "total_seconds": 1514.1233655420074
+    },
+    {
+      "iteration": 4500,
+      "chunk_seconds": 549.1519469170016,
+      "total_seconds": 2063.277348292002
+    },
+    {
+      "iteration": 5000,
+      "chunk_seconds": 369.23639579099836,
+      "total_seconds": 2432.5199593330035
+    },
+    {
+      "iteration": 5500,
+      "chunk_seconds": 339.80219737501466,
+      "total_seconds": 2772.3251132919977
+    },
+    {
+      "iteration": 6000,
+      "chunk_seconds": 294.77542191697285,
+      "total_seconds": 3067.100888832996
+    },
+    {
+      "iteration": 6500,
+      "chunk_seconds": 289.1525524169847,
+      "total_seconds": 3356.2564510419907
+    },
+    {
+      "iteration": 7000,
+      "chunk_seconds": 250.08970800001407,
+      "total_seconds": 3606.3464524169976
+    },
+    {
+      "iteration": 7500,
+      "chunk_seconds": 182.572524874995,
+      "total_seconds": 3788.92030662499
+    },
+    {
+      "iteration": 8000,
+      "chunk_seconds": 245.45952012500493,
+      "total_seconds": 4034.380076375004
+    },
+    {
+      "iteration": 8500,
+      "chunk_seconds": 194.54181670901016,
+      "total_seconds": 4228.922877957986
+    },
+    {
+      "iteration": 9000,
+      "chunk_seconds": 196.77556433301652,
+      "total_seconds": 4425.698473833007
+    },
+    {
+      "iteration": 9500,
+      "chunk_seconds": 213.08274595800322,
+      "total_seconds": 4638.781245833001
+    },
+    {
+      "iteration": 10000,
+      "chunk_seconds": 226.92828787499457,
+      "total_seconds": 4865.711587083002
+    }
+  ]
+}

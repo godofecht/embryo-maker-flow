@@ -1,10 +1,88 @@
 # Shared EmbryoMaker state. Indices in this port follow the Fortran source and
 # reserve element zero whenever a module allocates an indexed buffer.
 
+import std.process { proc_getenv }
+import std.string { ParseI64, str_parse_i64_at }
+
 extern {
     function calloc(count: i64, size: i64) -> ptr<void>
     function free(p: ptr<void>)
+    # native/embryo_pool.c: persistent worker threads for the deterministic
+    # parallel passes. Jobs call back into src/workers.flow.
+    function embryo_pool_start(requested: i32) -> i32
+    function embryo_pool_threads() -> i32
+    function embryo_pool_run(kind: i32, count: i32, grain: i32) -> void
 }
+
+# Thread policy. EMBRYO_THREADS=1 keeps every pass serial; unset or 0 starts
+# one worker per performance core; EMBRYO_PARALLEL_MIN_NODES (default 512)
+# keeps small models serial, where a fork and join costs more than the pass.
+let mut parallel_thread_count: i32 = -1
+let mut parallel_min_nodes: i32 = 512
+
+function parallel_workers() -> i32 {
+    if parallel_thread_count < 0 {
+        let mut requested: i32 = 0
+        let setting: string = proc_getenv("EMBRYO_THREADS")
+        if setting != "" {
+            let parsed: ParseI64 = str_parse_i64_at(setting, 0)
+            if parsed.ok { requested = parsed.value as i32 }
+        }
+        let minimum: string = proc_getenv("EMBRYO_PARALLEL_MIN_NODES")
+        if minimum != "" {
+            let parsed_minimum: ParseI64 = str_parse_i64_at(minimum, 0)
+            if parsed_minimum.ok { parallel_min_nodes = parsed_minimum.value as i32 }
+        }
+        if requested == 1 { parallel_thread_count = 1 }
+        else { parallel_thread_count = embryo_pool_start(requested) }
+        if parallel_thread_count < 1 { parallel_thread_count = 1 }
+    }
+    return parallel_thread_count
+}
+
+# Serial passes run through the same entry with one range, so a parallel
+# pass and its serial twin share one body.
+function use_parallel() -> bool {
+    return parallel_workers() > 1 and nd >= parallel_min_nodes
+}
+
+# GPU policy from EMBRYO_GPU:
+#   off        everything on the CPU
+#   1, exact   Metal candidate prefilter for the box neighbor search (exact)
+#   preview    prefilter plus float32 pair forces on the GPU (fast, inexact)
+#   exact64    prefilter plus software binary64 pair forces on the GPU (exact)
+#   verify     exact prefilter checked against the serial scan every call
+# EMBRYO_GPU_MIN_NODES (default 1000) keeps small models on the CPU.
+const GPU_MODE_OFF: i32 = 0
+const GPU_MODE_EXACT: i32 = 1
+const GPU_MODE_PREVIEW: i32 = 2
+const GPU_MODE_EXACT64: i32 = 3
+const GPU_MODE_VERIFY: i32 = 4
+let mut gpu_mode_setting: i32 = -1
+let mut gpu_min_nodes: i32 = 1000
+
+function gpu_mode() -> i32 {
+    if gpu_mode_setting < 0 {
+        let setting: string = proc_getenv("EMBRYO_GPU")
+        match setting {
+            "1" | "exact" => { gpu_mode_setting = GPU_MODE_EXACT }
+            "preview" => { gpu_mode_setting = GPU_MODE_PREVIEW }
+            "exact64" => { gpu_mode_setting = GPU_MODE_EXACT64 }
+            "verify" => { gpu_mode_setting = GPU_MODE_VERIFY }
+            _ => { gpu_mode_setting = GPU_MODE_OFF }
+        }
+        let minimum: string = proc_getenv("EMBRYO_GPU_MIN_NODES")
+        if minimum != "" {
+            let parsed: ParseI64 = str_parse_i64_at(minimum, 0)
+            if parsed.ok { gpu_min_nodes = parsed.value as i32 }
+        }
+    }
+    return gpu_mode_setting
+}
+
+# The viewer can switch modes at run time.
+function set_gpu_mode(mode: i32) -> void { gpu_mode_setting = mode }
+function set_parallel_threads_policy(min_nodes: i32) -> void { parallel_min_nodes = min_nodes }
 
 const NPARAM: i32 = 35
 const NPARAM_PER_NODE: i32 = 35
@@ -290,24 +368,19 @@ function iniarrays(node_count: i32, cell_count: i32) -> void {
     ffufi = calloc(((NFI + 1) * 4) as i64, sizeof<i32>()) as ptr<i32>
     node_capacity = node_count
     cell_capacity = cell_count
-    let mut n: i32 = 0
-    while n <= node_count {
+    for n in 0 to node_count + 1 {
         node[n] = nod_zero()
         nodeo[n] = nod_zero()
-        n = n + 1
     }
-    let mut q: i32 = 0
-    while q <= cell_count {
+    for q in 0 to cell_count + 1 {
         cels[q] = cel_zero()
-        q = q + 1
     }
 }
 
 function resize_f64_buffer(values: ptr<f64>, old_capacity: i32, new_capacity: i32) -> ptr<f64> {
     let resized: ptr<f64> = calloc((new_capacity + 1) as i64, sizeof<f64>()) as ptr<f64>
     if resized == null { resize_error = true; return values }
-    let mut i: i32 = 0
-    while i <= old_capacity { resized[i] = values[i]; i = i + 1 }
+    for i in 0 to old_capacity + 1 { resized[i] = values[i] }
     if values != null { free(values as ptr<void>) }
     return resized
 }
@@ -323,15 +396,12 @@ function resize_node_buffers(new_capacity: i32) -> bool {
         if resized_nodeo != null { free(resized_nodeo as ptr<void>) }
         return false
     }
-    let mut i: i32 = 0
-    while i <= node_capacity {
+    for i in 0 to node_capacity + 1 {
         resized_node[i] = node[i]
         resized_nodeo[i] = nodeo[i]
-        i = i + 1
     }
     free(node as ptr<void>); free(nodeo as ptr<void>)
     node = resized_node; nodeo = resized_nodeo
-    let mut row: i32 = 0
     px = resize_f64_buffer(px, node_capacity, new_capacity)
     py = resize_f64_buffer(py, node_capacity, new_capacity)
     pz = resize_f64_buffer(pz, node_capacity, new_capacity)
@@ -367,16 +437,12 @@ function resize_node_buffers(new_capacity: i32) -> bool {
             if new_dneigh != null { free(new_dneigh as ptr<void>) }
             return false
         }
-        row = 0
-        while row <= node_capacity {
-            let mut column: i32 = 0
-            while column < neigh_ld {
+        for row in 0 to node_capacity + 1 {
+            for column in 0 to neigh_ld {
                 let index: i32 = row * neigh_ld + column
                 new_neigh[index] = old_neigh[index]
                 new_dneigh[index] = old_dneigh[index]
-                column = column + 1
             }
-            row = row + 1
         }
         free(old_neigh as ptr<void>); free(old_dneigh as ptr<void>)
         neigh = new_neigh; dneigh = new_dneigh
@@ -385,8 +451,7 @@ function resize_node_buffers(new_capacity: i32) -> bool {
         let old_nneigh: ptr<i32> = nneigh
         let new_nneigh: ptr<i32> = calloc((new_capacity + 1) as i64, sizeof<i32>()) as ptr<i32>
         if new_nneigh == null { return false }
-        i = 0
-        while i <= node_capacity { new_nneigh[i] = old_nneigh[i]; i = i + 1 }
+        for i in 0 to node_capacity + 1 { new_nneigh[i] = old_nneigh[i] }
         free(old_nneigh as ptr<void>); nneigh = new_nneigh
     }
     node_capacity = new_capacity
@@ -398,15 +463,11 @@ function resize_cell_buffers(new_capacity: i32) -> bool {
     if new_capacity <= cell_capacity { return true }
     let resized: ptr<Cel> = calloc((new_capacity + 1) as i64, sizeof<Cel>()) as ptr<Cel>
     if resized == null { return false }
-    let mut i: i32 = 0
-    while i <= new_capacity {
+    for i in 0 to new_capacity + 1 {
         resized[i] = cel_zero()
-        i = i + 1
     }
-    i = 0
-    while i <= cell_capacity {
+    for i in 0 to cell_capacity + 1 {
         resized[i] = cels[i]
-        i = i + 1
     }
     if cels != null { free(cels as ptr<void>) }
     cels = resized
@@ -418,13 +479,11 @@ function resize_cell_buffers(new_capacity: i32) -> bool {
 function remove_node_slot(deleted_id: i32) -> bool {
     if deleted_id < 1 or deleted_id > nd { return false }
     if neigh != null and dneigh != null and nneigh != null and neigh_ld > 0 {
-        let mut source: i32 = 1
-        while source <= nd {
+        for source in 1 to nd + 1 {
             if source != deleted_id {
                 let old_count: i32 = nneigh[source]
-                let mut read_column: i32 = 1
                 let mut write_column: i32 = 1
-                while read_column <= old_count {
+                for read_column in 1 to old_count + 1 {
                     let source_index: i32 = source * neigh_ld + read_column
                     let neighbor_id: i32 = neigh[source_index]
                     if neighbor_id != deleted_id {
@@ -434,44 +493,34 @@ function remove_node_slot(deleted_id: i32) -> bool {
                         dneigh[target_index] = dneigh[source_index]
                         write_column = write_column + 1
                     }
-                    read_column = read_column + 1
                 }
-                let mut clear_column: i32 = write_column
-                while clear_column <= old_count {
+                for clear_column in write_column to old_count + 1 {
                     let clear_index: i32 = source * neigh_ld + clear_column
                     neigh[clear_index] = 0
                     dneigh[clear_index] = 0.0
-                    clear_column = clear_column + 1
                 }
                 nneigh[source] = write_column - 1
             }
-            source = source + 1
         }
     }
-    let mut row: i32 = deleted_id
-    while row < nd {
+    for row in deleted_id to nd {
         node[row] = node[row + 1]
         nneigh[row] = nneigh[row + 1]
         if neigh != null and dneigh != null and neigh_ld > 0 {
-            let mut column: i32 = 0
-            while column < neigh_ld {
+            for column in 0 to neigh_ld {
                 let target_index: i32 = row * neigh_ld + column
                 let source_index: i32 = (row + 1) * neigh_ld + column
                 neigh[target_index] = neigh[source_index]
                 dneigh[target_index] = dneigh[source_index]
-                column = column + 1
             }
         }
-        row = row + 1
     }
     nneigh[nd] = 0
     if neigh != null and dneigh != null and neigh_ld > 0 {
-        let mut column: i32 = 0
-        while column < neigh_ld {
+        for column in 0 to neigh_ld {
             let index: i32 = nd * neigh_ld + column
             neigh[index] = 0
             dneigh[index] = 0.0
-            column = column + 1
         }
     }
     nd = nd - 1
@@ -483,7 +532,7 @@ function matrix_index(row: i32, column: i32, leading_dimension: i32) -> i32 {
 }
 
 export NPARAM, NPARAM_PER_NODE, NPARAM_PER_NODER, NPARAM_PER_NODEI, NGCB, NGA, NFU, NFI, STATUS, NUE, PI, PII
-export aut, getot, nd, ng, ncels, ncals, nda, ndepi, ndmes, ndx, ncelsepi, ncelsmes, itacc, itv, nodecel, ntipusadh
+export parallel_workers, use_parallel, parallel_min_nodes, embryo_pool_run, gpu_mode, set_gpu_mode, gpu_min_nodes, set_parallel_threads_policy, GPU_MODE_OFF, GPU_MODE_EXACT, GPU_MODE_PREVIEW, GPU_MODE_EXACT64, GPU_MODE_VERIFY, aut, getot, nd, ng, ncels, ncals, nda, ndepi, ndmes, ndx, ncelsepi, ncelsmes, itacc, itv, nodecel, ntipusadh
 export nvarglobal_out, varglobal_out, mnn_dyn, omnn, mnn_dynam, ndmax, ndch, nseed, whichend, maxnodenr, ndoo, ndo, tellme2, ndu
 export desplacament, ene, realq, extre, rdiffmax, maxad, maxbox, maxcycl, newfase, maxelong, start_time, stop_time, current_time1, current_time2, total_gabriel
 export delta, rtime, temp, rv, urv, prop_noise, reqmin, ecmmax, mmae, dmax, prec, dif_req, min_comp

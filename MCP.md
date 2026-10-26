@@ -56,7 +56,10 @@ random seed match.
 ## Tools
 
 - `list_examples` lists local inputs and the imported morphospace cases.
-- `run_simulation` runs one input with the C or MLIR backend.
+- `run_simulation` runs one input with the C, MLIR, or GPU backend. MLIR
+  uses `tools/build-mlir.sh`; GPU sets `EMBRYO_GPU=exact64` on the C build,
+  which runs the Metal neighbor prefilter and the software binary64 force
+  kernel for models with at least 1000 nodes, bitwise equal to C.
 - `analyze_snapshot` measures node movement from its saved initial state.
 - `compare_snapshots` measures differences between two final node positions.
 - `test_hypothesis` runs and compares a control and variant pair.

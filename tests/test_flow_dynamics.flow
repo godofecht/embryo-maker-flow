@@ -1,0 +1,29 @@
+import embryo.dynamics { GeneConcentration, GeneConcentration_new, GeneConcentration_step, MorphogenDiffusionDecay, MorphogenDiffusionDecay_new, MorphogenDiffusionDecay_step }
+
+extern {
+    function fabs(x: f64) -> f64
+    function exp(x: f64) -> f64
+}
+
+function main() -> i32 {
+    let mut decay_model: MorphogenDiffusionDecay = MorphogenDiffusionDecay_new()
+    let dt: f64 = 0.01
+    for step in 0 to 100 {
+        MorphogenDiffusionDecay_step(&decay_model, dt)
+    }
+    # Exact analytical solution is exp(-0.05 * 1.0) = exp(-0.05) ~ 0.951229424500714
+    let expected: f64 = exp(-0.05 * 1.0)
+    if fabs(decay_model.concentration - expected) > 1.0e-7 {
+        return 1
+    }
+
+    let mut gene: GeneConcentration = GeneConcentration_new()
+    for step in 0 to 50 {
+        GeneConcentration_step(&gene, dt)
+    }
+    if gene.gex <= 0.0 or gene.gex > 1.5 {
+        return 2
+    }
+
+    return 0
+}

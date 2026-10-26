@@ -65,12 +65,10 @@ function itera_energy() -> bool {
     let mut direction_z: f64 = 0.0
     if npag[51] > 0 and node[moved_node].tipus < 4 {
         let mut bias: f64 = 0.0
-        let mut slot: i32 = 1
-        while slot <= npag[51] {
+        for slot in 1 to npag[51] + 1 {
             let gene_id: i32 = whonpag[51 * (ng + 1) + slot]
             let expression: f64 = gex[gene_expression_index(moved_node, gene_id)]
             if expression > 0.0 { bias = bias + expression * gene_effects[gene_effect_index(gene_id, 51)] }
-            slot = slot + 1
         }
         let direction_random: f64 = rng_real()
         let direction_index: i32 = (direction_random * nvaloq as f64) as i32 + 1

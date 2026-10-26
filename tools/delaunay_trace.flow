@@ -1,0 +1,52 @@
+# Capture the raw triangulation at the same coordinates used by both builders.
+# This deliberately bypasses neighbor restoration and display filtering.
+import embryo.io { read_snapshot_parameters, format_i64, format_f64 }
+import embryo.general { nd, node, ffu, getot, nparti }
+import embryo.aleas { inialea3d }
+import embryo.model { advance_model_iteration }
+import embryo.workers { parallel_init }
+import embryo.delaunay { delaunay_initialize, delaunay_build, delaunay_release, delaunay_error, delaunay_face_count, delaunay_face_vertex, delaunay_map_at }
+import std.bytebuf { bb_new, bb_puts, bb_str, bb_free }
+import std.io { io_write_file }
+import std.process { proc_argc, proc_argv }
+import std.string { str_parse_i64_at }
+
+function main() -> i32 {
+    if proc_argc() != 4 { println("usage: delaunay_trace <input> <steps> <output-prefix>"); return 2 }
+    let parsed = str_parse_i64_at(proc_argv(2), 0)
+    if not parsed.ok or parsed.value < 0 or parsed.value > 100000 { return 2 }
+    let _threads: i32 = parallel_init()
+    if read_snapshot_parameters(proc_argv(1)) != 0 { return 3 }
+    inialea3d(nparti)
+    for step in 0 to (parsed.value as i32) + 1 {
+        let out = bb_new(1048576)
+        bb_puts(out, "{\"iteration\":" + format_i64(getot as i64) + ",\"triangulationEnabled\":" + format_i64(ffu[8] as i64) + ",\"extendedNeighbors\":" + format_i64(ffu[9] as i64) + ",\"points\":[")
+        for i in 1 to nd + 1 {
+            if i > 1 { bb_puts(out, ",") }
+            bb_puts(out, "[" + format_f64(node[i].x) + "," + format_f64(node[i].y) + "," + format_f64(node[i].z) + "]")
+        }
+        let initialized: bool = delaunay_initialize()
+        let built: bool = if initialized { delaunay_build() } else { false }
+        bb_puts(out, "],\"built\":" + (if built { "true" } else { "false" }) + ",\"status\":" + format_i64(delaunay_error() as i64) + ",\"faces\":[")
+        let mut count: i32 = 0
+        if built {
+            for face in 1 to delaunay_face_count() + 1 {
+                let a: i32 = delaunay_map_at(delaunay_face_vertex(face, 1))
+                let b: i32 = delaunay_map_at(delaunay_face_vertex(face, 2))
+                let c: i32 = delaunay_map_at(delaunay_face_vertex(face, 3))
+                if a > 0 and b > 0 and c > 0 {
+                    if count > 0 { bb_puts(out, ",") }
+                    bb_puts(out, "[" + format_i64(a as i64) + "," + format_i64(b as i64) + "," + format_i64(c as i64) + "]")
+                    count = count + 1
+                }
+            }
+        }
+        bb_puts(out, "]}")
+        let saved: bool = io_write_file(proc_argv(3) + "_" + format_i64(step as i64) + ".json", bb_str(out))
+        bb_free(out)
+        delaunay_release()
+        if not saved { return 5 }
+        if step < parsed.value as i32 and not advance_model_iteration() { return 4 }
+    }
+    return 0
+}

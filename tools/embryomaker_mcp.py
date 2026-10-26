@@ -90,7 +90,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "properties": {
                     "input_path": {"type": "string", "description": "Input file path relative to the project root."},
                     "iterations": {"type": "integer", "minimum": 0, "maximum": MAX_ITERATIONS, "default": 1},
-                    "backend": {"type": "string", "enum": ["c", "mlir"], "default": "c"},
+                    "backend": {"type": "string", "enum": ["c", "mlir", "gpu"], "default": "c"},
                 },
                 "required": ["input_path"],
                 "additionalProperties": False,
@@ -135,7 +135,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                     "parameter_index": {"type": "integer", "minimum": 1, "maximum": 35, "description": "Parameter row to change in the copied input. Use list_parameters first."},
                     "variant_value": {"type": "number", "description": "New numeric value for the selected parameter row."},
                     "iterations": {"type": "integer", "minimum": 0, "maximum": MAX_ITERATIONS, "default": 1},
-                    "backend": {"type": "string", "enum": ["c", "mlir"], "default": "c"},
+                    "backend": {"type": "string", "enum": ["c", "mlir", "gpu"], "default": "c"},
                 },
                 "required": ["control_path", "variant_path"],
                 "additionalProperties": False,
@@ -155,17 +155,29 @@ def run_simulation(args: dict[str, Any]) -> dict[str, Any]:
     backend = args.get("backend", "c")
     if isinstance(iterations, bool) or not isinstance(iterations, int) or not 0 <= iterations <= MAX_ITERATIONS:
         raise ToolError(f"iterations must be an integer from 0 through {MAX_ITERATIONS}.")
-    if backend not in ("c", "mlir"):
-        raise ToolError("backend must be c or mlir.")
+    if backend not in ("c", "mlir", "gpu"):
+        raise ToolError("backend must be c, mlir, or gpu.")
     flow = shutil.which("flow")
     if flow is None:
         raise ToolError("Could not find the Flow CLI on PATH.")
 
-    build_command = [flow, "build"] if backend == "c" else [flow, "compile", "--backend=mlir", str(ENTRY.relative_to(ROOT))]
+    # c: the C backend through flow build. gpu: the same binary with the Metal
+    # prefilter and the software binary64 force kernel (EMBRYO_GPU=exact64,
+    # bitwise equal to c; tools/build-gpu.sh). mlir:
+    # tools/build-mlir.sh, which emits MLIR, splits fused multiply-adds, lowers
+    # through mlir-opt and links build/mlir/embryomaker.
+    if backend == "mlir":
+        build_command = [str(ROOT / "tools" / "build-mlir.sh")]
+    else:
+        build_command = [flow, "build"]
     environment = os.environ.copy()
     existing_flags = environment.get("FLOW_CFLAGS", "").strip()
     if "-ffp-contract=off" not in existing_flags.split():
         environment["FLOW_CFLAGS"] = (existing_flags + " -ffp-contract=off").strip()
+    if backend == "gpu":
+        environment["EMBRYO_GPU"] = "exact64"
+    else:
+        environment.pop("EMBRYO_GPU", None)
     build = subprocess.run(
         build_command,
         cwd=ROOT,
@@ -179,7 +191,7 @@ def run_simulation(args: dict[str, Any]) -> dict[str, Any]:
         detail = (build.stderr or build.stdout).strip()[-6000:]
         raise ToolError(f"Build failed with exit code {build.returncode}:\n{detail}")
 
-    binary = Path.home() / "flow" / "build" / "embryomaker"
+    binary = ROOT / "build" / "mlir" / "embryomaker" if backend == "mlir" else Path.home() / "flow" / "build" / "embryomaker"
     if not binary.is_file():
         raise ToolError(f"Build completed without producing the expected executable: {binary}")
     RUN_DIR.mkdir(parents=True, exist_ok=True)
@@ -263,8 +275,8 @@ def test_hypothesis(args: dict[str, Any]) -> dict[str, Any]:
     backend = args.get("backend", "c")
     if isinstance(iterations, bool) or not isinstance(iterations, int) or not 0 <= iterations <= MAX_ITERATIONS:
         raise ToolError(f"iterations must be an integer from 0 through {MAX_ITERATIONS}.")
-    if backend not in ("c", "mlir"):
-        raise ToolError("backend must be c or mlir.")
+    if backend not in ("c", "mlir", "gpu"):
+        raise ToolError("backend must be c, mlir, or gpu.")
     control_run = run_simulation({"input_path": str(control_path.relative_to(ROOT)), "iterations": iterations, "backend": backend})
     variant_run = run_simulation({"input_path": str(variant_path.relative_to(ROOT)), "iterations": iterations, "backend": backend})
     control_analysis = analyze_snapshot({"snapshot_path": control_run["snapshot_path"]})

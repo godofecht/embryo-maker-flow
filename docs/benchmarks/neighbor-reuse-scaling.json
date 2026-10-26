@@ -1,0 +1,240 @@
+{
+  "machine": "arm64",
+  "system": "Darwin",
+  "compiler": "Apple clang version 17.0.0 (clang-1700.6.3.2)",
+  "source_sha256": "9af7fae69e55beafbb1ce6f1a98414ad2db58bb101e73bdc4037c110dcb72ea5",
+  "frames_checked": 27000,
+  "oracle_frames_checked": 9000,
+  "setup": {
+    "density": 1,
+    "cutoff": 1.15,
+    "skin": 0.3,
+    "boundaries": "periodic",
+    "seed": 1234567,
+    "repetitions": 5,
+    "steps": 300,
+    "threads": 1
+  },
+  "notes": [
+    "Median wall times exclude trajectory generation, sorting and validation.",
+    "Both methods use cell grids. The cache includes its displacement checks and rebuilds.",
+    "Every frame checks canonical edge IDs and bitwise squared distances.",
+    "Sizes 64 and 216 also check an independent all-pairs oracle on every frame.",
+    "Boundary tests cover approaching endpoints and a periodic seam.",
+    "This prototype measures graph equality. Production neighbor order and trajectory parity require separate verification."
+  ],
+  "summary": [
+    {
+      "cells": 64,
+      "motion": 0.01,
+      "grid_ms_per_step": 0.018606666666666667,
+      "reuse_ms_per_step": 0.0023466666666666666,
+      "speedup": 7.928977272727273,
+      "rebuilds": 5,
+      "steps": 300,
+      "grid_distance_checks": 604800,
+      "reuse_distance_checks": 139834
+    },
+    {
+      "cells": 216,
+      "motion": 0.01,
+      "grid_ms_per_step": 0.03797333333333333,
+      "reuse_ms_per_step": 0.00744,
+      "speedup": 5.103942652329748,
+      "rebuilds": 7,
+      "steps": 300,
+      "grid_distance_checks": 1557402,
+      "reuse_distance_checks": 498650
+    },
+    {
+      "cells": 512,
+      "motion": 0.01,
+      "grid_ms_per_step": 0.12742333333333333,
+      "reuse_ms_per_step": 0.019836666666666666,
+      "speedup": 6.423626281297261,
+      "rebuilds": 8,
+      "steps": 300,
+      "grid_distance_checks": 4838947,
+      "reuse_distance_checks": 1237846
+    },
+    {
+      "cells": 1000,
+      "motion": 0.01,
+      "grid_ms_per_step": 0.2599433333333333,
+      "reuse_ms_per_step": 0.04513333333333333,
+      "speedup": 5.759453471196455,
+      "rebuilds": 8,
+      "steps": 300,
+      "grid_distance_checks": 8077004,
+      "reuse_distance_checks": 2489550
+    },
+    {
+      "cells": 1728,
+      "motion": 0.01,
+      "grid_ms_per_step": 0.47314333333333336,
+      "reuse_ms_per_step": 0.09086999999999999,
+      "speedup": 5.206815597373538,
+      "rebuilds": 9,
+      "steps": 300,
+      "grid_distance_checks": 12477384,
+      "reuse_distance_checks": 4137572
+    },
+    {
+      "cells": 4096,
+      "motion": 0.01,
+      "grid_ms_per_step": 1.2549133333333333,
+      "reuse_ms_per_step": 0.23120333666666668,
+      "speedup": 5.427747503240329,
+      "rebuilds": 9,
+      "steps": 300,
+      "grid_distance_checks": 31718503,
+      "reuse_distance_checks": 9578264
+    },
+    {
+      "cells": 64,
+      "motion": 0.08,
+      "grid_ms_per_step": 0.029760003333333333,
+      "reuse_ms_per_step": 0.015893333333333332,
+      "speedup": 1.8724834312080538,
+      "rebuilds": 150,
+      "steps": 300,
+      "grid_distance_checks": 604800,
+      "reuse_distance_checks": 420914
+    },
+    {
+      "cells": 216,
+      "motion": 0.08,
+      "grid_ms_per_step": 0.08600000000000001,
+      "reuse_ms_per_step": 0.06995333333333334,
+      "speedup": 1.2293910225864861,
+      "rebuilds": 150,
+      "steps": 300,
+      "grid_distance_checks": 1491226,
+      "reuse_distance_checks": 1856210
+    },
+    {
+      "cells": 512,
+      "motion": 0.08,
+      "grid_ms_per_step": 0.22318666666666667,
+      "reuse_ms_per_step": 0.17267666666666667,
+      "speedup": 1.2925120166785706,
+      "rebuilds": 150,
+      "steps": 300,
+      "grid_distance_checks": 4849324,
+      "reuse_distance_checks": 5139285
+    },
+    {
+      "cells": 1000,
+      "motion": 0.08,
+      "grid_ms_per_step": 0.42266666666666663,
+      "reuse_ms_per_step": 0.3499933333333333,
+      "speedup": 1.207642050324768,
+      "rebuilds": 150,
+      "steps": 300,
+      "grid_distance_checks": 7799547,
+      "reuse_distance_checks": 11140808
+    },
+    {
+      "cells": 1728,
+      "motion": 0.08,
+      "grid_ms_per_step": 0.70832,
+      "reuse_ms_per_step": 0.5623566666666666,
+      "speedup": 1.2595565092141998,
+      "rebuilds": 150,
+      "steps": 300,
+      "grid_distance_checks": 11888922,
+      "reuse_distance_checks": 14832709
+    },
+    {
+      "cells": 4096,
+      "motion": 0.08,
+      "grid_ms_per_step": 1.70485,
+      "reuse_ms_per_step": 1.29584,
+      "speedup": 1.315633102852204,
+      "rebuilds": 150,
+      "steps": 300,
+      "grid_distance_checks": 30454595,
+      "reuse_distance_checks": 32643242
+    },
+    {
+      "cells": 64,
+      "motion": 0.2,
+      "grid_ms_per_step": 0.03732666333333333,
+      "reuse_ms_per_step": 0.03109666666666667,
+      "speedup": 1.2003429092078464,
+      "rebuilds": 300,
+      "steps": 300,
+      "grid_distance_checks": 604800,
+      "reuse_distance_checks": 726742
+    },
+    {
+      "cells": 216,
+      "motion": 0.2,
+      "grid_ms_per_step": 0.09848333333333333,
+      "reuse_ms_per_step": 0.14144333333333334,
+      "speedup": 0.6962741262696486,
+      "rebuilds": 300,
+      "steps": 300,
+      "grid_distance_checks": 1507254,
+      "reuse_distance_checks": 3353338
+    },
+    {
+      "cells": 512,
+      "motion": 0.2,
+      "grid_ms_per_step": 0.2530733333333333,
+      "reuse_ms_per_step": 0.35213,
+      "speedup": 0.7186929069756435,
+      "rebuilds": 300,
+      "steps": 300,
+      "grid_distance_checks": 4890770,
+      "reuse_distance_checks": 9423439
+    },
+    {
+      "cells": 1000,
+      "motion": 0.2,
+      "grid_ms_per_step": 0.5051466666666667,
+      "reuse_ms_per_step": 0.7272266666666667,
+      "speedup": 0.6946206593084229,
+      "rebuilds": 300,
+      "steps": 300,
+      "grid_distance_checks": 7855936,
+      "reuse_distance_checks": 20545179
+    },
+    {
+      "cells": 1728,
+      "motion": 0.2,
+      "grid_ms_per_step": 0.7702733333333334,
+      "reuse_ms_per_step": 1.1078333333333332,
+      "speedup": 0.6952971265232436,
+      "rebuilds": 300,
+      "steps": 300,
+      "grid_distance_checks": 12025147,
+      "reuse_distance_checks": 26791635
+    },
+    {
+      "cells": 4096,
+      "motion": 0.2,
+      "grid_ms_per_step": 1.8445766666666668,
+      "reuse_ms_per_step": 2.5317733333333337,
+      "speedup": 0.7285710147827873,
+      "rebuilds": 300,
+      "steps": 300,
+      "grid_distance_checks": 30701195,
+      "reuse_distance_checks": 58431137
+    }
+  ],
+  "empirical_exponents": {
+    "0.01": {
+      "grid_ms_per_step": 1.0473596865742927,
+      "reuse_ms_per_step": 1.1219777840714849
+    },
+    "0.08": {
+      "grid_ms_per_step": 0.9802944652341059,
+      "reuse_ms_per_step": 1.0529007799347898
+    },
+    "0.2": {
+      "grid_ms_per_step": 0.9494164674784376,
+      "reuse_ms_per_step": 1.052305366724665
+    }
+  }
+}

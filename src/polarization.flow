@@ -1,8 +1,5 @@
 import embryo.general { ncels, cels, node }
-import embryo.genetic {
-    ng, gex, npag, whonpag, gene_effects,
-    gene_expression_index, gene_effect_index
-}
+import embryo.genetic { node_gene_effect }
 import embryo.aleas { nvaloq, particions_esfera, partition_index }
 import embryo.rng { rng_real }
 
@@ -14,10 +11,9 @@ const PARAMETER_NODE_POLARIZATION: i32 = 43
 const POLARIZATION_EPSILOD: f64 = 2.2204460492503131e-15
 
 function polarization() -> bool {
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
+    for cell_id in 1 to ncels + 1 {
         let node_count: i32 = cels[cell_id].nunodes
-        if node_count <= 0 { cell_id = cell_id + 1; continue }
+        if node_count <= 0 { continue }
         let center_x: f64 = cels[cell_id].cex
         let center_y: f64 = cels[cell_id].cey
         let center_z: f64 = cels[cell_id].cez
@@ -26,8 +22,7 @@ function polarization() -> bool {
         # The Fortran routine leaves d undefined on ignored node types. Use
         # the nearest eligible surface node as its documented intent.
         let mut last_distance: f64 = 1.0e10
-        let mut slot: i32 = 1
-        while slot <= node_count {
+        for slot in 1 to node_count + 1 {
             let node_id: i32 = cels[cell_id].node[slot]
             if node[node_id].tipus == 1 or node[node_id].tipus == 3 {
                 let dx: f64 = node[node_id].x - center_x
@@ -36,26 +31,15 @@ function polarization() -> bool {
                 last_distance = sqrt((dx * dx) + (dy * dy) + (dz * dz))
             }
             if last_distance <= closest { closest = last_distance; center_node = node_id }
-            slot = slot + 1
         }
         if center_node == 0 { return false }
-        let mut center_signal: f64 = 0.0
         let property: i32 = PARAMETER_NODE_POLARIZATION
-        let mut gene_slot: i32 = 1
-        while gene_slot <= npag[property] {
-            let gene_id: i32 = whonpag[property * (ng + 1) + gene_slot]
-            let expression: f64 = gex[gene_expression_index(center_node, gene_id)]
-            if expression > 0.0 {
-                center_signal = center_signal + expression * gene_effects[gene_effect_index(gene_id, property)]
-            }
-            gene_slot = gene_slot + 1
-        }
+        let center_signal: f64 = node_gene_effect(center_node, property)
 
         let mut gradient_x: f64 = 0.0
         let mut gradient_y: f64 = 0.0
         let mut gradient_z: f64 = 0.0
-        slot = 1
-        while slot <= node_count {
+        for slot in 1 to node_count + 1 {
             let node_id: i32 = cels[cell_id].node[slot]
             if node[node_id].tipus == 1 or node[node_id].tipus == 3 {
                 let dx: f64 = node[node_id].x - center_x
@@ -64,22 +48,12 @@ function polarization() -> bool {
                 let radius: f64 = sqrt((dx * dx) + (dy * dy) + (dz * dz))
                 if radius >= POLARIZATION_EPSILOD {
                     let inverse_radius: f64 = 1.0 / radius
-                    let mut signal: f64 = 0.0
-                    gene_slot = 1
-                    while gene_slot <= npag[property] {
-                        let gene_id: i32 = whonpag[property * (ng + 1) + gene_slot]
-                        let expression: f64 = gex[gene_expression_index(node_id, gene_id)]
-                        if expression > 0.0 {
-                            signal = signal + expression * gene_effects[gene_effect_index(gene_id, property)]
-                        }
-                        gene_slot = gene_slot + 1
-                    }
+                    let signal: f64 = node_gene_effect(node_id, property)
                     gradient_x = gradient_x + (dx * inverse_radius) * (signal - center_signal)
                     gradient_y = gradient_y + (dy * inverse_radius) * (signal - center_signal)
                     gradient_z = gradient_z + (dz * inverse_radius) * (signal - center_signal)
                 }
             }
-            slot = slot + 1
         }
 
         if gradient_x == 0.0 and gradient_y == 0.0 and gradient_z == 0.0 {
@@ -100,7 +74,6 @@ function polarization() -> bool {
                 cels[cell_id].polz = gradient_z * inverse_magnitude
             }
         }
-        cell_id = cell_id + 1
     }
     return true
 }

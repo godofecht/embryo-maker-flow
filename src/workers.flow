@@ -1,0 +1,37 @@
+# Entry point for the worker pool in native/embryo_pool.c. The pool splits a
+# pass into index ranges and calls parallel_entry for each. Every kind maps
+# to a range body elsewhere that writes only its own nodes' rows or its own
+# thread's scratch, which keeps results identical to the serial order.
+import embryo.general { parallel_workers }
+import embryo.neighboring { neighbor_scan_range }
+import embryo.genetic { genestep_range }
+import embryo.biomechanic { force_pairs_range, force_reduce_range, force_active_genes_range }
+
+extern {
+    function embryo_pool_set_entry(fn: ptr<void>) -> void
+}
+
+const PARALLEL_NEIGHBOR_SCAN: i32 = 1
+const PARALLEL_GENE_STEP: i32 = 2
+const PARALLEL_FORCE_PAIRS: i32 = 3
+const PARALLEL_FORCE_REDUCE: i32 = 4
+const PARALLEL_FORCE_ACTIVE_GENES: i32 = 5
+
+export function embryo_parallel_entry(kind: i32, start: i32, end: i32, thread: i32) -> void {
+    match kind {
+        value if value == PARALLEL_NEIGHBOR_SCAN => { neighbor_scan_range(start, end, thread) }
+        value if value == PARALLEL_GENE_STEP => { genestep_range(start, end, thread) }
+        value if value == PARALLEL_FORCE_PAIRS => { force_pairs_range(start, end, thread) }
+        value if value == PARALLEL_FORCE_REDUCE => { force_reduce_range(start, end, thread) }
+        value if value == PARALLEL_FORCE_ACTIVE_GENES => { force_active_genes_range(start, end, thread) }
+        _ => {}
+    }
+}
+
+# Starts the pool according to EMBRYO_THREADS and returns the thread count.
+function parallel_init() -> i32 {
+    embryo_pool_set_entry(embryo_parallel_entry as ptr<void>)
+    return parallel_workers()
+}
+
+export parallel_init

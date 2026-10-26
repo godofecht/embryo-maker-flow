@@ -1,0 +1,99 @@
+{
+  "threads": 8,
+  "initial_steps": 40,
+  "late_start_iteration": 10000,
+  "late_steps": 20,
+  "repetitions": 3,
+  "medians": {
+    "initial": {
+      "baseline": 2.0753883750003297,
+      "candidate": 1.9377039590035565
+    },
+    "late": {
+      "baseline": 8.435813166986918,
+      "candidate": 7.878520917001879
+    }
+  },
+  "runs": [
+    {
+      "case": "initial",
+      "repeat": 0,
+      "variant": "baseline",
+      "seconds": 2.0532392500026617
+    },
+    {
+      "case": "initial",
+      "repeat": 0,
+      "variant": "candidate",
+      "seconds": 1.998093667003559
+    },
+    {
+      "case": "initial",
+      "repeat": 1,
+      "variant": "candidate",
+      "seconds": 1.8752585409965832
+    },
+    {
+      "case": "initial",
+      "repeat": 1,
+      "variant": "baseline",
+      "seconds": 2.115214916993864
+    },
+    {
+      "case": "initial",
+      "repeat": 2,
+      "variant": "baseline",
+      "seconds": 2.0753883750003297
+    },
+    {
+      "case": "initial",
+      "repeat": 2,
+      "variant": "candidate",
+      "seconds": 1.9377039590035565
+    },
+    {
+      "case": "late",
+      "repeat": 0,
+      "variant": "baseline",
+      "seconds": 8.435813166986918
+    },
+    {
+      "case": "late",
+      "repeat": 0,
+      "variant": "candidate",
+      "seconds": 7.878520917001879
+    },
+    {
+      "case": "late",
+      "repeat": 1,
+      "variant": "candidate",
+      "seconds": 7.777385208988562
+    },
+    {
+      "case": "late",
+      "repeat": 1,
+      "variant": "baseline",
+      "seconds": 8.136931249988265
+    },
+    {
+      "case": "late",
+      "repeat": 2,
+      "variant": "baseline",
+      "seconds": 8.656031457998324
+    },
+    {
+      "case": "late",
+      "repeat": 2,
+      "variant": "candidate",
+      "seconds": 8.807894208002836
+    }
+  ],
+  "all_six_pairs_bitwise": true,
+  "baseline_binary_sha256": "693c00a9517d8b785075674f320b823f4bd250b3a495220f0244b60b106815ef",
+  "candidate_binary_sha256": "044f74c58cce9f63ea2504fd1973ef167936555d4628fdac5b40df6a1dfb389f",
+  "notes": [
+    "Baseline and candidate alternate order across repetitions.",
+    "The late checkpoint is loaded independently by each binary.",
+    "Full 10000-step runtime was not remeasured."
+  ]
+}

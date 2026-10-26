@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="studio-open">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,12 +10,81 @@
     :root{color-scheme:dark;--bg:#0b1119;--panel:#111a25;--panel2:#151f2b;--line:#24313f;--muted:#8292a3;--text:#e8edf2;--mint:#a8f0d0;--lime:#d6fb91;--coral:#ff9c83;--blue:#8bc9ff;--lav:#c5b1ff}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
     button,select,input{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
-    .shell{max-width:1680px;margin:auto;padding:22px 28px 28px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.mark{width:38px;height:38px;border:1px solid #315344;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,#1c382f,#14231f);color:var(--mint);font-size:20px}.brand-name{font-size:15px;font-weight:650;letter-spacing:.01em}.brand-sub{font-size:11px;color:var(--muted);margin-top:2px}.top-right{display:flex;align-items:center;gap:10px}.live-pill{display:flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid var(--line);border-radius:99px;color:#b7c4d0;font-size:12px}.dot{width:7px;height:7px;background:var(--mint);border-radius:50%;box-shadow:0 0 12px #91ffca77}.quiet-button,.icon-button,.primary,.secondary{border:1px solid var(--line);background:#17212d;border-radius:10px;padding:9px 13px}.quiet-button{color:#bdc8d2;font-size:12px}.quiet-button:hover,.secondary:hover,.icon-button:hover{background:#202d3a}.page-title{margin:0 0 4px;font-size:24px;font-weight:570;letter-spacing:-.035em}.page-intro{color:var(--muted);margin:0 0 20px;font-size:13px}.workspace{display:grid;grid-template-columns:258px minmax(400px,1fr) 276px;gap:14px;align-items:stretch}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}.left-panel,.right-panel{padding:17px}.section-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8192a4;font-weight:700}.field-label{display:flex;justify-content:space-between;align-items:center;color:#b4c0ca;font-size:12px;margin:17px 0 7px}.field-label small{color:var(--muted);font-size:11px}.select-wrap{position:relative}.select-wrap:after{content:"⌄";position:absolute;right:12px;top:9px;color:#9babb9;pointer-events:none}.select-wrap select{appearance:none;width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:10px 32px 10px 11px}.file-input{display:none}.upload{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:9px;padding:9px;border:1px dashed #344556;background:transparent;color:#a9b8c5;border-radius:9px;font-size:12px}.upload:hover{border-color:#84bea5;color:var(--mint)}.divider{height:1px;background:var(--line);margin:18px 0}.transport{display:grid;grid-template-columns:1fr 1fr;gap:8px}.primary{background:var(--mint);color:#12251d;border-color:var(--mint);font-weight:680}.primary:hover{background:#c5f8df}.secondary{font-size:12px;color:#d8e0e8}.wide{grid-column:1/-1}.range-row{display:flex;gap:11px;align-items:center}.range-row input[type=range]{flex:1;accent-color:var(--mint)}.range-number{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:#d3ddd8}.speed-select{width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:9px}.hint{font-size:11px;color:#718295;line-height:1.55;margin-top:12px}.view-panel{position:relative;min-height:570px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}.view-head{position:absolute;z-index:2;left:18px;right:18px;top:17px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}.view-head>*{pointer-events:auto}.view-title{font-size:13px;font-weight:600}.view-caption{font-size:11px;color:var(--muted);margin-top:2px}.view-actions{display:flex;gap:7px}.icon-button{width:34px;height:34px;padding:0;color:#bac6d0}.icon-button svg{width:15px;height:15px;vertical-align:middle}.stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none}.overlay-bottom{position:absolute;left:18px;right:18px;bottom:16px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.overlay-bottom>*{pointer-events:auto}.legend{display:flex;gap:12px;color:#9eacb8;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.swatch{width:7px;height:7px;border-radius:50%;display:inline-block}.view-controls{display:flex;gap:6px}.view-controls button{font-size:10px;padding:6px 9px;background:#101a25c9;border:1px solid #344556;color:#aebbc6;border-radius:8px}.view-controls button.active{color:var(--mint);border-color:#517a67}.empty-state{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}.empty-symbol{font-size:42px;color:#587268;margin-bottom:7px}.empty-state strong{font-size:14px;font-weight:570}.empty-state span{font-size:12px;color:var(--muted);margin-top:5px}.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.stat{background:#0d151e;border:1px solid #202d3a;border-radius:10px;padding:11px 10px}.stat-value{font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.04em}.stat-label{font-size:10px;color:var(--muted);margin-top:2px}.inspector-section{border-top:1px solid var(--line);margin-top:16px;padding-top:15px}.inspector-title{font-size:12px;color:#c9d2db;font-weight:560}.inspector-copy{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}.node-list{margin-top:10px;max-height:155px;overflow:auto;scrollbar-color:#3a4b5a transparent;scrollbar-width:thin}.node-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1d2935;color:#aebbc6;font-size:10px}.node-row b{font-weight:500;color:#e0e7ed}.statusline{height:24px;margin-top:10px;color:#788a9a;font-size:11px;display:flex;justify-content:space-between}.statusline .message{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.statusline.error{color:#ffad9d}.footer{display:flex;justify-content:space-between;color:#667789;font-size:10px;margin-top:14px}.badge{padding:4px 7px;border-radius:6px;background:#1c2b25;color:#b6edcd;font-size:10px}
+    .shell{max-width:1680px;margin:auto;padding:14px 20px 20px}.topbar{display:flex;align-items:center;justify-content:space-between;height:42px;min-height:42px;padding:0 14px;background:linear-gradient(180deg,#181e26 0%,#11161d 100%);border:1px solid #283340;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06);user-select:none;-webkit-user-select:none;margin-bottom:12px}.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}.brand{display:flex;align-items:center;gap:8px;flex-shrink:0}.mark{width:26px;height:26px;border:1px solid #365c49;border-radius:7px;display:grid;place-items:center;background:linear-gradient(145deg,#1f3d32,#12251e);color:var(--mint);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 2px 4px rgba(0,0,0,.3)}.brand-name{font-size:13px;font-weight:650;letter-spacing:-.015em;color:#f0f4f8}.brand-tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;border-radius:4px;background:rgba(168,240,208,.12);color:var(--mint);border:1px solid rgba(168,240,208,.22)}.topbar-divider{width:1px;height:16px;background:#2a3644;flex-shrink:0}.doc-chip{display:flex;align-items:center;gap:7px;padding:4px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;font-size:12px;color:#c4d1de;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.doc-dot{width:6px;height:6px;border-radius:50%;background:#50e3a4;flex-shrink:0}.top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}.live-pill{display:flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid #273543;border-radius:6px;background:rgba(11,17,24,.75);color:#9ab0c2;font-size:11px;font-weight:500;letter-spacing:-.01em}.dot{width:6px;height:6px;background:#4ade80;border-radius:50%;box-shadow:0 0 8px rgba(74,222,128,.6);animation:pulse-dot 2.5s infinite ease-in-out}@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.92)}}.topbar-button-group{display:inline-flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid #273544;border-radius:7px;padding:2px;gap:2px}.topbar-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:transparent;border:1px solid transparent;border-radius:5px;color:#d1dde8;font-size:11.5px;font-weight:500;cursor:pointer;transition:all 120ms ease;white-space:nowrap}.topbar-btn:hover:not(:disabled){background:rgba(255,255,255,.08);color:#fff}.topbar-btn:active:not(:disabled){background:rgba(255,255,255,.12);transform:translateY(1px)}.topbar-btn:disabled{opacity:.35;cursor:not-allowed}.quiet-button,.icon-button,.primary,.secondary{border:1px solid var(--line);background:#17212d;border-radius:10px;padding:9px 13px}.quiet-button{color:#bdc8d2;font-size:12px}.quiet-button:hover,.secondary:hover,.icon-button:hover{background:#202d3a}.page-title{margin:0 0 4px;font-size:24px;font-weight:570;letter-spacing:-.035em}.page-intro{color:var(--muted);margin:0 0 20px;font-size:13px}.workspace{display:grid;grid-template-columns:258px minmax(400px,1fr) 276px;gap:14px;align-items:stretch}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}.left-panel,.right-panel{padding:17px}.section-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8192a4;font-weight:700}.field-label{display:flex;justify-content:space-between;align-items:center;color:#b4c0ca;font-size:12px;margin:17px 0 7px}.field-label small{color:var(--muted);font-size:11px}.select-wrap{position:relative}.select-wrap:after{content:"⌄";position:absolute;right:12px;top:9px;color:#9babb9;pointer-events:none}.select-wrap select{appearance:none;width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:10px 32px 10px 11px}.file-input{display:none}.upload{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:9px;padding:9px;border:1px dashed #344556;background:transparent;color:#a9b8c5;border-radius:9px;font-size:12px}.upload:hover{border-color:#84bea5;color:var(--mint)}.divider{height:1px;background:var(--line);margin:18px 0}.transport{display:grid;grid-template-columns:1fr 1fr;gap:8px}.primary{background:var(--mint);color:#12251d;border-color:var(--mint);font-weight:680}.primary:hover{background:#c5f8df}.secondary{font-size:12px;color:#d8e0e8}.wide{grid-column:1/-1}.range-row{display:flex;gap:11px;align-items:center}.range-row input[type=range]{flex:1;accent-color:var(--mint)}.range-number{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:#d3ddd8}.speed-select{width:100%;background:#0d151e;border:1px solid #2a3948;border-radius:9px;padding:9px}.hint{font-size:11px;color:#718295;line-height:1.55;margin-top:12px}.view-panel{position:relative;min-height:570px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}.view-head{position:absolute;z-index:2;left:18px;right:18px;top:17px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}.view-head>*{pointer-events:auto}.view-title{font-size:13px;font-weight:600}.view-caption{font-size:11px;color:var(--muted);margin-top:2px}.view-actions{display:flex;gap:7px}.icon-button{width:34px;height:34px;padding:0;color:#bac6d0}.icon-button svg{width:15px;height:15px;vertical-align:middle}.stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none}.overlay-bottom{position:absolute;left:18px;right:18px;bottom:16px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.overlay-bottom>*{pointer-events:auto}.legend{display:flex;gap:12px;color:#9eacb8;font-size:10px}.legend span{display:flex;align-items:center;gap:6px}.swatch{width:7px;height:7px;border-radius:50%;display:inline-block}.view-controls{display:flex;gap:6px}.view-controls button{font-size:10px;padding:6px 9px;background:#101a25c9;border:1px solid #344556;color:#aebbc6;border-radius:8px}.view-controls button.active{color:var(--mint);border-color:#517a67}.empty-state{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}.empty-symbol{font-size:42px;color:#587268;margin-bottom:7px}.empty-state strong{font-size:14px;font-weight:570}.empty-state span{font-size:12px;color:var(--muted);margin-top:5px}.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.stat{background:#0d151e;border:1px solid #202d3a;border-radius:10px;padding:11px 10px}.stat-value{font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.04em}.stat-label{font-size:10px;color:var(--muted);margin-top:2px}.inspector-section{border-top:1px solid var(--line);margin-top:16px;padding-top:15px}.inspector-title{font-size:12px;color:#c9d2db;font-weight:560}.inspector-copy{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}.node-list{margin-top:10px;max-height:155px;overflow:auto;scrollbar-color:#3a4b5a transparent;scrollbar-width:thin}.node-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1d2935;color:#aebbc6;font-size:10px}.node-row b{font-weight:500;color:#e0e7ed}.statusline{height:24px;margin-top:10px;color:#788a9a;font-size:11px;display:flex;justify-content:space-between}.statusline .message{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.statusline.error{color:#ffad9d}.footer{display:flex;justify-content:space-between;color:#667789;font-size:10px;margin-top:14px}.badge{padding:4px 7px;border-radius:6px;background:#1c2b25;color:#b6edcd;font-size:10px}
     .color-scale{display:inline-block;height:7px;min-width:70px;flex:1;border-radius:5px}
     @media(max-width:1150px){.workspace{grid-template-columns:230px minmax(360px,1fr)}.right-panel{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:15px}.right-panel>.section-label{grid-column:1/-1}.inspector-section{margin-top:0}.view-panel{min-height:540px}}
     @media(max-width:760px){.shell{padding:15px}.topbar{margin-bottom:16px}.top-right .quiet-button{display:none}.workspace{grid-template-columns:1fr}.left-panel{order:2}.view-panel{order:1;min-height:60vh}.right-panel{order:3;grid-template-columns:1fr 1fr}.page-title{font-size:21px}.footer{gap:14px;flex-wrap:wrap}.statusline{margin-bottom:5px}}
     :root{--bg:#090b0d;--panel:#111417;--panel2:#171b1f;--line:#2a3035;--muted:#89939a}
     .view-panel{background:#000}.stat{background:#0d1114;border-color:#292e32;border-radius:8px}.select-wrap select,.speed-select,.settings-select{background:#0d1114;border-color:#353c41;border-radius:7px}.view-controls button{background:#101214;border-color:#41474b;border-radius:6px}.view-caption{color:#8a9499}.compact-label{display:block;margin:10px 0 6px;color:#aab4ba;font-size:11px}.settings-select{width:100%;padding:8px;color:#d1d9de}.small-range{display:flex;align-items:center;gap:8px}.small-range input{min-width:0;flex:1;accent-color:var(--mint)}.small-range output{width:34px;text-align:right;color:#b9c3c8;font-size:10px;font-variant-numeric:tabular-nums}.view-divider{height:1px;background:#252a2d;margin:13px 0}
+    .timeline{position:absolute;z-index:3;left:18px;right:18px;top:62px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 14px;background:#0b1118d9;border:1px solid #2a3540;border-radius:12px;backdrop-filter:blur(8px)}
+    .timeline-play{width:38px;height:38px;border-radius:10px;border:1px solid var(--mint);background:var(--mint);color:#12251d;font-size:15px;font-weight:700;cursor:pointer;flex:none}
+    .timeline-play.playing{background:#17212d;color:var(--mint)}
+    .timeline-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8192a4;font-weight:700;flex:none}
+    .timeline-slider-wrap{position:relative;flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px}
+    .timeline-slider-wrap input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:12px;border-radius:7px;background:linear-gradient(90deg,var(--mint) var(--fill,0%),#243040 var(--fill,0%));outline:none;cursor:pointer;margin:0}
+    .timeline-slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#eafff4;border:3px solid var(--mint);box-shadow:0 0 14px #91ffca66;cursor:grab}
+    .timeline-slider-wrap input[type=range]:active::-webkit-slider-thumb{cursor:grabbing}
+    .timeline-slider-wrap input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#eafff4;border:3px solid var(--mint)}
+    .timeline-cache-track{height:4px;border-radius:2px;background:#18222d;width:100%;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);transition:background 120ms ease}
+    .timeline-readout{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;font-size:18px;color:#e6edf3;flex:none}
+    .timeline-readout #iterationValue{min-width:3.2ch;text-align:right}
+    .timeline-sep{color:#5c6b7a}
+    .timeline-readout input{width:84px;background:#0d151e;border:1px solid #2a3948;border-radius:8px;color:#d3ddd8;font-size:15px;padding:5px 8px;font-variant-numeric:tabular-nums}
+    .cache-badge{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid #2a3746;color:#9eb0c0;font-size:11px;font-weight:500;cursor:pointer;user-select:none;transition:all 120ms ease;white-space:nowrap}
+    .cache-badge:hover{background:rgba(255,255,255,.09);border-color:#3f536b;color:#e2ecf5}
+    .cache-dot{width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 6px rgba(52,211,153,.55)}
+    .cache-dot.partial{background:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,.55)}
+    .cache-dot.empty{background:#546473;box-shadow:none}
+    .cache-modal{position:absolute;z-index:10;top:118px;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 32px));background:#121820;border:1px solid #2f3d4e;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.75);padding:16px;color:#d8e2eb;font-family:Inter,system-ui,sans-serif}
+    .cache-modal[hidden]{display:none}
+    .cache-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #222d3a}
+    .cache-modal-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:650;color:#f0f4f8}
+    .cache-stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+    .cache-stat-card{background:#0b1118;border:1px solid #233140;border-radius:8px;padding:9px 10px;display:flex;flex-direction:column;gap:3px}
+    .cache-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#7e93a6;font-weight:600}
+    .cache-stat-value{font-size:16px;color:#34d399;font-weight:700;font-variant-numeric:tabular-nums}
+    .cache-stat-sub{font-size:10px;color:#899dae}
+    .cache-range-list{display:flex;flex-direction:column;gap:10px;background:#0b1118;border:1px solid #233140;border-radius:8px;padding:10px;margin-bottom:14px;max-height:160px;overflow-y:auto}
+    .cache-range-group{display:flex;flex-direction:column;gap:4px}
+    .cache-group-title{font-size:10.5px;color:#8ea3b5;font-weight:600}
+    .cache-span-pills{display:flex;flex-wrap:wrap;gap:4px}
+    .cache-pill{font-size:10.5px;padding:2px 7px;border-radius:4px;font-variant-numeric:tabular-nums}
+    .cache-pill.calc{background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.3);color:#6ee7b7}
+    .cache-pill.uncalc{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:#fca5a5}
+    .cache-modal-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:6px}
+    .cache-modal-actions button{padding:6px 12px;font-size:11.5px;border-radius:6px}
+    .danger{border-color:#5c2929;background:#2b1515;color:#f87171}
+    .danger:hover{background:#3b1b1b;border-color:#7f1d1d}
+    .topbar-btn-accent{background:rgba(52,211,153,.12)!important;border-color:rgba(52,211,153,.32)!important;color:#a8f0d0!important}
+    .topbar-btn-accent:hover:not(:disabled){background:rgba(52,211,153,.22)!important;border-color:rgba(52,211,153,.5)!important;color:#fff!important}
+    .quick-precompute-box{margin-top:6px;padding:5px;background:rgba(255,255,255,.025);border:1px solid #1f2b38;border-radius:6px;display:flex;flex-direction:column;gap:4px}
+    .quick-precompute-head{display:flex;align-items:center;justify-content:space-between}
+    .quick-badge{font-size:8.5px;font-weight:700;letter-spacing:.08em;color:#7e93a6;text-transform:uppercase}
+    .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+    .quick-btn{background:#141d27;border:1px solid #253444;border-radius:4px;padding:4px 5px;color:#cdd7e1;font-size:9.5px;font-weight:500;text-align:center;cursor:pointer;transition:all 120ms ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .quick-btn:hover{background:#1c2937;border-color:#384c60;color:#fff}
+    .quick-btn.primary{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.32);color:#a8f0d0}
+    .quick-btn.primary:hover{background:rgba(52,211,153,.22);border-color:rgba(52,211,153,.52);color:#fff}
+    .video-modal{position:fixed;inset:0;z-index:9990;background:rgba(6,9,14,.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:16px}
+    .video-modal[hidden]{display:none}
+    .video-dialog{width:min(860px,94vw);background:#0e151e;border:1px solid #283749;border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,.85);overflow:hidden;display:flex;flex-direction:column}
+    .video-dialog-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1f2c3b;background:#121a24}
+    .video-dialog-title{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:650;color:#f0f5fa}
+    .video-dialog-title svg{color:#34d399}
+    .video-dialog-body{padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#080c12}
+    .video-dialog-footer{display:flex;align-items:center;justify-content:space-between;width:100%;padding:2px 4px 0;font-size:11px;color:#7a8d9e}
+    .drop-overlay{position:fixed;inset:0;z-index:99999;background:rgba(11,17,25,.88);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;pointer-events:none}
+    .drop-overlay[hidden]{display:none}
+    .drop-box{border:2px dashed #34d399;background:rgba(52,211,153,.06);border-radius:16px;padding:32px 44px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 16px 48px rgba(0,0,0,.6)}
+    .drop-box svg{color:#34d399}
+    .drop-title{font-size:17px;font-weight:650;color:#f0f5fa}
+    .drop-sub{font-size:11.5px;color:#8ba0b2}
+    .timeline-rate{font-size:11px;color:#8aa0b3;min-width:92px;text-align:right;flex:none}
+    .iteration-progress{display:none;align-items:center;gap:8px;flex:1 0 100%;color:#8aa0b3;font-size:11px}
+    .iteration-progress.active{display:flex}
+    .iteration-progress progress{flex:1;height:5px;accent-color:#65c7a5}
+    #viewPanel:fullscreen .timeline{left:16px;right:16px;top:62px}
+    @media(max-width:700px){.timeline{top:56px;gap:8px;padding:8px 10px}.timeline-label,.timeline-rate{display:none}}
     .stage-gl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}.stage{z-index:1}
     .classic-marker{color:#d2d9dc}.section-summary{display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:#859198;font-size:10px}
     .classic-menu{position:absolute;z-index:4;top:51px;left:14px;right:14px;display:flex;gap:2px;padding:4px;background:#101214;border:1px solid #383d40;border-radius:5px;color:#d2d9dc;font:12px/1.3 Arial,sans-serif}
@@ -35,47 +104,65 @@
     @media(max-width:760px){.shell{padding:0}.view-panel{width:min(100vw,100dvh);height:min(100vw,100dvh);min-height:0;aspect-ratio:1/1}.right-panel{display:none}}
     .classic-menu.context-popup[hidden]{display:none}.statusline{opacity:0;pointer-events:none;transition:opacity 150ms ease}.statusline.visible{opacity:1;pointer-events:auto}
   </style>
-  <style>
-    #viewPanel:fullscreen{width:100vw;height:100vh;min-height:0;aspect-ratio:auto;border:0;border-radius:0;background:#000}
-    #viewPanel:fullscreen .view-head{top:16px;left:16px;right:16px}
-    #viewPanel:fullscreen .overlay-bottom{left:16px;right:16px;bottom:16px}
-    .view-actions #fullscreenBtn{width:34px;height:34px;padding:0;font:18px Arial,sans-serif}
-    .workspace-toggle{border:1px solid #454b4f;background:#171a1c;color:#d2d9dc;border-radius:4px;padding:7px 10px;font:12px Arial,sans-serif;white-space:nowrap}
-    html.studio-open,body.studio-open{width:100%;height:100dvh;min-height:0;overflow:hidden;background:var(--bg)}
-    body.studio-open .shell{width:100%;height:100dvh;max-width:none;margin:0;padding:10px 16px 12px;display:grid;grid-template-rows:38px 24px minmax(0,1fr);gap:6px}
-    body.studio-open .topbar{display:flex;min-height:0;margin:0}
-    body.studio-open .page-title{display:block;margin:0;font-size:18px;line-height:24px}
-    body.studio-open .page-intro,body.studio-open .footer{display:none}
-    body.studio-open .left-panel,body.studio-open .right-panel{display:block;min-width:0;min-height:0;height:100%;padding:11px;overflow:hidden}
-    body.studio-open .left-panel{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-content:start}
-    body.studio-open .control-stack{min-width:0}
-    body.studio-open .workspace{width:100%;height:100%;min-width:0;min-height:0;grid-template-columns:310px minmax(0,1fr) 240px;place-items:stretch;gap:10px;align-items:stretch}
-    body.studio-open .view-panel{width:auto;height:min(100%,800px);min-width:0;min-height:0;aspect-ratio:1/1;align-self:center;justify-self:center;margin:0;border:1px solid var(--line);border-radius:15px;background:radial-gradient(ellipse at 50% 44%,#203142 0%,#111a25 48%,#0e1721 100%)}
-    body.studio-open .left-panel .divider{margin:9px 0}
-    body.studio-open .left-panel .field-label{margin:9px 0 5px;font-size:11px}
-    body.studio-open .left-panel .section-label{font-size:9px}
-    body.studio-open .left-panel .transport{gap:5px;margin-top:8px!important}
-    body.studio-open .left-panel .transport button{padding:7px 4px;font-size:10px;white-space:nowrap}
-    body.studio-open .left-panel .select-wrap select,body.studio-open .left-panel .speed-select,body.studio-open .left-panel .settings-select{padding:7px 6px;font-size:11px}
-    body.studio-open .left-panel .compact-label{font-size:10px;margin:7px 0 4px}
-    body.studio-open .left-panel .upload{font-size:10px;padding:7px 3px}
-    body.studio-open .left-panel .hint{font-size:9px;line-height:1.35;margin-top:7px}
-    body.studio-open .left-panel .range-row{gap:5px}
-    body.studio-open .left-panel .range-number{width:27px;font-size:10px}
-    body.studio-open .view-head{inset:17px 18px auto;left:18px;right:18px}
-    body.studio-open .view-head>div:first-child,body.studio-open #cameraPreset,body.studio-open #homeView,body.studio-open #openMenuBtn,body.studio-open .overlay-bottom{display:flex}
-    body.studio-open .view-head>div:first-child{display:block}
-    body.studio-open .statusline{position:absolute;left:18px;right:60px;bottom:48px;height:24px;margin:0;color:#788a9a;font:11px Arial,sans-serif;text-shadow:none}
-    @media(max-width:1150px){body.studio-open .workspace{grid-template-columns:290px minmax(0,1fr) 220px;gap:8px}body.studio-open .left-panel{gap:0 7px;padding:9px}body.studio-open .right-panel{padding:9px}body.studio-open .view-panel{max-height:100%}}
-    @media(max-width:900px){body.studio-open .workspace{grid-template-columns:260px minmax(0,1fr)}body.studio-open .right-panel{display:none}body.studio-open .left-panel{grid-template-columns:1fr 1fr}}
-    @media(max-width:680px){html.studio-open,body.studio-open{overflow:auto;height:auto;min-height:100dvh}body.studio-open .shell{height:auto;min-height:100dvh;padding:10px}body.studio-open .workspace{height:auto;grid-template-columns:1fr;grid-template-rows:minmax(48vh,1fr) auto}body.studio-open .view-panel{width:min(100%,70vh);height:auto;min-height:0;aspect-ratio:1}body.studio-open .left-panel{height:auto;grid-template-columns:1fr 1fr;overflow:visible}body.studio-open .right-panel{display:block}}
-  </style>
+  <link rel="stylesheet" href="studio.css">
 </head>
-<body>
+<body class="studio-open">
   <main class="shell">
-    <header class="topbar">
-      <div class="brand"><div class="mark" aria-hidden="true">◌</div><div><div class="brand-name">EmbryoMaker <span style="color:var(--mint)">Studio</span></div><div class="brand-sub">Cellular development workbench</div></div></div>
-      <div class="top-right"><div class="live-pill"><i class="dot"></i><span>Flow engine ready</span></div><button class="quiet-button" id="exportBtn" disabled>Export snapshot</button></div>
+    <header class="topbar" role="toolbar" aria-label="Application toolbar">
+      <div class="topbar-left">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 7a5 5 0 0 1 5 5"/>
+              <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+            </svg>
+          </div>
+          <span class="brand-name">EmbryoMaker</span>
+          <span class="brand-tag">Studio</span>
+        </div>
+        <div class="topbar-divider"></div>
+        <div class="doc-chip" id="docChip" title="Active simulation model">
+          <span class="doc-dot"></span>
+          <span id="activeModelChip" class="doc-title">Cell model</span>
+        </div>
+      </div>
+      <div class="top-right">
+        <div class="live-pill" title="Flow simulation core">
+          <span class="dot"></span>
+          <span id="engineStatusLabel">Flow Core</span>
+        </div>
+        <div class="cache-badge" id="topbarCacheBadge" title="Simulation persistent cache status · Click to view details">
+          <span class="cache-dot" id="topbarCacheDot"></span>
+          <span id="topbarCacheText">Cache: 0 calc</span>
+        </div>
+        <div class="topbar-button-group">
+          <button class="topbar-btn topbar-btn-accent" id="loadPrecomputedBtn" type="button" title="Load precomputed Sea Urchin Gastrulation trajectory (2,000 iterations · 100 snapshots)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Precomputed Urchin</span>
+          </button>
+          <button class="topbar-btn" id="watchVideoBtn" type="button" title="Watch rendered 3D gastrulation cross-section video (MP4 · 746 KB)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Watch Video</span>
+          </button>
+          <button class="topbar-btn" id="openProjBtn" type="button" title="Open project or snapshot file">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Open</span>
+          </button>
+          <button class="topbar-btn quiet-button" id="saveProjBtn" disabled title="Save project with all snapshots and settings (.embproj)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>Save Project</span>
+          </button>
+          <button class="topbar-btn quiet-button" id="exportTrajBtn" disabled title="Export complete multi-frame trajectory (.embtraj)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Trajectory</span>
+          </button>
+          <button class="topbar-btn quiet-button" id="exportBtn" disabled title="Export current snapshot (.dat)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span>Snapshot</span>
+          </button>
+        </div>
+      </div>
     </header>
     <h1 class="page-title">Simulation workspace</h1>
     <p class="page-intro">Explore cell behavior, inspect node state, and run documented EmbryoMaker experiments.</p>
@@ -85,8 +172,21 @@
         <div class="section-label">Experiment</div>
         <label class="field-label" for="experiment">Starting model</label>
         <div class="select-wrap"><select id="experiment" aria-label="Starting model"></select></div>
-        <input id="filePicker" class="file-input" type="file" accept=".txt,.dat,text/plain">
+        <input id="filePicker" class="file-input" type="file" accept=".embproj,.embtraj,.txt,.dat,.gz,.json,text/plain">
         <button id="uploadBtn" class="upload"><span>＋</span><span id="uploadLabel">Load input file</span></button>
+        <div class="quick-precompute-box">
+          <div class="quick-precompute-head">
+            <span class="quick-badge">Benchmark Reference</span>
+          </div>
+          <div class="quick-actions">
+            <button id="sidebarPrecomputedBtn" class="quick-btn primary" type="button" title="Load precomputed 2,000-iteration Sea Urchin trajectory (5.3 MB compressed)">
+              <span>✦ Urchin (2,000 it)</span>
+            </button>
+            <button id="sidebarWatchVideoBtn" class="quick-btn" type="button" title="Watch rendered 3D gastrulation cross-section video (MP4 · 746 KB)">
+              <span>▶ Watch Video</span>
+            </button>
+          </div>
+        </div>
         <div class="divider"></div>
         <div class="section-label">Run controls</div>
         <div class="transport" style="margin-top:12px">
@@ -95,10 +195,11 @@
           <button class="secondary" id="stepBtn">Step once</button>
           <button class="secondary" id="resetBtn">Reset</button>
         </div>
-        <label class="field-label" for="iterationRange"><span>Iteration</span><small id="iterationReadout">0 / 120</small></label>
-        <div class="range-row"><input id="iterationRange" type="range" min="0" max="120" value="0" aria-label="Iteration"><span id="iterationValue" class="range-number">0</span></div>
         <label class="field-label" for="speed">Playback speed</label>
-        <select id="speed" class="speed-select" aria-label="Playback speed"><option value="300">Slow</option><option value="140" selected>Normal</option><option value="45">Fast</option></select>
+        <select id="speed" class="speed-select" aria-label="Playback speed"><option value="slow">Slow, 3 per second</option><option value="frame" selected>Smooth, one per frame</option><option value="fast">Fast, batched</option><option value="max">Maximum throughput</option></select>
+        <label class="field-label" for="computeMode"><span>Compute</span><small id="computeInfo"></small></label>
+        <select id="computeMode" class="speed-select" aria-label="Compute mode"><option value="threads" selected>CPU threads, exact</option><option value="serial">CPU single core, exact</option><option value="exact64">GPU binary64, exact</option><option value="preview">GPU float32 preview</option></select>
+        <p class="hint">Use the timeline to move between iterations. Set Target to choose how far to run. GPU modes apply to models of 1000 nodes or more; the preview diverges from the exact trajectory.</p>
         <div class="divider"></div>
         </div>
         <div class="control-stack">
@@ -120,7 +221,99 @@
         </div>
       </aside>
       <section class="panel view-panel" id="viewPanel" aria-label="3D model view">
-        <div class="view-head"><div><div id="viewTitle" class="view-title">Cell model</div><div id="viewCaption" class="view-caption">Drag to rotate · Scroll to zoom</div></div><div class="view-actions"><button id="workspaceToggle" class="workspace-toggle" type="button" aria-expanded="false">Controls</button><select id="cameraPreset" class="settings-select" aria-label="Camera view" style="width:auto;padding:7px 9px"><option value="oblique">Oblique view</option><option value="above">View from above</option><option value="front">View from front</option></select><button id="homeView" class="icon-button" aria-label="Reset view" title="Reset view">⌂</button><button id="fullscreenBtn" class="icon-button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button><button id="openMenuBtn" class="icon-button" aria-label="Open EmbryoMaker menu" title="Right-click the view for the original menu">☰</button></div></div>
+        <div class="view-head"><div><div id="viewTitle" class="view-title">Cell model</div><div id="viewCaption" class="view-caption">Drag to rotate · Scroll to zoom</div></div><div class="view-actions"><button id="workspaceToggle" class="workspace-toggle" type="button" aria-expanded="true">Focus view</button><select id="cameraPreset" class="settings-select" aria-label="Camera view" style="width:auto;padding:7px 9px"><option value="oblique">Oblique view</option><option value="above">View from above</option><option value="front">View from front</option></select><button id="homeView" class="icon-button" aria-label="Reset view" title="Reset view">⌂</button><button id="fullscreenBtn" class="icon-button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button><button id="openMenuBtn" class="icon-button" aria-label="Open EmbryoMaker menu" title="Right-click the view for the original menu">☰</button></div></div>
+        <div class="timeline" id="timeline" aria-label="Iteration timeline">
+          <button id="timelinePlay" class="timeline-play" type="button" aria-label="Run or pause">&#9654;</button>
+          <span class="timeline-label">Iteration</span>
+          <div class="timeline-slider-wrap">
+            <input id="iterationRange" type="range" min="0" max="120" value="0" step="1" aria-label="Iteration">
+            <div id="timelineCacheTrack" class="timeline-cache-track" title="Calculated simulation cache map"></div>
+          </div>
+          <div class="timeline-readout"><span id="iterationValue">0</span><label class="target-label" for="iterationMax">Target</label><input id="iterationMax" type="number" min="1" step="1" value="120" aria-label="Run target"></div>
+          <button type="button" class="cache-badge" id="cacheBadge" aria-haspopup="dialog" title="Simulation cache status · Click for details">
+            <span class="cache-dot" id="cacheDot"></span>
+            <span id="cacheSummary">0 calc</span>
+          </button>
+          <span id="iterationReadout" class="timeline-rate"></span>
+          <div id="iterationProgress" class="iteration-progress" aria-live="polite"><span id="iterationProgressLabel">Iteration 0 of 0</span><progress id="iterationProgressBar" max="1" value="0" aria-label="Simulation iteration progress"></progress></div>
+        </div>
+        <div id="cacheModal" class="cache-modal" role="dialog" aria-modal="true" aria-label="Simulation cache and storage" tabindex="-1" hidden>
+          <div class="cache-modal-head">
+            <div class="cache-modal-title">
+              <span class="cache-dot"></span>
+              <span>Simulation Cache & Storage</span>
+            </div>
+            <button id="closeCacheModal" class="icon-button" type="button" aria-label="Close cache dialog" style="width:24px;height:24px;font-size:12px">✕</button>
+          </div>
+          <div class="cache-modal-body">
+            <div class="cache-stat-grid">
+              <div class="cache-stat-card">
+                <span class="cache-stat-label">Calculated</span>
+                <b id="cacheModalCalcCount" class="cache-stat-value">0</b>
+                <small id="cacheModalCalcPct" class="cache-stat-sub">0% of range</small>
+              </div>
+              <div class="cache-stat-card">
+                <span class="cache-stat-label">Uncalculated</span>
+                <b id="cacheModalUncalcCount" class="cache-stat-value">0</b>
+                <small id="cacheModalUncalcSub" class="cache-stat-sub">Pending frames</small>
+              </div>
+              <div class="cache-stat-card">
+                <span class="cache-stat-label">Storage</span>
+                <b id="cacheModalStorageType" class="cache-stat-value">IndexedDB</b>
+                <small id="cacheModalStorageSize" class="cache-stat-sub">Persistent</small>
+              </div>
+            </div>
+            <div class="cache-range-list">
+              <div class="cache-range-group">
+                <span class="cache-group-title">Calculated spans (instant 60 FPS playback):</span>
+                <div id="cacheCalculatedSpans" class="cache-span-pills"><span class="cache-pill calc">None</span></div>
+              </div>
+              <div class="cache-range-group">
+                <span class="cache-group-title">Uncalculated spans (pending computation):</span>
+                <div id="cacheUncalculatedSpans" class="cache-span-pills"><span class="cache-pill uncalc">None</span></div>
+              </div>
+            </div>
+            <div class="cache-modal-actions">
+              <button id="fillUncalcBtn" class="primary" type="button">Compute Pending Spans</button>
+              <button id="exportCacheBtn" class="secondary" type="button">Export Cache (.embtraj)</button>
+              <button id="clearCacheBtn" class="secondary danger" type="button">Purge Cache</button>
+            </div>
+          </div>
+        </div>
+        <div id="videoModal" class="video-modal" role="dialog" aria-modal="true" aria-label="Sea urchin video" tabindex="-1" hidden>
+          <div class="video-dialog">
+            <div class="video-dialog-head">
+              <div class="video-dialog-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Sea Urchin Gastrulation · 2,000 Iterations</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <a href="/sea_urchin_gastrulation.mp4" download="sea_urchin_gastrulation.mp4" class="topbar-btn" style="text-decoration:none;background:rgba(255,255,255,0.06);border:1px solid #283749" title="Download MP4 video (746 KB)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download MP4 (746 KB)</span>
+                </a>
+                <button class="icon-button" id="closeVideoModal" type="button" aria-label="Close video player" style="width:24px;height:24px;font-size:12px">✕</button>
+              </div>
+            </div>
+            <div class="video-dialog-body">
+              <video id="urchinVideoPlayer" controls loop playsinline style="width:100%;max-height:68vh;border-radius:8px;background:#000;outline:none">
+                <source src="/sea_urchin_gastrulation.mp4" type="video/mp4">
+                Your browser does not support HTML5 video.
+              </video>
+              <div class="video-dialog-footer">
+                <span>Flow EmbryoMaker C-transpiled simulation · 3,534 nodes · 100 snapshots</span>
+                <span>H.264 / AAC · 746 KB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="dropOverlay" class="drop-overlay" hidden>
+          <div class="drop-box">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="15" x2="12" y2="15"/></svg>
+            <div class="drop-title">Drop Simulation to Load</div>
+            <div class="drop-sub">Accepts .embproj, .embtraj, .json, .gz, .dat, .txt</div>
+          </div>
+        </div>
         <nav class="classic-menu" aria-label="EmbryoMaker view menus" hidden>
           <details><summary>Basic View Modifier</summary><div class="menu-items"><details><summary>left mouse button</summary><div class="menu-items"><button data-menu="drag-rotate">rotate</button><button data-menu="drag-zoom">zoom</button><button data-menu="drag-pan">pan</button><button data-menu="section-minx">Section from minimal x plane</button><button data-menu="section-maxx">Section from maximal x plane</button><button data-menu="section-miny">Section from minimal y plane</button><button data-menu="section-maxy">Section from maximal y plane</button><button data-menu="section-minz">Section from minimal z plane</button><button data-menu="section-maxz">Section from maximal z plane</button></div></details><button data-menu="camera-reset">reset to initial view</button><button data-menu="camera-above">view from above</button><button data-menu="camera-front">view from front</button><button data-menu="section-off">Undo sections</button><button data-menu="fixed-sections-toggle">Toggle Fixed sections when running iterations</button></div></details>
           <details><summary>show node mechanical properties</summary><div class="menu-items"><details><summary>with colors</summary><div class="menu-items"><label>property<select id="ogMechanicalColor" class="settings-select"></select></label><label>color minimum<input id="ogMechanicalColorMinimum" class="settings-select" type="number" step="any"></label><label>color maximum<input id="ogMechanicalColorMaximum" class="settings-select" type="number" step="any"></label></div></details><details><summary>with arrows (only epithelia)</summary><div class="menu-items"><label>property<select id="ogMechanicalArrow" class="settings-select"></select></label></div></details><details><summary>with semitransparent spheres</summary><div class="menu-items"><label>property<select id="ogMechanicalSphere" class="settings-select"></select></label></div></details><details><summary>color options</summary><div class="menu-items"><details><summary>change color palette</summary><div class="menu-items"><button data-menu="palette-multi">multicolor palette</button><button data-menu="palette-warm">yellow-red palette</button><button data-menu="palette-blue">blue palette</button><button data-menu="palette-green">green palette</button></div></details><button data-menu="color-range-terminal">select color max. and min. from terminal</button><button data-menu="color-min-left">select color min. with left mouse button</button><button data-menu="color-max-left">select color max. with left mouse button</button><button data-menu="color-min-middle">select color min. with middle mouse button</button><button data-menu="color-max-middle">select color max. with middle mouse button</button></div></details><details><summary>arrow options</summary><div class="menu-items"><label>arrow minimum<input id="ogMechanicalArrowMinimum" class="settings-select" type="number" step="any"></label><label>arrow maximum<input id="ogMechanicalArrowMaximum" class="settings-select" type="number" step="any"></label><label>arrow scale<input id="ogMechanicalArrowScale" class="settings-select" type="number" step="any"></label><button data-menu="arrow-scale-left">change arrow scale with left mouse button</button><button data-menu="arrow-range-terminal">select arrow max. and min. from terminal</button><button data-menu="arrow-min-left">select arrow min. with left mouse button</button><button data-menu="arrow-max-left">select arrow max. with left mouse button</button><button data-menu="arrow-min-middle">select arrow min. with middle mouse button</button><button data-menu="arrow-max-middle">select arrow max. with middle mouse button</button><button data-menu="arrow-disable">disable arrows</button></div></details><details><summary>sphere options</summary><div class="menu-items"><label>sphere minimum<input id="ogMechanicalSphereMinimum" class="settings-select" type="number" step="any"></label><label>sphere maximum<input id="ogMechanicalSphereMaximum" class="settings-select" type="number" step="any"></label><label>sphere scale<input id="ogMechanicalSphereScale" class="settings-select" type="number" step="any"></label><button data-menu="sphere-scale-left">change sphere scale with left mouse button</button><button data-menu="sphere-range-terminal">select sphere max. and min. from terminal</button><button data-menu="sphere-min-left">select sphere min. with left mouse button</button><button data-menu="sphere-max-left">select sphere max. with left mouse button</button><button data-menu="sphere-min-middle">select sphere min. with middle mouse button</button><button data-menu="sphere-max-middle">select sphere max. with middle mouse button</button><button data-menu="sphere-disable">disable spheres</button></div></details></div></details>
@@ -155,11 +348,255 @@
   <script>
   (() => {
     const $ = id => document.getElementById(id);
+    class FrameStorage {
+      constructor(maxRam = 48) {
+        this.index = new Map();
+        this.ramCache = new Map();
+        this.accessOrder = [];
+        this.sortedIters = [];
+        this.activeExp = null;
+        this.fetchingIters = new Set();
+        this.MAX_RAM_FRAMES = maxRam;
+      }
+      get size() { return this.index.size; }
+      has(it) { return this.index.has(it) || this.ramCache.has(it); }
+      get(it) {
+        if (this.ramCache.has(it)) {
+          this._touch(it);
+          return this.ramCache.get(it);
+        }
+        void this.streamFromDisk(it);
+        return this.getClosestInRam(it);
+      }
+      set(it, f) {
+        this.put(it, f, false);
+        return this;
+      }
+      delete(it) {
+        this.index.delete(it);
+        this.ramCache.delete(it);
+        const sIdx = this._binarySearch(it);
+        if (sIdx >= 0) this.sortedIters.splice(sIdx, 1);
+        const aIdx = this.accessOrder.indexOf(it);
+        if (aIdx >= 0) this.accessOrder.splice(aIdx, 1);
+        return true;
+      }
+      clear() {
+        this.index.clear();
+        this.ramCache.clear();
+        this.accessOrder = [];
+        this.sortedIters = [];
+        this.fetchingIters.clear();
+      }
+      keys() { return this.index.keys(); }
+      values() { return this.ramCache.values(); }
+      entries() { return this.ramCache.entries(); }
+      [Symbol.iterator]() { return this.ramCache.entries(); }
+
+      registerMeta(it, meta) {
+        if (!this.index.has(it)) {
+          this.index.set(it, meta);
+          const sIdx = this._binarySearch(it);
+          if (sIdx < 0) this.sortedIters.splice(~sIdx, 0, it);
+        }
+      }
+
+      put(it, frame, persist = true) {
+        if (!frame || typeof it !== 'number') return;
+        frame._cached = true;
+        const exp = frame.experiment || this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
+        frame.experiment = exp;
+        this.registerMeta(it, {
+          iteration: it,
+          count: frame.count || frame.nodes?.length || 0,
+          simulatedTime: frame.simulatedTime,
+          hasSnapshot: Boolean(frame.snapshot),
+          experiment: exp
+        });
+        this.ramCache.set(it, frame);
+        this._touch(it);
+        if (persist) {
+          queueFramePersist(frame);
+        }
+        this._enforceRamLimit();
+      }
+
+      _touch(it) {
+        const idx = this.accessOrder.indexOf(it);
+        if (idx !== -1) this.accessOrder.splice(idx, 1);
+        this.accessOrder.push(it);
+      }
+
+      _enforceRamLimit() {
+        if (this.ramCache.size <= this.MAX_RAM_FRAMES) return;
+        const current = state.iteration || 0;
+        while (this.ramCache.size > this.MAX_RAM_FRAMES && this.accessOrder.length > 0) {
+          let furthestIter = null, maxDist = -1;
+          for (const it of this.ramCache.keys()) {
+            const d = Math.abs(it - current);
+            if (d > maxDist) {
+              maxDist = d;
+              furthestIter = it;
+            }
+          }
+          if (furthestIter !== null && furthestIter !== current) {
+            this.ramCache.delete(furthestIter);
+            const aIdx = this.accessOrder.indexOf(furthestIter);
+            if (aIdx !== -1) this.accessOrder.splice(aIdx, 1);
+          } else {
+            break;
+          }
+        }
+      }
+
+      _binarySearch(target) {
+        let lo = 0, hi = this.sortedIters.length - 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          const v = this.sortedIters[mid];
+          if (v === target) return mid;
+          if (v < target) lo = mid + 1;
+          else hi = mid - 1;
+        }
+        return ~lo;
+      }
+
+      findClosestIteration(target) {
+        if (!this.sortedIters.length) return null;
+        const idx = this._binarySearch(target);
+        if (idx >= 0) return this.sortedIters[idx];
+        const ins = ~idx;
+        if (ins <= 0) return this.sortedIters[0];
+        if (ins >= this.sortedIters.length) return this.sortedIters[this.sortedIters.length - 1];
+        const prev = this.sortedIters[ins - 1], next = this.sortedIters[ins];
+        return Math.abs(prev - target) <= Math.abs(next - target) ? prev : next;
+      }
+
+      getClosestInRam(target) {
+        if (this.ramCache.has(target)) return this.ramCache.get(target);
+        let best = null, bestDist = Infinity;
+        for (const [it, frame] of this.ramCache) {
+          const d = Math.abs(it - target);
+          if (d < bestDist) {
+            bestDist = d;
+            best = frame;
+          }
+        }
+        return best;
+      }
+
+      async streamFromDisk(iteration) {
+        if (this.ramCache.has(iteration) || this.fetchingIters.has(iteration)) return;
+        this.fetchingIters.add(iteration);
+        try {
+          const exp = this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
+          const record = await dbGetFrame(exp, iteration);
+          if (record) {
+            const frame = {
+              iterations: record.iteration,
+              simulatedTime: record.simulatedTime,
+              count: record.count,
+              nodes: record.nodes,
+              cells: record.cells,
+              edges: record.edges,
+              bounds: record.bounds,
+              triangulationWarning: record.triangulationWarning,
+              snapshot: record.snapshot,
+              experiment: record.experiment,
+              _cached: true
+            };
+            this.ramCache.set(iteration, frame);
+            this._touch(iteration);
+            this._enforceRamLimit();
+            if (state.iteration === iteration || (state.scrubbing && state.progressTarget === iteration)) {
+              updateModel(frame, '', true);
+              draw();
+            }
+          }
+        } finally {
+          this.fetchingIters.delete(iteration);
+        }
+      }
+
+      prefetchAround(target, count = 5) {
+        if (!this.sortedIters.length) return;
+        const centerIdx = this._binarySearch(target);
+        const actualIdx = centerIdx >= 0 ? centerIdx : ~centerIdx;
+        for (let i = Math.max(0, actualIdx - count); i < Math.min(this.sortedIters.length, actualIdx + count + 1); i++) {
+          const it = this.sortedIters[i];
+          if (!this.ramCache.has(it)) {
+            void this.streamFromDisk(it);
+          }
+        }
+      }
+
+      snapshotCache() {
+        return {
+          index: new Map(this.index),
+          ramCache: new Map(this.ramCache),
+          accessOrder: this.accessOrder.slice(),
+          sortedIters: this.sortedIters.slice()
+        };
+      }
+
+      restore(s) {
+        if (!s) return;
+        this.index = new Map(s.index);
+        this.ramCache = new Map(s.ramCache);
+        this.accessOrder = s.accessOrder.slice();
+        this.sortedIters = s.sortedIters.slice();
+      }
+
+      async getClosestCheckpoint(target, exp) {
+        let best = null;
+        for (const [it, frame] of this.ramCache) {
+          if (it <= target && frame.snapshot && frame.experiment === exp) {
+            if (!best || it > best.iterations) best = frame;
+          }
+        }
+        if (best) return best;
+        let bestIt = -1;
+        for (const [it, meta] of this.index) {
+          if (it <= target && meta.hasSnapshot && meta.experiment === exp) {
+            if (it > bestIt) bestIt = it;
+          }
+        }
+        if (bestIt >= 0) {
+          const record = await dbGetFrame(exp, bestIt);
+          if (record && record.snapshot) return record;
+        }
+        return null;
+      }
+
+      async getAllFramesAsync() {
+        if (this.ramCache.size === this.index.size && this.ramCache.size > 0) {
+          return Array.from(this.ramCache.values()).sort((a,b)=>a.iterations-b.iterations);
+        }
+        const exp = this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
+        const diskRecords = await dbLoadFramesForExperiment(exp);
+        if (diskRecords && diskRecords.length) {
+          return diskRecords.map(r => ({
+            iterations: r.iteration,
+            simulatedTime: r.simulatedTime,
+            count: r.count,
+            nodes: r.nodes,
+            cells: r.cells,
+            edges: r.edges,
+            bounds: r.bounds,
+            triangulationWarning: r.triangulationWarning,
+            snapshot: r.snapshot,
+            experiment: r.experiment
+          })).sort((a,b)=>a.iterations-b.iterations);
+        }
+        return Array.from(this.ramCache.values()).sort((a,b)=>a.iterations-b.iterations);
+      }
+    }
     let ogCameraDistance = 5;
     let ogInitialCamera = { yaw: 0, pitch: 60*Math.PI/180 };
     const canvas = $('stage'), ctx = canvas.getContext('2d');
-    const state = { nodes: [], cells: [], edges: [], slicePlots: [], sliceSurface: false, boxGrid: {spacing:0,count:0}, iteration: 0, simulatedTime: 0, max: 120, keyboardIterationBatch:1, yaw: 0, pitch: 60*Math.PI/180, cameraDistance: 5, cameraShiftX: 0, cameraShiftY: 0, zoom: 1, panX: 0, panY: 0, playing: false, busy: false, colorMode: 'type', paletteMode: 'multi', pointScale: 1, radiusMode: 'add', ballMode: 'cylinders', nodeFilter: 'all', fixedOnly: false, showNodes: true, showApical: true, showBasal: true, showFixed: true, showBox: true, showGrid: false, showEggshell: false, showEllipses: false, showTransparentSpheres: false, showArrows: false, arrowField: 'type', sphereField: 'type', arrowScale: 1, sphereScale: 1, mechanicalArrowField:'scalar:x', otherArrowField:'type', mechanicalSphereField:'scalar:x', otherSphereField:'type', mechanicalColorField:'scalar:x', otherColorField:'type', showEpithelium: true, showMesenchyme: true, showECM: true, showCentroids: false, showPolarization: false, showDisplacement: false, showUnitMovement: false, showMovementVectors: false, showRepulsion: false, showLateralForce: false, showAxialForce: false, selected: null, selectionHistory: [], copiedNodeProperty: null, copiedCellProperty: null, cursor: null, cursorInitialized: false, cursorEnabled: false, dragDelta: null, temporalPlotsEnabled: true, geneSamples: [], plottedNodeIds: [], plottedGenes: [], inputText: null, fileName: null, lastSnapshot: null, timer: null, statusTimer: null, frame: [], bounds: null, colorLimits: {}, customColorLimits: {}, customArrowLimits: {}, customSphereLimits: {}, section: 'off', sectionFraction: 0, fixedSections: false, sectionBounds: null, dragMode: 'rotate', drawQueued: false, depthDirty: true };
-    Object.assign(state,{periodicSnapshots:false,snapshotFrequency:1000,outputLabel:'',saveImages:false,movieRecorder:null,movieChunks:[],movieEnd:0,lastOutputIteration:-1,leftMouseAdjustment:null,middleMouseAdjustment:null,activeMouseAdjustment:null});
+    const state = { nodes: [], cells: [], edges: [], slicePlots: [], sliceSurface: false, boxGrid: {spacing:0,count:0}, iteration: 0, simulatedTime: 0, max: 120, maxPinned: false, scrubbing: false, pendingIterationTarget: null, progressTarget: null, msPerIteration: 0, rateText: '', keyboardIterationBatch:1, yaw: 0, pitch: 60*Math.PI/180, cameraDistance: 5, cameraShiftX: 0, cameraShiftY: 0, zoom: 1, panX: 0, panY: 0, playing: false, busy: false, colorMode: 'type', paletteMode: 'multi', pointScale: 1, radiusMode: 'add', ballMode: 'cylinders', nodeFilter: 'all', fixedOnly: false, showNodes: true, showApical: true, showBasal: true, showFixed: true, showBox: true, showGrid: false, showEggshell: false, showEllipses: false, showTransparentSpheres: false, showArrows: false, arrowField: 'type', sphereField: 'type', arrowScale: 1, sphereScale: 1, mechanicalArrowField:'scalar:x', otherArrowField:'type', mechanicalSphereField:'scalar:x', otherSphereField:'type', mechanicalColorField:'scalar:x', otherColorField:'type', showEpithelium: true, showMesenchyme: true, showECM: true, showCentroids: false, showPolarization: false, showDisplacement: false, showUnitMovement: false, showMovementVectors: false, showRepulsion: false, showLateralForce: false, showAxialForce: false, selected: null, selectionHistory: [], copiedNodeProperty: null, copiedCellProperty: null, cursor: null, cursorInitialized: false, cursorEnabled: false, dragDelta: null, temporalPlotsEnabled: true, geneSamples: [], plottedNodeIds: [], plottedGenes: [], inputText: null, fileName: null, lastSnapshot: null, timer: null, statusTimer: null, frame: [], bounds: null, colorLimits: {}, customColorLimits: {}, customArrowLimits: {}, customSphereLimits: {}, section: 'off', sectionFraction: 0, fixedSections: false, sectionBounds: null, dragMode: 'rotate', drawQueued: false, depthDirty: true };
+    window.state = state;
+    Object.assign(state,{periodicSnapshots:false,snapshotFrequency:1000,outputLabel:'',saveImages:false,movieRecorder:null,movieChunks:[],movieEnd:0,lastOutputIteration:-1,leftMouseAdjustment:null,middleMouseAdjustment:null,activeMouseAdjustment:null,trajectoryFrames:new FrameStorage(),isTrajectoryMode:false,minIteration:0});
     state.showSprings = false;state.showCylinders=true;state.smallBalls=false;state.noBalls=false;
     const cellPalettes = {
       multi: ['#f2f2f2','#e5484d','#16b9d3','#40b64a','#c13ce0','#e7c629','#743fe3','#f07e2f'],
@@ -341,8 +778,9 @@
       ctx.globalAlpha=1;
     }
     function draw(){if(state.drawQueued)return;state.drawQueued=true;requestAnimationFrame(()=>{state.drawQueued=false;renderFrame();});}
-    function updateModel(data, elapsed='') {
+    function updateModel(data, elapsed='', isReplay=false) {
       const selectedNodeId=state.selected,selectedNodeField=$('nodeProperty')?.value||'x',selectedCellField=$('cellProperty')?.value||'phase';
+      data.experiment=data.experiment||(state.inputText!==null?(state.fileName||'custom'):$('experiment').value);
       state.nodes=data.nodes; state.cells=data.cells||[]; state.edges=data.edges||[]; state.boxGrid=data.boxGrid||state.boxGrid; state.iteration=data.iterations; state.simulatedTime=data.simulatedTime??state.simulatedTime; state.session=data.session||state.session;
       const geneOptions=$('geneColorOptions');geneOptions.textContent='';for(let gene=1;gene<=data.geneCount;gene++){const option=document.createElement('option');option.value=`scalar:gene_${gene}`;option.textContent=`Amount of regulatory molecule ${gene}`;geneOptions.append(option);}if(state.colorMode.startsWith('scalar:gene_')&&Number(state.colorMode.slice(12))>data.geneCount)state.colorMode='type';$('colorMode').value=state.colorMode;populateOgPropertyMenus();
       state.lastSnapshot=data; state.selected=null;
@@ -357,16 +795,15 @@
       state.frame=state.nodes.map(n=>({n,x:0,y:0,z:0,r:0,perspective:1,visible:true}));
       refreshColorRange();updateLegend();
       state.depthDirty=true;
-      $('emptyState').style.display='none'; $('viewTitle').textContent=data.experiment;
+      $('emptyState').style.display='none'; $('viewTitle').textContent=data.experiment; if($('activeModelChip'))$('activeModelChip').textContent=data.experiment;
       $('viewCaption').textContent=`Iteration ${data.iterations.toLocaleString()} · ${data.count.toLocaleString()} nodes · drag to ${state.dragMode}`;
-      $('iterationRange').max=state.max; $('iterationRange').value=Math.min(state.iteration,state.max);
-      $('iterationReadout').textContent=`${state.iteration} / ${state.max}`;
-      $('iterationValue').textContent=state.iteration;
+      syncTimeline();
       $('nodeCount').textContent=data.count.toLocaleString();
       $('cellCount').textContent=cells.size.toLocaleString(); $('modelStep').textContent=data.iterations.toLocaleString(); $('typeCount').textContent=types.size.toLocaleString();
       $('modelReadout').textContent=`${data.experiment} has ${data.count.toLocaleString()} nodes across ${cells.size.toLocaleString()} cells.`;
       $('sectionPosition').disabled=state.section==='off';
-      $('exportBtn').disabled=false;const selectedNode=selectedNodeId?state.nodes.find(n=>n.id===selectedNodeId):null;if(selectedNode)showSelectedNode(selectedNode,selectedNodeField,selectedCellField);else{$('nodeEditControls').hidden=true;$('cellEditControls').hidden=true;}captureGeneSample();draw();const warning=data.triangulationWarning?`Iteration ${data.iterations} used distance-based neighbors after Delaunay status ${data.triangulationWarning}.`:`Model ready at iteration ${data.iterations}.`;setStatus(warning,false,elapsed);
+      if(!isReplay&&data&&typeof data.iterations==='number'){persistFrame(data);}
+      $('exportBtn').disabled=false;if($('exportTrajBtn'))$('exportTrajBtn').disabled=state.trajectoryFrames.size===0;const selectedNode=selectedNodeId?state.nodes.find(n=>n.id===selectedNodeId):null;if(selectedNode)showSelectedNode(selectedNode,selectedNodeField,selectedCellField);else{$('nodeEditControls').hidden=true;$('cellEditControls').hidden=true;}captureGeneSample();draw();const warning=data.triangulationWarning?`Iteration ${data.iterations} used distance-based neighbors after Delaunay status ${data.triangulationWarning}.`:`Model ready at iteration ${data.iterations}.`;setStatus(warning,false,elapsed);
     }
     let restartQueued=false;
     function requestModelRestart(){
@@ -379,8 +816,267 @@
       restartQueued=false;
       queueMicrotask(()=>{if(state.busy)restartQueued=true;else void runAt(0,true);});
     }
+    const DB_NAME='EmbryoMakerDB';
+    const DB_VERSION=2;
+    let dbPromise=null;
+    function openCacheDB(){
+      if(dbPromise)return dbPromise;
+      dbPromise=new Promise(resolve=>{
+        if(typeof indexedDB==='undefined'){resolve(null);return;}
+        const req=indexedDB.open(DB_NAME,DB_VERSION);
+        req.onupgradeneeded=e=>{
+          const db=e.target.result;
+          if(!db.objectStoreNames.contains('frames')){
+            const store=db.createObjectStore('frames',{keyPath:'key'});
+            store.createIndex('by_experiment','experiment',{unique:false});
+            store.createIndex('by_iter',['experiment','iteration'],{unique:true});
+          }
+        };
+        req.onsuccess=()=>resolve(req.result);
+        req.onerror=()=>resolve(null);
+      });
+      return dbPromise;
+    }
+    let pendingDbFrames=[];
+    let dbFlushTimer=null;
+    function queueFramePersist(frame){
+      if(!frame||typeof frame.iterations!=='number')return;
+      pendingDbFrames.push(frame);
+      if(!dbFlushTimer)dbFlushTimer=setTimeout(flushDbFrames,80);
+    }
+    async function flushDbFrames(){
+      dbFlushTimer=null;
+      if(!pendingDbFrames.length)return;
+      const batch=pendingDbFrames;
+      pendingDbFrames=[];
+      try{
+        const db=await openCacheDB();
+        if(!db)return;
+        const tx=db.transaction('frames','readwrite');
+        const store=tx.objectStore('frames');
+        for(const f of batch){
+          const exp=f.experiment||$('experiment')?.value||'default';
+          store.put({
+            key:`${exp}:${f.iterations}`,
+            experiment:exp,
+            iteration:f.iterations,
+            simulatedTime:f.simulatedTime,
+            count:f.count||f.nodes?.length||0,
+            nodes:f.nodes,
+            cells:f.cells,
+            edges:f.edges,
+            bounds:f.bounds,
+            triangulationWarning:f.triangulationWarning||0,
+            timestamp:Date.now(),
+            snapshot:f.snapshot||null
+          });
+        }
+      }catch(err){}
+    }
+    async function dbLoadFramesForExperiment(exp){
+      try{
+        const db=await openCacheDB();
+        if(!db)return [];
+        const tx=db.transaction('frames','readonly');
+        const store=tx.objectStore('frames');
+        const index=store.index('by_experiment');
+        return new Promise(resolve=>{
+          const req=index.getAll(IDBKeyRange.only(exp));
+          req.onsuccess=()=>resolve(req.result||[]);
+          req.onerror=()=>resolve([]);
+        });
+      }catch{return [];}
+    }
+    async function dbGetFrame(exp, iteration){
+      try{
+        const db=await openCacheDB();
+        if(!db)return null;
+        return new Promise(resolve=>{
+          const tx=db.transaction('frames','readonly');
+          const store=tx.objectStore('frames');
+          const req=store.get(`${exp}:${iteration}`);
+          req.onsuccess=()=>resolve(req.result||null);
+          req.onerror=()=>resolve(null);
+        });
+      }catch{return null;}
+    }
+    async function dbLoadIndexForExperiment(exp){
+      try{
+        const db=await openCacheDB();
+        if(!db)return [];
+        const tx=db.transaction('frames','readonly');
+        const store=tx.objectStore('frames');
+        const index=store.index('by_experiment');
+        const req=index.openKeyCursor(IDBKeyRange.only(exp));
+        const iters=[];
+        return new Promise(resolve=>{
+          req.onsuccess=e=>{
+            const cursor=e.target.result;
+            if(cursor){
+              const parts=String(cursor.primaryKey).split(':');
+              const it=Number(parts[parts.length-1]);
+              if(Number.isFinite(it))iters.push(it);
+              cursor.continue();
+            } else {
+              resolve(iters);
+            }
+          };
+          req.onerror=()=>resolve([]);
+        });
+      }catch{return [];}
+    }
+    async function dbClearFramesForExperiment(exp){
+      try{
+        const db=await openCacheDB();
+        if(!db)return;
+        const tx=db.transaction('frames','readwrite');
+        const store=tx.objectStore('frames');
+        const index=store.index('by_experiment');
+        const req=index.openCursor(IDBKeyRange.only(exp));
+        req.onsuccess=e=>{const c=e.target.result;if(c){c.delete();c.continue();}};
+      }catch(err){}
+    }
+    function computeCacheRanges(min,max,cachedIters){
+      if(!cachedIters.length)return {cachedSpans:[],uncalculatedSpans:min<=max?[[min,max]]:[],coverageRatio:0,totalCached:0};
+      const cachedSpans=[];
+      let spanStart=cachedIters[0],spanEnd=cachedIters[0];
+      for(let i=1;i<cachedIters.length;i++){
+        const it=cachedIters[i];
+        if(it<=spanEnd+1)spanEnd=it;
+        else{cachedSpans.push([spanStart,spanEnd]);spanStart=it;spanEnd=it;}
+      }
+      cachedSpans.push([spanStart,spanEnd]);
+      const uncalculatedSpans=[];
+      let cursor=min;
+      for(const [start,end] of cachedSpans){
+        if(start>cursor)uncalculatedSpans.push([cursor,Math.min(start-1,max)]);
+        cursor=Math.max(cursor,end+1);
+      }
+      if(cursor<=max)uncalculatedSpans.push([cursor,max]);
+      const inRange=cachedIters.filter(it=>it>=min&&it<=max).length;
+      const coverageRatio=inRange/Math.max(1,max-min+1);
+      return {cachedSpans,uncalculatedSpans,coverageRatio,totalCached:cachedIters.length};
+    }
+    function formatSpans(spans){
+      if(!spans.length)return 'None';
+      return spans.map(([s,e])=>s===e?`${s}`:`${s} to ${e}`).join(', ');
+    }
+    function updateCacheVisuals(){
+      const min=state.minIteration||0,max=Math.max(1,state.max);
+      const iters=state.trajectoryFrames?.sortedIters?.length?state.trajectoryFrames.sortedIters:Array.from(state.trajectoryFrames?.keys?.()||[]).sort((a,b)=>a-b);
+      const {cachedSpans,uncalculatedSpans,coverageRatio,totalCached}=computeCacheRanges(min,max,iters);
+      const track=$('timelineCacheTrack');
+      if(track){
+        if(!cachedSpans.length){
+          track.style.background='#18222d';
+        } else {
+          const total=Math.max(1,max-min);
+          const stops=[];
+          let lastPct=0;
+          for(const [start,end] of cachedSpans){
+            const p0=Math.max(0,Math.min(100,((start-min)/total)*100));
+            const p1=Math.max(p0+0.5,Math.min(100,((end-min)/total)*100));
+            if(p0>lastPct){stops.push(`#18222d ${lastPct.toFixed(2)}%`,`#18222d ${p0.toFixed(2)}%`);}
+            stops.push(`#34d399 ${p0.toFixed(2)}%`,`#34d399 ${p1.toFixed(2)}%`);
+            lastPct=p1;
+          }
+          if(lastPct<100)stops.push(`#18222d ${lastPct.toFixed(2)}%`,`#18222d 100%`);
+          track.style.background=`linear-gradient(90deg, ${stops.join(', ')})`;
+        }
+      }
+      const pct=Math.round(coverageRatio*100);
+      const summaryText=totalCached===0?'0 calc':pct===100?`${totalCached} calc (100%)`:`${totalCached} calc (${pct}%)`;
+      const dotState=totalCached===0?'empty':pct===100?'':'partial';
+      const tooltip=`Calculated: ${formatSpans(cachedSpans)} · Uncalculated: ${formatSpans(uncalculatedSpans)} · Click to manage`;
+      const badgeSummary=$('cacheSummary');if(badgeSummary)badgeSummary.textContent=summaryText;
+      const cacheDot=$('cacheDot');if(cacheDot)cacheDot.className=`cache-dot ${dotState}`.trim();
+      const badge=$('cacheBadge');if(badge)badge.title=tooltip;
+      const topbarText=$('topbarCacheText');if(topbarText)topbarText.textContent=`Cache: ${summaryText}`;
+      const topbarDot=$('topbarCacheDot');if(topbarDot)topbarDot.className=`cache-dot ${dotState}`.trim();
+      const modal=$('cacheModal');
+      if(modal&&!modal.hidden){
+        $('cacheModalCalcCount').textContent=totalCached.toLocaleString();
+        $('cacheModalCalcPct').textContent=`${pct}% of range`;
+        const uncalcCount=Math.max(0,(max-min+1)-iters.filter(i=>i>=min&&i<=max).length);
+        $('cacheModalUncalcCount').textContent=uncalcCount.toLocaleString();
+        $('cacheCalculatedSpans').innerHTML=cachedSpans.length?cachedSpans.map(([s,e])=>`<span class="cache-pill calc">${s===e?s:`${s} to ${e}`}</span>`).join(''):'<span class="cache-pill calc">None</span>';
+        $('cacheUncalculatedSpans').innerHTML=uncalculatedSpans.length?uncalculatedSpans.map(([s,e])=>`<span class="cache-pill uncalc">${s===e?s:`${s} to ${e}`}</span>`).join(''):'<span class="cache-pill calc">Fully calculated (100%)</span>';
+      }
+    }
+    function persistFrame(frame){
+      if(!frame||typeof frame.iterations!=='number'||frame._cached)return;
+      state.trajectoryFrames.put(frame.iterations,frame,true);
+      updateCacheVisuals();
+    }
+    async function loadExperimentCache(exp){
+      if(!exp)return;
+      state.trajectoryFrames.activeExp=exp;
+      try{
+        const iters=await dbLoadIndexForExperiment(exp);
+        if(iters&&iters.length){
+          for(const it of iters){
+            state.trajectoryFrames.registerMeta(it,{iteration:it,experiment:exp});
+          }
+          const maxIter=Math.max(...iters);
+          if(maxIter>state.max)state.max=maxIter;
+          syncTimeline();
+          updateCacheVisuals();
+          state.trajectoryFrames.prefetchAround(iters[0],6);
+        }
+      }catch(err){}
+    }
+    const dialogReturnFocus=new WeakMap();
+    function setDialogOpen(modal,open){
+      if(open===!modal.hidden)return;
+      if(open){dialogReturnFocus.set(modal,document.activeElement);modal.hidden=false;modal.querySelector('button')?.focus();}
+      else{modal.hidden=true;dialogReturnFocus.get(modal)?.focus();}
+    }
+    document.addEventListener('keydown',event=>{
+      const modal=document.querySelector('[role="dialog"]:not([hidden])');
+      if(!modal||event.key!=='Tab')return;
+      const controls=[...modal.querySelectorAll('button,a[href],input,select,video[controls],[tabindex="0"]')].filter(el=>!el.disabled&&el.getClientRects().length);
+      if(!controls.length){event.preventDefault();modal.focus();return;}
+      const first=controls[0],last=controls[controls.length-1];
+      if(event.shiftKey&&(document.activeElement===first||!modal.contains(document.activeElement))){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&(document.activeElement===last||!modal.contains(document.activeElement))){event.preventDefault();first.focus();}
+    });
+    function toggleCacheModal(force){
+      const modal=$('cacheModal');
+      if(!modal)return;
+      const open=typeof force==='boolean'?force:modal.hidden;
+      setDialogOpen(modal,open);
+      if(open)updateCacheVisuals();
+    }
+    // Packed model frame from the server (see make_model_binary in ui/server.flow).
+    const BINARY_FLOAT_FIELDS=['x','y','z','radius','eqd','energy','you','adh','rep','rec','erp','est','eqs','hoo','mov','dmo','x0','y0','z0','ecm','cod','grd','pld','vod','dif','kfi','pla','kvol','phase','elongationFactor','moveX','moveY','moveZ','repX','repY','repZ','lateralX','lateralY','lateralZ','axialX','axialY','axialZ'];
+    const BINARY_INT_FIELDS=['id','fixed','type','cell','other','marge','talone','ndiv','lineage','box'];
+    const textDecoder=new TextDecoder();
+    function decodeModel(buffer){
+      const bytes=new Uint8Array(buffer),view=new DataView(buffer);
+      if(bytes.length<24||String.fromCharCode(bytes[0],bytes[1],bytes[2],bytes[3])!=='EMB1')throw Error('Unexpected model frame from the server');
+      let offset=4;const metaLength=view.getUint32(offset,true);offset+=4;
+      const meta=JSON.parse(textDecoder.decode(bytes.subarray(offset,offset+metaLength)));offset=(offset+metaLength+7)&~7;
+      const count=view.getUint32(offset,true),floatFields=view.getUint32(offset+4,true),intFields=view.getUint32(offset+8,true),geneCount=view.getUint32(offset+12,true);offset+=16;
+      if(floatFields!==BINARY_FLOAT_FIELDS.length||intFields!==BINARY_INT_FIELDS.length)throw Error('Model frame field layout does not match this page');
+      const floats=new Float64Array(buffer,offset,count*floatFields);offset+=count*floatFields*8;
+      const ints=new Int32Array(buffer,offset,count*intFields);offset+=count*intFields*4;
+      const genes=new Float64Array(buffer,offset,count*geneCount);offset+=count*geneCount*8;
+      const edgeCount=view.getUint32(offset,true);offset+=8;
+      const edgeData=new Int32Array(buffer,offset,edgeCount*3);
+      const nodes=new Array(count);
+      for(let i=0;i<count;i++){const n={};const f=i*floatFields,k=i*intFields,g=i*geneCount;
+        for(let j=0;j<intFields;j++)n[BINARY_INT_FIELDS[j]]=ints[k+j];
+        n.fixed=n.fixed!==0;
+        for(let j=0;j<floatFields;j++)n[BINARY_FLOAT_FIELDS[j]]=floats[f+j];
+        const geneValues=new Array(geneCount);for(let j=0;j<geneCount;j++)geneValues[j]=genes[g+j];n.genes=geneValues;
+        nodes[i]=n;}
+      const edges=new Array(edgeCount);
+      for(let e=0;e<edgeCount;e++)edges[e]={a:edgeData[e*3],b:edgeData[e*3+1],inter:edgeData[e*3+2]!==0};
+      meta.nodes=nodes;meta.edges=edges;return meta;
+    }
     async function sendSession(body, endpoint='/api/session') {
       const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(response.ok&&(response.headers.get('content-type')||'').startsWith('application/octet-stream'))return decodeModel(await response.arrayBuffer());
       const data=await response.json(); if(!response.ok)throw Error(data.error||'Simulation failed'); return data;
     }
     window.embryomakerPlotSlice=async function(axis='z',side='min',field=0,resolution=450,surface=state.sliceSurface,decoy=(state.nodes.slice().reverse().find(node=>node.type<4)?.id||state.nodes.length)){
@@ -409,20 +1105,59 @@
     function toggleMovie(){if(state.movieRecorder){const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();return;}const end=Number(window.prompt('Save movie until which iteration?',String(Math.max(state.iteration+1,state.iteration+state.snapshotFrequency*10))));if(!Number.isInteger(end)||end<=state.iteration){setStatus('Enter an iteration after the current time.',true);return;}if(typeof $('stageGL').captureStream!=='function'||typeof MediaRecorder==='undefined'){setStatus('Movie recording is unavailable in this browser.',true);return;}try{const stream=$('stageGL').captureStream(20),track=stream.getVideoTracks()[0];state.movieChunks=[];state.movieEnd=end;state.movieLabel=`${state.outputLabel||'embryomaker'}_${Date.now()}`;state.max=Math.max(state.max,end);$('iterationRange').max=state.max;$('iterationReadout').textContent=`${state.iteration} / ${state.max}`;state.movieTrack=track;const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';state.movieRecorder=new MediaRecorder(stream,{mimeType});state.movieRecorder.ondataavailable=event=>{if(event.data.size)state.movieChunks.push(event.data);};state.movieRecorder.onstop=async()=>{const blob=new Blob(state.movieChunks,{type:mimeType});stream.getTracks().forEach(item=>item.stop());state.movieTrack=null;state.movieChunks=[];try{const movie=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the movie recording'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.movieLabel,movie},`/api/session/${state.session}/save-movie`);setStatus(`Saved movie to ${result.path}.`);}catch(error){downloadBlob(blob,`${state.movieLabel}.webm`);setStatus(`GIF conversion failed. Saved WebM movie instead: ${error.message}`,true);}};state.movieRecorder.start();setStatus(`Movie recording through iteration ${end}.`);}catch(error){state.movieRecorder=null;setStatus(`Could not start movie recording: ${error.message}`,true);}}
     async function handleOutputIteration(iteration){const frequency=Math.max(1,state.snapshotFrequency),atFrequency=iteration%frequency===0;if(atFrequency&&state.periodicSnapshots)await saveSnapshotToOutput();if(atFrequency&&state.saveImages)await outputImage(iteration);if(state.movieRecorder){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));await new Promise(resolve=>setTimeout(resolve,60));if(iteration>=state.movieEnd){await new Promise(resolve=>setTimeout(resolve,100));const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();}}}
     async function runAt(iteration,restart=false) {
-      if(state.busy)return false; state.busy=true; clearTimeout(state.timer);
-      $('pauseBtn').disabled=true; $('runBtn').disabled=true; $('stepBtn').disabled=true; $('exportBtn').disabled=true;
-      setStatus('Running Flow simulation…'); const started=performance.now(); let succeeded=true;
+      if(state.isTrajectoryMode){
+        const closestIt=state.trajectoryFrames.findClosestIteration(iteration);
+        if(closestIt!==null){
+          const frame=state.trajectoryFrames.get(closestIt);
+          if(frame){updateModel(frame,'',true);syncTimeline();}
+        }
+        return true;
+      }
+      const activeExperiment=state.inputText!==null?(state.fileName||'custom'):$('experiment').value;
+      if(!restart&&state.trajectoryFrames.has(iteration)){
+        const cached=state.trajectoryFrames.get(iteration);
+        if(cached&&cached.experiment===activeExperiment){
+          updateModel(cached,'',true);syncTimeline();
+          return true;
+        }
+      }
+      if(state.busy){state.pendingIterationTarget=Math.max(0,Math.floor(iteration));return true;} state.busy=true; clearTimeout(state.timer);state.pendingIterationTarget=null;state.progressTarget=iteration;
+      $('pauseBtn').disabled=false; $('runBtn').disabled=true; $('stepBtn').disabled=true; $('exportBtn').disabled=true;
+      setStatus('Running Flow simulation…'); const started=performance.now(); let succeeded=true;syncIterationProgress();
       try {
         const rewinding=!restart&&Boolean(state.session)&&iteration<state.iteration;
         if(restart||!state.session||rewinding) {
-          const body={}; if(state.inputText!==null){body.inputText=state.inputText;body.fileName=state.fileName;}else body.example=$('experiment').value;
+          let body={};
+          if(state.inputText!==null){body.inputText=state.inputText;body.fileName=state.fileName;}
+          else body.example=$('experiment').value;
+          if(rewinding){
+            const bestCp=await state.trajectoryFrames.getClosestCheckpoint(iteration,activeExperiment);
+            if(bestCp&&bestCp.iterations>0&&bestCp.snapshot){
+              body={inputText:bestCp.snapshot,fileName:`checkpoint_${bestCp.iterations}.dat`};
+            }
+          }
           const initial=await sendSession(body);
-          if(!rewinding){state.selected=null;state.selectionHistory=[];state.selectionMode=null;state.cursorEnabled=false;state.cursorInitialized=false;state.cursor=null;state.temporalPlotsEnabled=true;state.geneSamples=[];state.plottedNodeIds=[];state.plottedGenes=[];state.slicePlots=[];state.sliceSurface=false;state.fixedSections=false;state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};state.sectionBounds=null;state.section='off';state.sectionFraction=0;state.max=Math.max(120,initial.iterations+120);$('genePlotPanel').hidden=true;$('sectionPlane').value='off';$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';resetCamera();setDragMode('rotate');}
+          if(!rewinding&&restart){state.selected=null;state.selectionHistory=[];state.selectionMode=null;state.cursorEnabled=false;state.cursorInitialized=false;state.cursor=null;state.temporalPlotsEnabled=true;state.geneSamples=[];state.plottedNodeIds=[];state.plottedGenes=[];state.slicePlots=[];state.sliceSurface=false;state.fixedSections=false;state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};state.sectionBounds=null;state.section='off';state.sectionFraction=0;state.max=Math.max(120,initial.iterations+120);state.maxPinned=false;state.msPerIteration=0;state.rateText='';$('genePlotPanel').hidden=true;$('sectionPlane').value='off';$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';resetCamera();setDragMode('rotate');}
           updateModel(initial,`${((performance.now()-started)/1000).toFixed(1)} s`);
         }
-        while(state.iteration<iteration){let next=iteration;const outputActive=state.periodicSnapshots||state.saveImages||state.movieRecorder;const frequency=Math.max(1,state.snapshotFrequency);if(outputActive){const boundary=(Math.floor(state.iteration/frequency)+1)*frequency;if(boundary<next)next=boundary;}const includeSnapshot=state.periodicSnapshots&&next%frequency===0;const data=await sendSession({steps:next-state.iteration,includeSnapshot},`/api/session/${state.session}/advance`);updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);if(next%frequency===0)await handleOutputIteration(next);}
+        while(state.iteration<iteration){
+          if(state.pendingIterationTarget!==null){iteration=state.pendingIterationTarget;state.pendingIterationTarget=null;state.progressTarget=iteration;if(iteration<=state.iteration)break;}
+          const batchSize=Math.max(1,Math.min(64,Math.round(100/(state.msPerIteration||4))));
+          let next=Math.min(iteration,state.iteration+batchSize);
+          const outputActive=state.periodicSnapshots||state.saveImages||state.movieRecorder;
+          const frequency=Math.max(1,state.snapshotFrequency);
+          if(outputActive){
+            const boundary=(Math.floor(state.iteration/frequency)+1)*frequency;
+            if(boundary<next)next=boundary;
+          }
+          const includeSnapshot=(state.periodicSnapshots&&next%frequency===0)||next===iteration;
+          const data=await sendSession({steps:next-state.iteration,includeSnapshot},`/api/session/${state.session}/advance`);
+          updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);
+          syncIterationProgress();
+          if(next%frequency===0)await handleOutputIteration(next);
+        }
       } catch(e) { succeeded=false; setStatus(e.message,true); }
-      finally { state.busy=false; $('runBtn').disabled=false; $('stepBtn').disabled=false; $('pauseBtn').disabled=!state.playing; $('exportBtn').disabled=!state.lastSnapshot; flushQueuedRestart(); }
+      finally { state.busy=false;state.progressTarget=null;state.pendingIterationTarget=null;syncIterationProgress();$('runBtn').disabled=false; $('stepBtn').disabled=false; $('pauseBtn').disabled=!state.playing; $('exportBtn').disabled=!state.lastSnapshot; flushQueuedRestart(); }
       return succeeded;
     }
     async function runMenuIterations(count){
@@ -452,17 +1187,414 @@
     async function moveCellTo(cell,x,y,z){try{const data=await sendSession({cellId:cell.id,x,y,z},`/api/session/${state.session}/cell-move`);updateModel(data);setStatus(`Moved cell ${cell.id}.`);}catch(error){setStatus(error.message,true);}}
     async function moveFromTerminal(kind){let selected=state.nodes.find(item=>item.id===state.selected),index;if(kind==='node'){if(!selected){const raw=window.prompt('Node index');if(raw===null)return;index=Number(raw);selected=state.nodes.find(item=>item.id===index);}if(!selected){setStatus('Choose a node in the current model.',true);return;}try{const x=promptedCoordinate('x',selected.x),y=x===null?null:promptedCoordinate('y',selected.y),z=y===null?null:promptedCoordinate('z',selected.z);if(z===null)return;await moveNodeTo(selected,x,y,z);}catch(error){setStatus(error.message,true);}return;}if(!selected){const raw=window.prompt('Cell index');if(raw===null)return;index=Number(raw);}else index=selected.cell;const cell=state.cells.find(item=>item.id===index);if(!cell){setStatus('Choose a cell in the current model.',true);return;}try{const x=promptedCoordinate('x',cell.x),y=x===null?null:promptedCoordinate('y',cell.y),z=y===null?null:promptedCoordinate('z',cell.z);if(z===null)return;await moveCellTo(cell,x,y,z);}catch(error){setStatus(error.message,true);}}
     function applyMouseMove(){const delta=state.dragDelta,target=state.nodes.find(item=>item.id===state.selected);if(!delta)return;if(state.dragMode==='move-node'&&target)moveNodeTo(target,target.x+delta.x,target.y+delta.y,target.z+delta.z);else if(state.dragMode==='move-cell'&&target){const cell=state.cells.find(item=>item.id===target.cell);if(cell)moveCellTo(cell,cell.x+delta.x,cell.y+delta.y,cell.z+delta.z);}state.dragDelta=null;}
-    function stop(){state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;setStatus(`Paused at iteration ${state.iteration}.`);}
-    async function advance(){if(!state.playing||state.busy)return;if(state.iteration>=state.max){stop();return;}const succeeded=await runAt(state.iteration+1);if(!succeeded){state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;return;}if(state.playing&&state.iteration<state.max)state.timer=setTimeout(advance,Number($('speed').value));else stop();}
-    $('runBtn').addEventListener('click',()=>{if(state.iteration===0||!state.nodes.length){state.playing=true;$('pauseBtn').disabled=false;advance();}else{state.playing=true;$('pauseBtn').disabled=false;advance();}});
+    function syncTimeline(){
+      if(state.iteration>state.max)state.max=state.iteration;
+      const range=$('iterationRange');if(Number(range.max)!==state.max)range.max=state.max;
+      if(!state.scrubbing)range.value=Math.min(state.iteration,state.max);
+      range.style.setProperty('--fill',`${(Number(range.value)/Math.max(1,state.max))*100}%`);
+      $('iterationValue').textContent=state.scrubbing?Number(range.value):state.iteration;
+      const maxInput=$('iterationMax');if(document.activeElement!==maxInput&&Number(maxInput.value)!==state.max)maxInput.value=state.max;
+      $('iterationReadout').textContent=state.playing&&state.rateText?state.rateText:'';
+      range.setAttribute('aria-valuetext',`Iteration ${range.value} of ${state.max}`);
+      const playButton=$('timelinePlay');playButton.setAttribute('aria-label',state.playing?'Pause simulation':'Run simulation');playButton.setAttribute('aria-pressed',String(state.playing));playButton.innerHTML=state.playing?'&#10074;&#10074;':'&#9654;';playButton.classList.toggle('playing',state.playing);
+      if(!state.scrubbing)updateCacheVisuals();
+    }
+    function syncIterationProgress(){const panel=$('iterationProgress'),bar=$('iterationProgressBar'),label=$('iterationProgressLabel');if(!panel)return;const target=state.progressTarget;panel.classList.toggle('active',state.busy&&target!==null);if(target===null)return;bar.max=Math.max(1,target);bar.value=Math.min(state.iteration,target);label.textContent=`Iteration ${Math.min(state.iteration,target)} of ${target}`;}
+    function stop(){state.playing=false;clearTimeout(state.timer);if(state.busy)state.pendingIterationTarget=state.iteration;$('pauseBtn').disabled=true;setStatus(state.busy?'Pausing after the current batch.':`Paused at iteration ${state.iteration}.`);syncTimeline();}
+    // Play modes: slow waits 300 ms between single iterations, frame runs one
+    // iteration per screen update, fast and max batch several iterations per
+    // request so the solver, not the round trip, sets the pace. Batch sizes
+    // adapt to the measured time per iteration.
+    async function playLoop(){
+      if(!state.playing)return;
+      const activeExperiment = state.inputText !== null ? (state.fileName || 'custom') : $('experiment').value;
+      const mode = $('speed').value;
+      const iters = state.trajectoryFrames.sortedIters.length
+        ? state.trajectoryFrames.sortedIters
+        : Array.from(state.trajectoryFrames.keys()).sort((a,b)=>a-b);
+
+      let nextIter = null;
+      if (iters.length > 0) {
+        const higherIters = iters.filter(it => it > state.iteration);
+        if (higherIters.length > 0) {
+          if (state.isTrajectoryMode) {
+            nextIter = higherIters[0];
+          } else {
+            const stride = mode === 'slow' || mode === 'frame' ? 1 : mode === 'fast' ? 2 : 4;
+            const target = state.iteration + stride;
+            nextIter = higherIters.find(it => it >= target) || higherIters[0];
+            if (nextIter - state.iteration > Math.max(10, stride * 4) && !higherIters.includes(state.iteration + 1)) {
+              nextIter = null;
+            }
+          }
+        } else if (state.isTrajectoryMode || (state.iteration >= state.max && iters.length > 1)) {
+          if (!state.maxPinned) {
+            const minIt = state.isTrajectoryMode ? state.minIteration : iters[0];
+            state.iteration = minIt;
+            const f0 = state.trajectoryFrames.get(minIt);
+            if (f0) updateModel(f0, '', true);
+            syncTimeline();
+            const delay = mode === 'slow' ? 300 : mode === 'frame' ? 80 : 30;
+            state.timer = setTimeout(playLoop, delay);
+            return;
+          } else {
+            stop();
+            return;
+          }
+        }
+      }
+
+      if (nextIter !== null) {
+        const frame = state.trajectoryFrames.get(nextIter);
+        if (frame && (state.isTrajectoryMode || frame.experiment === activeExperiment)) {
+          state.iteration = nextIter;
+          updateModel(frame, '', true);
+          state.trajectoryFrames.prefetchAround(nextIter, 6);
+          syncTimeline();
+          const delay = mode === 'slow' ? 300 : mode === 'frame' ? 40 : mode === 'fast' ? 16 : 8;
+          state.rateText = mode === 'slow' ? '3 it/s' : mode === 'frame' ? '25 it/s' : mode === 'fast' ? '60 it/s' : '120 it/s';
+          state.timer = setTimeout(playLoop, delay);
+          return;
+        }
+      }
+
+      if (state.isTrajectoryMode) {
+        stop();
+        return;
+      }
+
+      if (state.busy) { state.timer = setTimeout(playLoop, 4); return; }
+      if (state.iteration >= state.max) {
+        if (state.maxPinned) { stop(); return; }
+        state.max = Math.max(state.max + 1, Math.ceil(state.max * 1.5));
+        syncTimeline();
+      }
+
+      let steps = 1;
+      if (mode === 'fast' || mode === 'max') {
+        const budget = mode === 'fast' ? 40 : 200, perStep = Math.max(0.1, state.msPerIteration || 4);
+        steps = Math.max(1, Math.min(mode === 'fast' ? 64 : 2000, Math.round(budget / perStep)));
+      }
+      steps = Math.max(1, Math.min(steps, state.max - state.iteration));
+
+      const started = performance.now(), from = state.iteration;
+      const ok = await runAt(from + steps);
+      const elapsed = performance.now() - started, advanced = state.iteration - from;
+      if (advanced > 0) {
+        const per = elapsed / advanced;
+        state.msPerIteration = state.msPerIteration ? 0.7 * state.msPerIteration + 0.3 * per : per;
+        state.rateText = `${(1000 / per).toFixed(per > 100 ? 1 : 0)} it/s`;
+      }
+      if (!ok) { state.playing = false; $('pauseBtn').disabled = true; syncTimeline(); return; }
+      if (!state.playing) { syncTimeline(); return; }
+      syncTimeline();
+      state.timer = setTimeout(playLoop, mode === 'slow' ? 300 : 0);
+    }
+    function play(){
+      if(state.playing)return;
+      if(state.iteration>=state.max){
+        const minIt=state.isTrajectoryMode?state.minIteration:0;
+        state.iteration=minIt;
+        if(state.trajectoryFrames.has(minIt)){
+          const f=state.trajectoryFrames.get(minIt);
+          if(f)updateModel(f,'',true);
+        }
+        syncTimeline();
+      }
+      state.playing=true;$('pauseBtn').disabled=false;syncTimeline();void playLoop();
+    }
+    async function applyComputeMode(mode){try{const response=await fetch('/api/compute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mode?{mode}:{})});const info=await response.json();if(!response.ok)throw Error(info.error||'Compute mode failed');$('computeMode').value=info.mode;$('computeInfo').textContent=info.threads>1?`${info.threads} threads`:'1 thread';if($('engineStatusLabel'))$('engineStatusLabel').textContent=info.threads>1?`Flow Core (${info.threads}T)`:'Flow Core (1T)';state.msPerIteration=0;}catch(e){setStatus(e.message,true);}}
+    $('computeMode').addEventListener('change',e=>applyComputeMode(e.target.value));
+    void applyComputeMode('');
+    $('runBtn').addEventListener('click',play);
+    $('timelinePlay').addEventListener('click',()=>{if(state.playing)stop();else play();});
     $('pauseBtn').addEventListener('click',stop);
-    $('workspaceToggle').addEventListener('click',()=>{const open=!document.body.classList.contains('studio-open');document.body.classList.toggle('studio-open',open);document.documentElement.classList.toggle('studio-open',open);$('workspaceToggle').textContent=open?'Hide controls':'Controls';$('workspaceToggle').setAttribute('aria-expanded',String(open));draw();});
-    $('stepBtn').addEventListener('click',()=>{state.playing=false;runAt(Math.min(state.max,state.iteration+1));});
+    $('workspaceToggle').addEventListener('click',()=>{const open=!document.body.classList.contains('studio-open');document.body.classList.toggle('studio-open',open);document.documentElement.classList.toggle('studio-open',open);$('workspaceToggle').textContent=open?'Focus view':'Show controls';$('workspaceToggle').setAttribute('aria-expanded',String(open));draw();});
+    $('stepBtn').addEventListener('click',()=>{state.playing=false;clearTimeout(state.timer);if(state.iteration+1>state.max)state.max=state.iteration+1;runAt(state.iteration+1);});
     $('resetBtn').addEventListener('click',()=>{state.playing=false;runAt(0,true);});
-    $('iterationRange').addEventListener('change',e=>{state.playing=false;runAt(Number(e.target.value));});
-    $('experiment').addEventListener('change',()=>{if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;state.inputText=null;state.fileName=null;$('uploadLabel').textContent='Load input file';requestModelRestart();});$('experimentMenu').addEventListener('change',()=>{classicMenu.hidden=true;if($('experiment').value!==$('experimentMenu').value){$('experiment').value=$('experimentMenu').value;$('experiment').dispatchEvent(new Event('change'));}});
+    function scrubInstant(target){
+      const range=$('iterationRange');
+      range.style.setProperty('--fill',`${(target/Math.max(1,state.max))*100}%`);
+      $('iterationValue').textContent=target;
+      if(state.trajectoryFrames.size>0){
+        state.trajectoryFrames.prefetchAround(target,5);
+        const closestIt=state.trajectoryFrames.findClosestIteration(target);
+        if(closestIt!==null){
+          const frame=state.trajectoryFrames.get(closestIt);
+          if(frame){
+            updateModel(frame,'',true);
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    {
+      const range=$('iterationRange');
+      range.addEventListener('pointerdown',()=>{state.scrubbing=true;if(state.playing)stop();});
+      range.addEventListener('input',()=>{
+        state.scrubbing=true;
+        if(state.playing)stop();
+        const target=Number(range.value);
+        scrubInstant(target);
+      });
+      range.addEventListener('change',()=>{
+        state.scrubbing=false;
+        const target=Number(range.value);
+        if(!scrubInstant(target)){
+          if(target!==state.iteration){
+            state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;void runAt(target);
+          } else syncTimeline();
+        } else {
+          syncTimeline();
+        }
+      });
+      range.addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();if(state.busy)return;state.playing=false;clearTimeout(state.timer);const target=Math.max(0,state.iteration+(e.key==='ArrowRight'?1:-1));if(target>state.max)state.max=target;void runAt(target);});
+      $('iterationMax').addEventListener('change',e=>{const value=Math.floor(Number(e.target.value));if(!Number.isFinite(value)||value<1){e.target.value=state.max;return;}state.max=Math.max(value,state.iteration);state.maxPinned=true;syncTimeline();});
+    }
+    function loadProjectData(proj, fileName='Project'){
+      if(!proj.frames||!proj.frames.length)throw Error('Project has no snapshot frames');
+      state.trajectoryFrames.clear();
+      for(const f of proj.frames){
+        f.experiment=proj.name||fileName;
+        state.trajectoryFrames.set(f.iterations,f);
+        queueFramePersist(f);
+      }
+      updateCacheVisuals();
+      state.isTrajectoryMode=true;
+      state.minIteration=proj.minIteration??proj.frames[0].iterations;
+      state.max=proj.maxIteration??proj.frames[proj.frames.length-1].iterations;
+      state.iteration=state.minIteration;
+      if(proj.experiment){
+        if($('experiment'))$('experiment').value=proj.experiment;
+        if($('experimentMenu'))$('experimentMenu').value=proj.experiment;
+      }
+      if(proj.camera){
+        state.yaw=proj.camera.yaw??ogInitialCamera.yaw;
+        state.pitch=proj.camera.pitch??ogInitialCamera.pitch;
+        state.zoom=proj.camera.zoom??1;
+        state.panX=proj.camera.panX??0;
+        state.panY=proj.camera.panY??0;
+        state.cameraDistance=proj.camera.cameraDistance??ogInitialCamera.cameraDistance;
+      } else {
+        state.yaw=ogInitialCamera.yaw;
+        state.pitch=ogInitialCamera.pitch;
+        state.cameraDistance=ogInitialCamera.cameraDistance;
+        state.zoom=1;
+        state.panX=0;
+        state.panY=0;
+      }
+      state.section='off';
+      if($('sectionPlane'))$('sectionPlane').value='off';
+      if($('sectionPosition')){$('sectionPosition').value=0;$('sectionPosition').disabled=true;}
+      state.depthDirty=true;
+      if(proj.display){
+        if(proj.display.colorMode){
+          state.colorMode=proj.display.colorMode;
+          if($('colorMode'))$('colorMode').value=proj.display.colorMode;
+        }
+        if(proj.display.paletteMode){
+          state.paletteMode=proj.display.paletteMode;
+          if($('paletteMode'))$('paletteMode').value=proj.display.paletteMode;
+        }
+        if(proj.display.pointScale!==undefined){
+          state.pointScale=proj.display.pointScale;
+          if($('pointScale'))$('pointScale').value=proj.display.pointScale;
+          if($('pointScaleReadout'))$('pointScaleReadout').value=`${proj.display.pointScale}%`;
+        }
+        if(proj.display.showNodes!==undefined){
+          state.showNodes=proj.display.showNodes;
+          if($('showNodes'))$('showNodes').checked=proj.display.showNodes;
+        }
+      }
+      const range=$('iterationRange');
+      range.min=state.minIteration;
+      range.max=state.max;
+      range.value=state.minIteration;
+      $('iterationValue').textContent=state.minIteration;
+      $('iterationMax').value=state.max;
+      $('uploadLabel').textContent=fileName;
+      if($('saveProjBtn'))$('saveProjBtn').disabled=false;
+      if($('exportTrajBtn'))$('exportTrajBtn').disabled=false;
+      state.playing=false;
+      updateModel(proj.frames[0],'',true);
+      syncTimeline();
+      draw();
+      setStatus(`Loaded project "${proj.name||fileName}" with ${proj.frames.length} snapshots (${state.minIteration} to ${state.max} iterations).`);
+    }
+    async function saveProject(){
+      if(state.trajectoryFrames.size===0)return;
+      setStatus('Preparing project bundle…');
+      const frames=await state.trajectoryFrames.getAllFramesAsync();
+      const proj={
+        format:'embryomaker-project',
+        version:1,
+        name:state.lastSnapshot?.experiment||'EmbryoMaker Project',
+        experiment:state.lastSnapshot?.experiment||'EmbryoMaker Project',
+        savedAt:new Date().toISOString(),
+        totalIterations:frames.length?frames[frames.length-1].iterations:state.iteration,
+        minIteration:frames.length?frames[0].iterations:0,
+        maxIteration:frames.length?frames[frames.length-1].iterations:state.max,
+        frameCount:frames.length,
+        camera:{yaw:state.yaw,pitch:state.pitch,zoom:state.zoom,panX:state.panX,panY:state.panY,cameraDistance:state.cameraDistance},
+        display:{colorMode:state.colorMode,paletteMode:state.paletteMode,pointScale:state.pointScale,radiusMode:state.radiusMode,showNodes:state.showNodes,showCylinders:state.showCylinders},
+        iterations:frames.map(f=>f.iterations),
+        frames:frames
+      };
+      const jsonStr=JSON.stringify(proj);
+      const fileName=`${(state.outputLabel||state.lastSnapshot?.experiment||'embryomaker').replace(/[^a-zA-Z0-9_-]/g,'_')}.embproj`;
+      downloadBlob(new Blob([jsonStr],{type:'application/json'}),fileName);
+      setStatus(`Saved project with ${frames.length} snapshots to ${fileName}.`);
+    }
+    $('openProjBtn')?.addEventListener('click',()=>$('filePicker').click());
+    $('saveProjBtn')?.addEventListener('click',saveProject);
+    async function loadPrecomputedSeaUrchin(){
+      setStatus('Loading precomputed Sea Urchin Gastrulation (2,000 iterations · 101 snapshots)…');
+      try{
+        let proj;
+        if(window.DecompressionStream){
+          const res=await fetch('/sea_urchin_project.json.gz');
+          if(res.ok){
+            const ds=new DecompressionStream('gzip');
+            const stream=res.body.pipeThrough(ds);
+            const text=await new Response(stream).text();
+            proj=JSON.parse(text);
+          }
+        }
+        if(!proj){
+          const res=await fetch('/sea_urchin_project.json');
+          if(!res.ok)throw Error(`HTTP ${res.status}`);
+          proj=await res.json();
+        }
+        loadProjectData(proj,'Sea Urchin Gastrulation');
+        setStatus('Loaded Sea Urchin Gastrulation (2,000 iterations · 101 snapshots, 0 to 2,000 it). Instant replay ready.');
+      }catch(err){
+        setStatus('Could not load precomputed Urchin: '+err.message,true);
+      }
+    }
+    $('loadPrecomputedBtn')?.addEventListener('click',loadPrecomputedSeaUrchin);
+    $('sidebarPrecomputedBtn')?.addEventListener('click',loadPrecomputedSeaUrchin);
+    function toggleVideoModal(force){
+      const modal=$('videoModal');
+      if(!modal)return;
+      const open=typeof force==='boolean'?force:modal.hidden;
+      setDialogOpen(modal,open);
+      const player=$('urchinVideoPlayer');
+      if(player){
+        if(open){
+          player.currentTime=0;
+          player.play().catch(()=>{});
+        }else{
+          player.pause();
+        }
+      }
+    }
+    $('watchVideoBtn')?.addEventListener('click',()=>toggleVideoModal(true));
+    $('sidebarWatchVideoBtn')?.addEventListener('click',()=>toggleVideoModal(true));
+    $('closeVideoModal')?.addEventListener('click',()=>toggleVideoModal(false));
+    $('videoModal')?.addEventListener('click',e=>{if(e.target===$('videoModal'))toggleVideoModal(false);});
+    $('cacheBadge')?.addEventListener('click',()=>toggleCacheModal());
+    $('topbarCacheBadge')?.addEventListener('click',()=>toggleCacheModal());
+    $('closeCacheModal')?.addEventListener('click',()=>toggleCacheModal(false));
+    $('exportCacheBtn')?.addEventListener('click',()=>{toggleCacheModal(false);$('exportTrajBtn')?.click();});
+    $('clearCacheBtn')?.addEventListener('click',async()=>{
+      const exp=$('experiment')?.value||'default';
+      await dbClearFramesForExperiment(exp);
+      state.trajectoryFrames.clear();
+      updateCacheVisuals();
+      setStatus(`Purged simulation cache for ${exp}.`);
+      toggleCacheModal(false);
+    });
+    $('fillUncalcBtn')?.addEventListener('click',async()=>{
+      toggleCacheModal(false);
+      const min=state.minIteration||0,max=Math.max(1,state.max);
+      const iters=state.trajectoryFrames.sortedIters.length?state.trajectoryFrames.sortedIters:Array.from(state.trajectoryFrames.keys()).sort((a,b)=>a-b);
+      const {uncalculatedSpans}=computeCacheRanges(min,max,iters);
+      if(!uncalculatedSpans.length){
+        setStatus('All iterations in the current range are already calculated.');
+        return;
+      }
+      setStatus(`Precomputing ${uncalculatedSpans.length} pending spans up to iteration ${max}…`);
+      for(const [start,end] of uncalculatedSpans){
+        setStatus(`Precomputing iterations ${start} through ${end}…`);
+        const ok=await runAt(end);
+        if(!ok)break;
+      }
+      setStatus(`Precomputation complete up to iteration ${max}.`);
+      updateCacheVisuals();
+    });
+    $('experiment').addEventListener('change',async()=>{
+      if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;
+      state.inputText=null;state.fileName=null;$('uploadLabel').textContent='Load input file';
+      state.trajectoryFrames.clear();
+      setStatus('Loading model…');
+      requestModelRestart();
+      void loadExperimentCache($('experiment').value);
+    });
+    $('experimentMenu').addEventListener('change',()=>{classicMenu.hidden=true;if($('experiment').value!==$('experimentMenu').value){$('experiment').value=$('experimentMenu').value;$('experiment').dispatchEvent(new Event('change'));}});
     $('uploadBtn').addEventListener('click',()=>$('filePicker').click());
-    $('filePicker').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;e.target.value='';const inputText=await file.text(),previousInput=state.inputText,previousName=state.fileName;state.inputText=inputText;state.fileName=file.name;$('uploadLabel').textContent=file.name;state.playing=false;if(!await runAt(0,true)){state.inputText=previousInput;state.fileName=previousName;$('uploadLabel').textContent=previousName||'Load input file';}});
+    $('filePicker').addEventListener('change',async e=>{
+      const file=e.target.files[0];if(!file)return;e.target.value='';
+      let text;
+      try{
+        if(file.name.endsWith('.gz')||file.name.endsWith('.tgz')){
+          const ds=new DecompressionStream('gzip');
+          const stream=file.stream().pipeThrough(ds);
+          text=await new Response(stream).text();
+        } else {
+          text=await file.text();
+        }
+      }catch(err){setStatus('Could not read file: '+err.message,true);return;}
+      const trimmed=text.trim();
+      if(trimmed.startsWith('{')&&(file.name.includes('.embproj')||file.name.includes('.embtraj')||trimmed.includes('"embryomaker-project"')||trimmed.includes('"embryomaker-trajectory"'))){
+        try{
+          const proj=JSON.parse(trimmed);
+          loadProjectData(proj,file.name);
+          return;
+        }catch(err){
+          setStatus('Project parse failed: '+err.message,true);
+          return;
+        }
+      }
+      state.isTrajectoryMode=false;
+      const inputText=text,previousInput=state.inputText,previousName=state.fileName;
+      state.inputText=inputText;state.fileName=file.name;$('uploadLabel').textContent=file.name;state.playing=false;
+      const cacheSnapshot=state.trajectoryFrames.snapshotCache();
+      state.trajectoryFrames.clear();
+      if(!await runAt(0,true)){
+        state.inputText=previousInput;state.fileName=previousName;$('uploadLabel').textContent=previousName||'Load input file';
+        state.trajectoryFrames.restore(cacheSnapshot);
+      }
+    });
+    let dragCounter=0;
+    const dropOverlay=$('dropOverlay');
+    window.addEventListener('dragenter',e=>{
+      e.preventDefault();
+      dragCounter++;
+      if(dropOverlay)dropOverlay.hidden=false;
+    });
+    window.addEventListener('dragover',e=>{
+      e.preventDefault();
+      if(dropOverlay)dropOverlay.hidden=false;
+    });
+    window.addEventListener('dragleave',e=>{
+      e.preventDefault();
+      dragCounter=Math.max(0,dragCounter-1);
+      if(dragCounter===0&&dropOverlay)dropOverlay.hidden=true;
+    });
+    window.addEventListener('drop',e=>{
+      e.preventDefault();
+      dragCounter=0;
+      if(dropOverlay)dropOverlay.hidden=true;
+      if(e.dataTransfer?.files?.length){
+        const file=e.dataTransfer.files[0];
+        const input=$('filePicker');
+        const dt=new DataTransfer();
+        dt.items.add(file);
+        input.files=dt.files;
+        input.dispatchEvent(new Event('change'));
+      }
+    });
     const nodeProperties=[['x','x'],['y','y'],['z','z'],['Energy','energy'],['p^EQD','eqd'],['p^ADD','radius'],['p^YOU','you'],['p^ADH','adh'],['p^REP','rep'],['p^REC','rec'],['p^ERP','erp'],['p^EST','est'],['p^EQS','eqs'],['p^HOO','hoo'],['p^MOV','mov'],['p^DMO','dmo'],['x(0)','x0'],['y(0)','y0'],['z(0)','z0'],['p^ECM','ecm'],['p^COD','cod'],['p^GRD','grd'],['p^PLD','pld'],['p^VOD','vod'],['p^DIF','dif'],['p^KFI','kfi'],['p^PLA','pla'],['p^VOC','kvol'],['type','type'],['cell','cell'],['other','other'],['marge','marge'],['talone','talone'],['p^FIX','fixed'],['divisions','ndiv']];
     function showSelectedNode(n,preferredNodeField='',preferredCellField=''){if(!n)return;if(state.selected&&state.selected!==n.id)state.selectionHistory.push(state.selected);state.selected=n.id;$('selectionInfo').textContent=`Node ${n.id} · ${n.type===1||n.type===2?'epithelial':n.type===3?'mesenchymal':'ECM'} cell`;$('nodeDetails').innerHTML=`<div class="node-row"><span>Position</span><b>${n.x.toFixed(3)}, ${n.y.toFixed(3)}, ${n.z.toFixed(3)}</b></div><div class="node-row"><span>Cell / type</span><b>${n.cell} / ${n.type}</b></div><div class="node-row"><span>Radius</span><b>${n.radius.toFixed(4)}</b></div>`;const select=$('nodeProperty');if(!select.options.length){for(const [label,value] of nodeProperties){const option=document.createElement('option');option.textContent=label;option.value=value;select.append(option);}}select.value=[...select.options].some(o=>o.value===preferredNodeField)?preferredNodeField:'x';$('nodeValue').value=n[select.value];$('nodeEditControls').hidden=false;const cell=state.cells.find(c=>c.id===n.cell),cellSelect=$('cellProperty');if(cell){if(!cellSelect.options.length){for(const [label,value] of [['fase','phase'],['temt','time'],['cex','x'],['cey','y'],['cez','z'],['polx','polx'],['poly','poly'],['polz','polz'],['minsize_for_div','minsize_for_div'],['maxsize_for_div','maxsize_for_div'],['nodela','nodela'],['ctipus','type']]){const option=document.createElement('option');option.textContent=label;option.value=value;cellSelect.append(option);}}cellSelect.value=[...cellSelect.options].some(o=>o.value===preferredCellField)?preferredCellField:'phase';$('cellValue').value=cell[cellSelect.value];$('cellEditControls').hidden=false;}else{$('cellEditControls').hidden=true;}captureGeneSample();}
     $('nodeProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected);if(node)$('nodeValue').value=node[$('nodeProperty').value]??0;});$('cellProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected),cell=state.cells.find(item=>item.id===node?.cell);if(cell)$('cellValue').value=cell[$('cellProperty').value]??0;});
@@ -711,6 +1843,25 @@
     $('snapshotFrequency').addEventListener('change',event=>{const value=Number(event.target.value);if(!Number.isInteger(value)||value<1){event.target.value=state.snapshotFrequency;setStatus('Snapshot frequency must be a positive integer.',true);return;}state.snapshotFrequency=value;setStatus(`Snapshots every ${value} iterations.`);});
     $('outputLabel').addEventListener('input',event=>{state.outputLabel=event.target.value.replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);if(event.target.value!==state.outputLabel)event.target.value=state.outputLabel;});
     $('exportBtn').addEventListener('click',async()=>{if(!state.session||!state.lastSnapshot)return;try{const data=await sendSession({steps:0,includeSnapshot:true},`/api/session/${state.session}/advance`);downloadBlob(new Blob([data.snapshot],{type:'text/plain'}),`${state.outputLabel||'embryomaker'}-${state.iteration}.dat`);setStatus(`Exported iteration ${state.iteration} snapshot.`);}catch(e){setStatus(e.message,true);}});
+    $('exportTrajBtn').addEventListener('click',async()=>{
+      if(state.trajectoryFrames.size===0)return;
+      setStatus('Exporting trajectory…');
+      const frames=await state.trajectoryFrames.getAllFramesAsync();
+      const traj={
+        format:'embryomaker-trajectory',
+        version:1,
+        experiment:state.lastSnapshot?.experiment||'EmbryoMaker Simulation',
+        totalIterations:frames.length?frames[frames.length-1].iterations:state.iteration,
+        minIteration:frames.length?frames[0].iterations:0,
+        maxIteration:frames.length?frames[frames.length-1].iterations:state.max,
+        frameCount:frames.length,
+        iterations:frames.map(f=>f.iterations),
+        frames:frames
+      };
+      const jsonStr=JSON.stringify(traj);
+      downloadBlob(new Blob([jsonStr],{type:'application/json'}),`${state.outputLabel||'embryomaker'}-trajectory.embtraj`);
+      setStatus(`Exported trajectory with ${frames.length} frames.`);
+    });
     function worldDragDelta(dx,dy){const rho=state.cameraDistance/state.zoom,theta=state.pitch,phi=Math.PI/2-state.yaw,orientX=-rho*Math.sin(theta)*Math.cos(phi),orientY=-rho*Math.sin(theta)*Math.sin(phi),orientZ=rho*Math.cos(theta),normalX=orientY,normalY=-orientX,horizontal=Math.hypot(normalX,normalY),scale=horizontal>1e-12?1/horizontal:0,front=orientZ>=0;return{x:.01*(front?dx*normalX*scale-dy*orientX*scale:-dx*normalX*scale-dy*orientX*scale),y:.01*(-dy*orientY*scale+(front?dx:-dx)*normalY*scale),z:0};}
     function pickNodeAt(x,y){let best=null,dist=Infinity;for(const point of state.frame){if(!point.visible||!passesNodeFilter(point.n))continue;const distance=Math.hypot(point.x-x,point.y-y);if(distance<point.r+7&&distance<dist){best=point;dist=distance;}}return best;}
     let dragging=false,moved=false,lastX=0,lastY=0,draggingButton=0;
@@ -719,11 +1870,11 @@
     canvas.addEventListener('pointermove',event=>{if(!dragging)return;const dx=event.clientX-lastX,dy=event.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>1)moved=true;if(state.activeMouseAdjustment){applyOgMouseAdjustment(event.clientY-state.activeMouseAdjustment.startY,state.activeMouseAdjustment);}else if(state.dragMode==='rotate'){state.yaw+=dx*Math.PI/180;state.pitch+=dy*Math.PI/180;state.depthDirty=true;}else if(state.dragMode==='pan'){state.panX+=dx;state.panY+=dy;}else if(state.dragMode==='zoom'){const factor=1+.002*Math.abs(dy);state.zoom=Math.max(.35,Math.min(4,state.zoom*(dy<0?factor:1/factor)));}else if(state.dragMode==='cursor-xy'){const delta=worldDragDelta(dx,dy);state.cursor.x+=delta.x;state.cursor.y+=delta.y;}else if(state.dragMode==='cursor-z'||state.dragMode==='cursor-middle-z'){const rho=state.cameraDistance/state.zoom,orientationZ=rho*Math.cos(state.pitch);state.cursor.z+=dy*(orientationZ>=0?-.01:.01);}else if(state.dragMode==='move-node'||state.dragMode==='move-cell'){const delta=worldDragDelta(dx,dy);state.dragDelta.x+=delta.x;state.dragDelta.y+=delta.y;}lastX=event.clientX;lastY=event.clientY;draw();});
     canvas.addEventListener('pointerup',async event=>{if(!dragging)return;dragging=false;const adjustment=state.activeMouseAdjustment;state.activeMouseAdjustment=null;if(adjustment){setStatus(`Adjusted ${adjustment.channel} ${adjustment.kind} for ${adjustment.property}.`);return;}if(moved&&(state.dragMode==='move-node'||state.dragMode==='move-cell')){applyMouseMove();return;}if(!moved&&draggingButton===0&&state.showNodes){const rect=canvas.getBoundingClientRect(),point=pickNodeAt(event.clientX-rect.left,event.clientY-rect.top);if(point){if(state.selectionMode){state.cursor={x:point.n.x,y:point.n.y,z:point.n.z};state.cursorEnabled=true;}state.selectionMode=null;showSelectedNode(point.n);draw();}}});
     canvas.addEventListener('wheel',event=>{event.preventDefault();state.zoom=Math.max(.35,Math.min(4,state.zoom*Math.exp(-event.deltaY*.001)));draw();},{passive:false});
-    document.addEventListener('keydown',event=>{if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft'].includes(event.key)||event.altKey||event.ctrlKey||event.metaKey)return;const target=event.target;if(target instanceof HTMLElement&&(target.isContentEditable||['INPUT','SELECT','TEXTAREA'].includes(target.tagName)))return;event.preventDefault();if(event.key==='ArrowDown'){if(state.dragMode==='cursor-xy')setCursorMode('cursor-z');else if(state.dragMode==='cursor-z')setCursorMode('cursor-xy');else if(state.dragMode==='rotate')setDragMode('zoom');else if(state.dragMode==='zoom')setDragMode('rotate');return;}if(state.busy)return;if(event.key==='ArrowUp'){state.keyboardIterationBatch=Math.min(50000,state.keyboardIterationBatch*10);void runMenuIterations(state.keyboardIterationBatch);}else if(event.key==='ArrowRight'){void runMenuIterations(state.keyboardIterationBatch);}else if(state.iteration>0){state.playing=false;void runAt(state.iteration-1);}});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'){toggleCacheModal(false);toggleVideoModal(false);return;}if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft'].includes(event.key)||event.altKey||event.ctrlKey||event.metaKey)return;const target=event.target;if(target instanceof HTMLElement&&(target.isContentEditable||['INPUT','SELECT','TEXTAREA'].includes(target.tagName)))return;event.preventDefault();if(event.key==='ArrowDown'){if(state.dragMode==='cursor-xy')setCursorMode('cursor-z');else if(state.dragMode==='cursor-z')setCursorMode('cursor-xy');else if(state.dragMode==='rotate')setDragMode('zoom');else if(state.dragMode==='zoom')setDragMode('rotate');return;}if(state.busy)return;if(event.key==='ArrowUp'){state.keyboardIterationBatch=Math.min(50000,state.keyboardIterationBatch*10);void runMenuIterations(state.keyboardIterationBatch);}else if(event.key==='ArrowRight'){void runMenuIterations(state.keyboardIterationBatch);}else if(state.iteration>0){state.playing=false;void runAt(state.iteration-1);}});
     window.addEventListener('resize',fitCanvas);new ResizeObserver(fitCanvas).observe(canvas);
-    async function boot(){try{const configResponse=await fetch('/api/display-config');if(configResponse.ok)applyOgDisplayConfig(await configResponse.text());}catch{}if(![...$('colorMode').options].some(option=>option.value===state.colorMode)){const option=document.createElement('option');option.value=state.colorMode;option.textContent=state.colorMode;$('colorMode').append(option);}$('colorMode').value=state.colorMode;$('paletteMode').value=state.paletteMode;$('showNodes').checked=state.showNodes;populateOgPropertyMenus();syncOgColorRanges();updateLegend();try{const response=await fetch('/api/examples');if(!response.ok)throw Error(`Example list request failed (${response.status})`);const data=await response.json();if(!Array.isArray(data.examples)||data.examples.length===0)throw Error('The server returned no experiments');for(const item of data.examples){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;$('experiment').append(option);$('experimentMenu').append(option.cloneNode(true));}const requestedExample=new URLSearchParams(location.search).get('example');if(requestedExample&&data.examples.some(item=>item.id===requestedExample))$('experiment').value=requestedExample;$('experimentMenu').value=$('experiment').value;fitCanvas();await runAt(0);}catch(error){setStatus(`Could not load experiment list: ${error.message}`,true);}}
+    async function boot(){try{const configResponse=await fetch('/api/display-config');if(configResponse.ok)applyOgDisplayConfig(await configResponse.text());}catch{}if(![...$('colorMode').options].some(option=>option.value===state.colorMode)){const option=document.createElement('option');option.value=state.colorMode;option.textContent=state.colorMode;$('colorMode').append(option);}$('colorMode').value=state.colorMode;$('paletteMode').value=state.paletteMode;$('showNodes').checked=state.showNodes;populateOgPropertyMenus();syncOgColorRanges();updateLegend();try{const response=await fetch('/api/examples');if(!response.ok)throw Error(`Example list request failed (${response.status})`);const data=await response.json();if(!Array.isArray(data.examples)||data.examples.length===0)throw Error('The server returned no experiments');for(const item of data.examples){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;$('experiment').append(option);$('experimentMenu').append(option.cloneNode(true));}const requestedExample=new URLSearchParams(location.search).get('example');if(requestedExample&&data.examples.some(item=>item.id===requestedExample))$('experiment').value=requestedExample;$('experimentMenu').value=$('experiment').value;fitCanvas();void loadExperimentCache($('experiment').value);await runAt(0);}catch(error){setStatus(`Could not load experiment list: ${error.message}`,true);}}
     void boot();
-    window.addEventListener('beforeunload',()=>{if(state.session)navigator.sendBeacon(`/api/session/${state.session}/close`,new Blob(['{}'],{type:'application/json'}));});
+    window.addEventListener('beforeunload',()=>{flushDbFrames();if(state.session)navigator.sendBeacon(`/api/session/${state.session}/close`,new Blob(['{}'],{type:'application/json'}));});
   })();
   </script>
 </body>

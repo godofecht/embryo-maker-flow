@@ -165,17 +165,15 @@ function d_nwthfc(point_index: i32, face_index: i32) -> bool {
     let b: i32 = d_fc[d_f(2, face_index)]
     let c: i32 = d_fc[d_f(3, face_index)]
     let boundary: bool = d_fc[d_f(5, face_index)] <= 0
-    let mut vertex_slot: i32 = 4
     let last_vertex_slot: i32 = if boundary { 4 } else { 5 }
     let mut front: i32 = 0
     let mut back: i32 = 0
     let mut last_d: i32 = 0
-    while vertex_slot <= last_vertex_slot {
+    for vertex_slot in 4 to last_vertex_slot + 1 {
         d_ntetra = d_ntetra + 2
         let d: i32 = d_fc[d_f(vertex_slot, face_index)]
         last_d = d
-        let mut edge_slot: i32 = 1
-        while edge_slot <= 3 {
+        for edge_slot in 1 to 4 {
             let mut aa: i32 = a; let mut bb: i32 = b; let mut cc: i32 = c
             if edge_slot == 2 { aa = b; bb = c; cc = a }
             elif edge_slot == 3 { aa = c; bb = a; cc = b }
@@ -191,9 +189,7 @@ function d_nwthfc(point_index: i32, face_index: i32) -> bool {
                 else { d_fc[d_f(7, back)] = matched }
                 back = matched
             }
-            edge_slot = edge_slot + 1
         }
-        vertex_slot = vertex_slot + 1
     }
     if front != 0 { d_fc[d_f(7, back)] = 0 }
     let face_ab: i32 = d_availf()
@@ -243,8 +239,7 @@ function d_nwthin(point_index: i32, face_index: i32, vertex_slot: i32) -> bool {
     let b: i32 = d_fc[d_f(2, face_index)]
     let c: i32 = d_fc[d_f(3, face_index)]
     let d: i32 = d_fc[d_f(vertex_slot, face_index)]
-    let mut face_slot: i32 = 1
-    while face_slot <= 4 {
+    for face_slot in 1 to 5 {
         let mut aa: i32 = a; let mut bb: i32 = b; let mut cc: i32 = c; let mut dd: i32 = d
         let mut face: i32 = face_index
         if face_slot == 2 { cc = d; dd = c; face = d_htsrc(aa, bb, cc) }
@@ -258,15 +253,12 @@ function d_nwthin(point_index: i32, face_index: i32, vertex_slot: i32) -> bool {
             else { d_fc[d_f(7, d_back)] = face }
             d_back = face
         }
-        face_slot = face_slot + 1
     }
     if d_front != 0 { d_fc[d_f(7, d_back)] = 0 }
     let mut indices: array<i32, 6> = []
-    let mut j: i32 = 0
-    while j < 6 {
+    for j in 0 to 6 {
         indices[j] = d_availf()
         if indices[j] == 0 { return false }
-        j = j + 1
     }
     d_htins(indices[0], a, b, point_index, c, d)
     d_htins(indices[1], a, c, point_index, b, d)
@@ -373,8 +365,7 @@ function d_nwthed(point_index: i32, face_index: i32, edge_slot: i32) -> bool {
             d_nfc = d_nfc + 1
             d_htins(d_nfc, c, d, point_index, a, b)
         }
-        let mut direction: i32 = 1
-        while direction <= 2 {
+        for direction in 1 to 3 {
             let aa: i32 = if direction == 1 { a } else { b }
             let bb: i32 = if direction == 1 { b } else { a }
             let adjacent: i32 = d_htsrc(aa, c, d)
@@ -387,7 +378,6 @@ function d_nwthed(point_index: i32, face_index: i32, edge_slot: i32) -> bool {
                 else { d_fc[d_f(7, d_back)] = adjacent }
                 d_back = adjacent
             }
-            direction = direction + 1
         }
         last_c = c
         cp = c
@@ -406,8 +396,7 @@ function d_nwthed(point_index: i32, face_index: i32, edge_slot: i32) -> bool {
         if d_nbf > d_maxbf { d_nbf = d_maxbf; d_error = 12; return false }
         if d_reserve_boundaries(d_nbf) == false { return false }
         d_fc[d_f(5, fcn1)] = 0 - bfn1; d_fc[d_f(5, fcn2)] = 0 - bfn2
-        let mut which: i32 = 1
-        while which <= 2 {
+        for which in 1 to 3 {
             if which == 2 { c = d }
             let old_boundary: i32 = if which == 1 { bfo1 } else { bfo2 }
             let new_boundary: i32 = if which == 1 { bfn1 } else { bfn2 }
@@ -440,7 +429,6 @@ function d_nwthed(point_index: i32, face_index: i32, edge_slot: i32) -> bool {
             if d_bf[d_b(1, adjacent_boundary)] == old_new_face { d_bf[d_b(1, adjacent_boundary)] = replacement_face }
             elif d_bf[d_b(2, adjacent_boundary)] == old_new_face { d_bf[d_b(2, adjacent_boundary)] = replacement_face }
             else { d_bf[d_b(3, adjacent_boundary)] = replacement_face }
-            which = which + 1
         }
     }
     return true
@@ -456,8 +444,7 @@ function d_opside(a: i32, b: i32, c: i32, d: i32, e: i32) -> i32 {
     let dp: f64 = (d_vcl[d_v(1, d)] - ax) * nrml1 + (d_vcl[d_v(2, d)] - ay) * nrml2 + (d_vcl[d_v(3, d)] - az) * nrml3
     let mut maxabc: f64 = fabs(ax)
     let coords: array<f64, 8> = [ay, az, d_vcl[d_v(1, b)], d_vcl[d_v(2, b)], d_vcl[d_v(3, b)], d_vcl[d_v(1, c)], d_vcl[d_v(2, c)], d_vcl[d_v(3, c)]]
-    let mut k: i32 = 0
-    while k < 8 { if fabs(coords[k]) > maxabc { maxabc = fabs(coords[k]) }; k = k + 1 }
+    for k in 0 to 8 { if fabs(coords[k]) > maxabc { maxabc = fabs(coords[k]) } }
     let mut maxd: f64 = maxabc
     if fabs(d_vcl[d_v(2, d)]) > maxd { maxd = fabs(d_vcl[d_v(2, d)]) }
     if fabs(d_vcl[d_v(3, d)]) > maxd { maxd = fabs(d_vcl[d_v(3, d)]) }
@@ -501,13 +488,11 @@ function d_ccsph(a: i32, b: i32, c: i32, d: i32, e: i32) -> DelaunaySphere {
     let tol: f64 = 2.2204460492503131e-14
     let mut cmax: f64 = 0.0
     let ids: array<i32, 4> = [a, b, c, d]
-    let mut i: i32 = 0
-    while i < 4 {
+    for i in 0 to 4 {
         let p: i32 = ids[i]
         if fabs(d_vcl[d_v(1, p)]) > cmax { cmax = fabs(d_vcl[d_v(1, p)]) }
         if fabs(d_vcl[d_v(2, p)]) > cmax { cmax = fabs(d_vcl[d_v(2, p)]) }
         if fabs(d_vcl[d_v(3, p)]) > cmax { cmax = fabs(d_vcl[d_v(3, p)]) }
-        i = i + 1
     }
     if fabs(determinant) <= 0.01 * tol * cmax { return DelaunaySphere { inside: 2, center_x: 0.0, center_y: 0.0, center_z: 0.0, radius_squared: -1.0 } }
     let mut ox: f64 = (rhs1 * cp1 + rhs2 * cp2 + rhs3 * cp3) / determinant
@@ -647,8 +632,7 @@ function d_swapes(inserted: i32) -> bool {
                 d_htins(ind2, bb, dd, ee, cc, d_fc[d_f(5, ind2)])
                 let mut nbr11: i32 = 0; let mut nbr12: i32 = 0
                 let mut nbr21: i32 = 0; let mut nbr22: i32 = 0
-                let mut which: i32 = 1
-                while which <= 2 {
+                for which in 1 to 3 {
                     let boundary: i32 = if which == 1 { bfx1 } else { bfx2 }
                     let opposite: i32 = if which == 1 { dd } else { ee }
                     let mut near1: i32 = 0; let mut near2: i32 = 0
@@ -656,12 +640,10 @@ function d_swapes(inserted: i32) -> bool {
                     elif opposite < bb { near1 = d_bf[d_b(3, boundary)]; near2 = d_bf[d_b(1, boundary)] }
                     else { near1 = d_bf[d_b(2, boundary)]; near2 = d_bf[d_b(1, boundary)] }
                     if which == 1 { nbr11 = near1; nbr12 = near2 } else { nbr21 = near1; nbr22 = near2 }
-                    which = which + 1
                 }
-                which = 1
                 let mut pivot: i32 = aa
                 let mut adjacent_boundary: i32 = 0 - d_fc[d_f(5, nbr12)]
-                while which <= 2 {
+                for which in 1 to 3 {
                     let boundary: i32 = if which == 1 { bfx1 } else { bfx2 }
                     let other_face: i32 = if which == 1 { ind2 } else { ind1 }
                     let near1: i32 = if which == 1 { nbr11 } else { nbr12 }
@@ -683,7 +665,6 @@ function d_swapes(inserted: i32) -> bool {
                     if d_bf[d_b(1, adjacent_boundary)] == (if which == 1 { ind1 } else { ind2 }) { d_bf[d_b(1, adjacent_boundary)] = (if which == 1 { ind2 } else { ind1 }) }
                     elif d_bf[d_b(2, adjacent_boundary)] == (if which == 1 { ind1 } else { ind2 }) { d_bf[d_b(2, adjacent_boundary)] = (if which == 1 { ind2 } else { ind1 }) }
                     else { d_bf[d_b(3, adjacent_boundary)] = (if which == 1 { ind2 } else { ind1 }) }
-                    which = which + 1
                 }
             } elif f == g {
                 d_last_swap_type = 4
@@ -723,27 +704,23 @@ function d_swapes(inserted: i32) -> bool {
 
 function d_validate_faces() -> bool {
     d_bad_hash_index = 0
-    let mut index: i32 = 1
-    while index <= d_nfc {
+    for index in 1 to d_nfc + 1 {
         if d_fc[d_f(1, index)] > 0 and d_fc[d_f(2, index)] > 0 {
             let a: i32 = d_fc[d_f(1, index)]
             let b: i32 = d_fc[d_f(2, index)]
             let c: i32 = d_fc[d_f(3, index)]
             if a > b or b > c or d_htsrc_ordered(a, b, c) != index { d_bad_hash_index = index; return false }
         }
-        index = index + 1
     }
     return true
 }
 
 function d_validate_boundary() -> bool {
     d_bad_boundary_face = 0; d_bad_boundary_side = 0; d_bad_boundary_neighbor = 0
-    let mut face: i32 = 1
-    while face <= d_nfc {
+    for face in 1 to d_nfc + 1 {
         if d_fc[d_f(1, face)] > 0 and d_fc[d_f(2, face)] > 0 and d_fc[d_f(5, face)] < 0 {
             let boundary: i32 = 0 - d_fc[d_f(5, face)]
-            let mut side: i32 = 1
-            while side <= 3 {
+            for side in 1 to 4 {
                 let neighbor: i32 = d_bf[d_b(side, boundary)]
                 if neighbor <= 0 or d_fc[d_f(5, neighbor)] >= 0 { d_bad_boundary_face = face; d_bad_boundary_side = side; d_bad_boundary_neighbor = neighbor; return false }
                 let mut edge_a: i32 = d_fc[d_f(1, face)]
@@ -755,13 +732,10 @@ function d_validate_boundary() -> bool {
                 if contains_a == false or contains_b == false { d_bad_boundary_face = face; d_bad_boundary_side = side; d_bad_boundary_neighbor = neighbor; return false }
                 let neighbor_boundary: i32 = 0 - d_fc[d_f(5, neighbor)]
                 let mut reciprocal: bool = false
-                let mut k: i32 = 1
-                while k <= 3 { if d_bf[d_b(k, neighbor_boundary)] == face { reciprocal = true }; k = k + 1 }
+                for k in 1 to 4 { if d_bf[d_b(k, neighbor_boundary)] == face { reciprocal = true } }
                 if reciprocal == false { d_bad_boundary_face = face; d_bad_boundary_side = side; d_bad_boundary_neighbor = neighbor; return false }
-                side = side + 1
             }
         }
-        face = face + 1
     }
     return true
 }
@@ -771,11 +745,9 @@ function d_vbfac(point: i32, top_visible: i32, top_nonvisible: i32) -> bool {
     let mut topt: i32 = 0
     d_fc[d_f(7, top_visible)] = 0
     let mut k: i32 = 0 - d_fc[d_f(5, top_visible)]
-    let mut j: i32 = 1
-    while j <= 3 {
+    for j in 1 to 4 {
         let nbr: i32 = d_bf[d_b(j, k)]
         if d_fc[d_f(7, nbr)] == -1 { d_fc[d_f(7, nbr)] = topt; topt = nbr }
-        j = j + 1
     }
     while topt != 0 {
         let face: i32 = topt
@@ -789,11 +761,9 @@ function d_vbfac(point: i32, top_visible: i32, top_nonvisible: i32) -> bool {
             d_fc[d_f(7, face)] = top_visible
             top_visible = face
             k = 0 - d_fc[d_f(5, face)]
-            j = 1
-            while j <= 3 {
+            for j in 1 to 4 {
                 let nbr: i32 = d_bf[d_b(j, k)]
                 if d_fc[d_f(7, nbr)] == -1 { d_fc[d_f(7, nbr)] = topt; topt = nbr }
-                j = j + 1
             }
         } else {
             d_fc[d_f(7, face)] = topn
@@ -821,13 +791,11 @@ function d_nwthou(point_index: i32) -> bool {
         d_fc[d_f(5, pointer)] = point_index
         d_ntetra = d_ntetra + 1
         let mut a: i32 = a0; let mut b: i32 = b0; let mut c: i32 = c0
-        let mut edge: i32 = 1
-        while edge <= 3 {
+        for edge in 1 to 4 {
             if edge == 2 { let swap: i32 = a; a = b; b = swap }
             elif edge == 3 { let swap: i32 = a; a = c; c = swap }
             let neighbor: i32 = d_bf[d_b(edge, boundary_id)]
             if d_fc[d_f(7, neighbor)] != -1 and d_fc[d_f(5, neighbor)] == point_index {
-                edge = edge + 1
                 continue
             }
             let new_face: i32 = d_availf()
@@ -852,7 +820,6 @@ function d_nwthou(point_index: i32) -> bool {
                 d_bf[d_b(side, neighbor_boundary_id)] = new_face
                 d_bf[d_b(3, new_boundary)] = neighbor
             }
-            edge = edge + 1
         }
         if boundary_id == d_nbf { d_nbf = d_nbf - 1 }
         else { d_bf[d_b(1, boundary_id)] = 0 - d_hdavbf; d_hdavbf = boundary_id }
@@ -895,13 +862,11 @@ function d_nwthou(point_index: i32) -> bool {
 function delaunay_initialize_first_tetrahedron() -> bool {
     if d_vcl == null or d_fc == null or d_ht == null or d_bf == null { d_error = 305; return false }
     d_cx = 0.0; d_cy = 0.0; d_cz = 0.0
-    let mut i: i32 = 1
-    while i <= 4 {
+    for i in 1 to 5 {
         let point: i32 = d_vm[i]
         d_cx = d_cx + d_vcl[d_v(1, point)]
         d_cy = d_cy + d_vcl[d_v(2, point)]
         d_cz = d_cz + d_vcl[d_v(3, point)]
-        i = i + 1
     }
     d_cx = d_cx * 0.25; d_cy = d_cy * 0.25; d_cz = d_cz * 0.25
     d_vcl[d_v(1, d_npt + 1)] = d_cx
@@ -909,15 +874,10 @@ function delaunay_initialize_first_tetrahedron() -> bool {
     d_vcl[d_v(3, d_npt + 1)] = d_cz
     d_nbf = 4; d_nfc = 4; d_ntetra = 1
     d_hdavbf = 0; d_hdavfc = 0
-    i = 0
-    while i < d_sizht { d_ht[i] = 0; i = i + 1 }
-    i = 1
-    while i <= 4 {
-        let mut field: i32 = 1
-        while field <= 7 { d_fc[d_f(field, i)] = 0; field = field + 1 }
-        field = 1
-        while field <= 3 { d_bf[d_b(field, i)] = 0; field = field + 1 }
-        i = i + 1
+    for i in 0 to d_sizht { d_ht[i] = 0 }
+    for i in 1 to 5 {
+        for field in 1 to 8 { d_fc[d_f(field, i)] = 0 }
+        for field in 1 to 4 { d_bf[d_b(field, i)] = 0 }
     }
     d_htins(1, 1, 2, 3, 4, -1)
     d_htins(2, 1, 2, 4, 3, -2)
@@ -960,10 +920,8 @@ function delaunay_insert_one() -> bool {
 
 function delaunay_build() -> bool {
     if delaunay_initialize_first_tetrahedron() == false { return false }
-    let mut point_index: i32 = 5
-    while point_index <= d_npt {
+    for point_index in 5 to d_npt + 1 {
         if d_insert_at(point_index, false) == false { return false }
-        point_index = point_index + 1
     }
     if d_validate_boundary() == false { d_error = 780; return false }
     if d_validate_faces() == false { d_error = 777; return false }
@@ -994,21 +952,24 @@ function delaunay_initialize() -> bool {
     d_maxbf = d_npt * d_npt
     d_maxfc = d_npt * d_npt
     if d_sizht <= 0 { d_error = 302; return false }
-    d_bfcap = if d_maxbf < 64 { d_maxbf } else { 64 }
-    d_fccap = if d_maxfc < 64 { d_maxfc } else { 64 }
+    # The triangulation usually needs O(points) faces and boundary records.
+    # Seed capacities near the steady-state size so each simulation iteration
+    # avoids repeatedly reallocating and copying the tables as points are added.
+    let boundary_capacity: i32 = d_npt * 4
+    let face_capacity: i32 = d_npt * 16
+    d_bfcap = if d_maxbf < boundary_capacity { d_maxbf } else { boundary_capacity }
+    d_fccap = if d_maxfc < face_capacity { d_maxfc } else { face_capacity }
     d_vcl = calloc(((d_npt + 2) * 4) as i64, sizeof<f64>()) as ptr<f64>
     d_vm = calloc((d_npt + 1) as i64, sizeof<i32>()) as ptr<i32>
     d_bf = calloc(((d_bfcap + 1) * 4) as i64, sizeof<i32>()) as ptr<i32>
     d_fc = calloc(((d_fccap + 1) * 8) as i64, sizeof<i32>()) as ptr<i32>
     d_ht = calloc(d_sizht as i64, sizeof<i32>()) as ptr<i32>
     if d_vcl == null or d_vm == null or d_bf == null or d_fc == null or d_ht == null { d_error = 305; delaunay_release(); return false }
-    let mut point: i32 = 1
-    while point <= d_npt {
+    for point in 1 to d_npt + 1 {
         d_vcl[d_v(1, point)] = node[point].x
         d_vcl[d_v(2, point)] = node[point].y
         d_vcl[d_v(3, point)] = node[point].z
         d_vm[point] = point
-        point = point + 1
     }
     d_nbf = 0; d_nfc = 0; d_nface = 0; d_ntetra = 0
     d_hdavbf = 0; d_hdavfc = 0; d_ifac = 0; d_error = 0
@@ -1180,24 +1141,19 @@ function d_walkt3(point: i32) -> bool {
 
 function d_frstet() -> bool {
     let tol: f64 = 2.2204460492503131e-14
-    let mut limit: i32 = 1
     let mut m1: i32 = d_vm[1]
     let mut m: i32 = 0
-    let mut i: i32 = 1
-    while i <= limit {
+    for i in 1 to 2 {
         m = m1
         m1 = d_vm[i + 1]
-        let mut k: i32 = 1
         let mut distinct: bool = false
-        while k <= 3 {
+        for k in 1 to 4 {
             let x: f64 = d_vcl[d_v(k, m)]
             let y: f64 = d_vcl[d_v(k, m1)]
             let cmax: f64 = if fabs(x) > fabs(y) { fabs(x) } else { fabs(y) }
             if fabs(x - y) > tol * cmax and cmax > tol { distinct = true }
-            k = k + 1
         }
         if distinct == false { d_error = 302; return false }
-        i = i + 1
     }
 
     let first: i32 = d_vm[1]
@@ -1206,11 +1162,9 @@ function d_frstet() -> bool {
     let y1: f64 = d_vcl[d_v(2, second)] - d_vcl[d_v(2, first)]
     let z1: f64 = d_vcl[d_v(3, second)] - d_vcl[d_v(3, first)]
     let mut cmax: f64 = fabs(d_vcl[d_v(1, first)])
-    let mut k: i32 = 2
-    while k <= 3 {
+    for k in 2 to 4 {
         if fabs(d_vcl[d_v(k, first)]) > cmax { cmax = fabs(d_vcl[d_v(k, first)]) }
         if fabs(d_vcl[d_v(k, second)]) > cmax { cmax = fabs(d_vcl[d_v(k, second)]) }
-        k = k + 1
     }
 
     let mut third_position: i32 = 2

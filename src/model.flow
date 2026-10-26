@@ -93,12 +93,10 @@ function advance_model_iteration() -> bool {
     if nexe_gradual() == false { model_error = 70 + nexus_error; return false }
     if ffu[12] == 0 {
         if ffu[5] == 1 {
-            let mut node_id: i32 = 1
-            while node_id <= nd {
+            for node_id in 1 to nd + 1 {
                 node[node_id].x = node[node_id].x + delta * px[node_id]
                 node[node_id].y = node[node_id].y + delta * py[node_id]
                 node[node_id].z = node[node_id].z + delta * pz[node_id]
-                node_id = node_id + 1
             }
         } elif rungekutta4(delta) == false { model_error = 8; return false }
     } elif adaptive_rungekutta() == false { model_error = 8; return false }
@@ -107,11 +105,9 @@ function advance_model_iteration() -> bool {
         let noise_count: f64 = nd as f64 * prop_noise * delta / deltamin
         if noise_count > 1.0 {
             let repetitions: i32 = noise_count as i32
-            let mut attempt: i32 = 0
-            while attempt < repetitions {
+            for attempt in 0 to repetitions {
                 let noise_ok: bool = if ffu[15] == 1 { itera_energy() } else { itera_unbiased() }
                 if noise_ok == false { model_error = if ffu[15] == 1 { 90 + noise_error } else { 9 }; return false }
-                attempt = attempt + 1
             }
         } else {
             let selection: f64 = rng_real()
@@ -121,10 +117,8 @@ function advance_model_iteration() -> bool {
             }
         }
     } else {
-        let mut attempt: i32 = 0
-        while attempt < nd {
+        for attempt in 0 to nd {
             if itera_energy() == false { model_error = 90 + noise_error; return false }
-            attempt = attempt + 1
         }
     }
     rtime = rtime + delta
@@ -136,34 +130,18 @@ function advance_model_iteration() -> bool {
 function advance_model_batch(requested: i32) -> bool {
     model_error = 0
     model_batch_reset()
-    if requested < 0 { model_error = 1; return false }
-    let iteration_mode: bool = ffu[7] != 0 or ffu[14] != 0
-    if iteration_mode {
-        let mut completed: i32 = 0
-        while completed < requested {
-            if advance_model_iteration() == false { return false }
-            completed = completed + 1
-        }
-        return true
-    }
-    let mut elapsed: f64 = 0.0
-    let target: f64 = requested as f64
-    while elapsed < target {
-        if advance_model_iteration() == false { return false }
-        elapsed = elapsed + delta
-    }
-    return true
+    if model_batch_begin(1, requested) == false { return false }
+    let progress: ModelBatchProgress = model_batch_advance_chunk(1, 2147483647)
+    return progress.ok
 }
 
 function itera_unbiased() -> bool {
     if nd <= 0 or nvaloq <= 0 or particions_esfera == null { return false }
     let mut moved_node: i32 = 0
-    let mut tries: i32 = 0
-    while tries < nd * 2 {
+    for tries in 0 to nd * 2 {
         moved_node = (rng_real() * nd as f64) as i32 + 1
         if node[moved_node].fix != 2 { break }
         moved_node = 0
-        tries = tries + 1
     }
     if moved_node == 0 { return true }
     let mut displacement: f64 = rng_real() * node[moved_node].dmo
@@ -191,12 +169,10 @@ function itera_unbiased() -> bool {
     let mut direction_z: f64 = 0.0
     if npag[51] > 0 and node[moved_node].tipus < 4 {
         let mut bias: f64 = 0.0
-        let mut slot: i32 = 1
-        while slot <= npag[51] {
+        for slot in 1 to npag[51] + 1 {
             let gene_id: i32 = whonpag[51 * (ng + 1) + slot]
             let expression: f64 = gex[gene_expression_index(moved_node, gene_id)]
             if expression > 0.0 { bias = bias + expression * gene_effects[gene_effect_index(gene_id, 51)] }
-            slot = slot + 1
         }
         let random_value: f64 = rng_real()
         let partition: i32 = (random_value * nvaloq as f64) as i32 + 1
@@ -230,28 +206,24 @@ function itera_unbiased() -> bool {
 
 function update_cell_centroids() -> bool {
     model_error = 0
-    let mut cell_id: i32 = 1
-    while cell_id <= ncels {
-        if cels[cell_id].nunodes <= 0 { cell_id = cell_id + 1; continue }
+    for cell_id in 1 to ncels + 1 {
+        if cels[cell_id].nunodes <= 0 { continue }
         let mut x: f64 = 0.0
         let mut y: f64 = 0.0
         let mut z: f64 = 0.0
-        let mut slot: i32 = 1
-        while slot <= cels[cell_id].nunodes {
+        for slot in 1 to cels[cell_id].nunodes + 1 {
             let node_id: i32 = cels[cell_id].node[slot]
             if node[node_id].tipus == 1 or node[node_id].tipus == 3 {
                 x = x + node[node_id].x
                 y = y + node[node_id].y
                 z = z + node[node_id].z
             }
-            slot = slot + 1
         }
         let mut inverse_count: f64 = 1.0 / ((cels[cell_id].nunodes as f32) as f64)
         if node[cels[cell_id].node[1]].tipus < 3 { inverse_count = 2.0 * inverse_count }
         cels[cell_id].cex = x * inverse_count
         cels[cell_id].cey = y * inverse_count
         cels[cell_id].cez = z * inverse_count
-        cell_id = cell_id + 1
     }
     return true
 }
@@ -259,10 +231,8 @@ function update_cell_centroids() -> bool {
 function update_maximum_displacement() -> bool {
     if nd <= 0 { model_error = 2; return false }
     let mut largest_radius: f64 = node[1].add
-    let mut node_id: i32 = 2
-    while node_id <= nd {
+    for node_id in 2 to nd + 1 {
         if node[node_id].add > largest_radius { largest_radius = node[node_id].add }
-        node_id = node_id + 1
     }
     rdiffmax = (2.0 * largest_radius) * dmax
     return true
@@ -275,16 +245,12 @@ function prepare_model_iteration() -> bool {
 }
 
 function commit_gene_expression() -> void {
-    let mut node_id: i32 = 1
-    while node_id <= nd {
-        let mut gene_id: i32 = 1
-        while gene_id <= ng {
+    for node_id in 1 to nd + 1 {
+        for gene_id in 1 to ng + 1 {
             let index: i32 = gene_expression_index(node_id, gene_id)
             let value: f64 = agex[index]
             gex[index] = if value < 0.0 { 0.0 } else { value }
-            gene_id = gene_id + 1
         }
-        node_id = node_id + 1
     }
 }
 

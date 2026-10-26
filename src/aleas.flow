@@ -27,8 +27,7 @@ function inialea3d(un: i32) -> void {
     particions_esfera = calloc(((nvaloq + 1) * PARTITION_STRIDE) as i64, sizeof<f64>()) as ptr<f64>
     let e: f64 = PI_SINGLE_ASSIGNED_TO_DOUBLE
     let half: i32 = nvaloq / 2
-    let mut i: i32 = 1
-    while i <= half {
+    for i in 1 to half + 1 {
         let x: f64 = rng_real()
         let y0: f64 = rng_real()
         let angle: f64 = 2.0 * e * x
@@ -42,7 +41,6 @@ function inialea3d(un: i32) -> void {
         particions_esfera[partition_index(i + half, 1)] = -1.0 * radius * cos(angle)
         particions_esfera[partition_index(i + half, 2)] = -1.0 * radius * sin(angle)
         particions_esfera[partition_index(i + half, 3)] = -1.0 * y
-        i = i + 1
     }
 }
 

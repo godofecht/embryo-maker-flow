@@ -1,0 +1,66 @@
+# Candidate prefilter for the standard box neighbor search, one GPU thread
+# per node. `flow gpu gpu/kernels/neighbor_prefilter.flow` turns this into
+# build/gpu/neighbor_prefilter.metal; tools/build-gpu.sh embeds that source in
+# native/embryo_metal_kernels.h for the Metal host in native/embryo_metal.m.
+#
+# The kernel walks the same 27 boxes in the same order as neighbor_build in
+# src/neighboring.flow: z offset outermost, then y, then x, and within a box
+# the node ids in descending order. box_start and box_nodes hold that order
+# as a compressed row layout built by src/gpu_neighbor.flow. Positions and
+# radii are single precision here, so the contact test is widened by
+# `margin`; the CPU then repeats the exact double precision test on every
+# survivor, in this order, which keeps the neighbor rows bit for bit equal
+# to the serial scan. A node whose survivors exceed `stride` reports the
+# true count so the host can fall back to the serial scan.
+@gpu
+function neighbor_prefilter(px: array<f32>, py: array<f32>, pz: array<f32>, radius: array<f32>,
+                            box_start: array<i32>, box_nodes: array<i32>, node_box: array<i32>,
+                            out_count: array<i32>, out_ids: array<i32>,
+                            n: i32, side: i32, stride: i32, margin: f32) {
+    let i = gpu_thread_id()
+    if i < n {
+        let node: i32 = i + 1
+        let x: f32 = px[node]
+        let y: f32 = py[node]
+        let z: f32 = pz[node]
+        let r: f32 = radius[node]
+        let slot: i32 = node_box[node]
+        let plane: i32 = side * side
+        let mut count: i32 = 0
+        let mut dz: i32 = -1
+        while dz <= 1 {
+            let mut dy: i32 = -1
+            while dy <= 1 {
+                let mut dx: i32 = -1
+                while dx <= 1 {
+                    let b: i32 = slot + dx * plane + dy * side + dz
+                    let mut k: i32 = box_start[b]
+                    let last: i32 = box_start[b + 1]
+                    while k < last {
+                        let c: i32 = box_nodes[k]
+                        if c != node {
+                            let ddx: f32 = px[c] - x
+                            let ddy: f32 = py[c] - y
+                            let ddz: f32 = pz[c] - z
+                            let d2: f32 = ddx * ddx + ddy * ddy + ddz * ddz
+                            let contact: f32 = (radius[c] + r) * (1.0 + margin) + margin
+                            if d2 <= contact * contact {
+                                if count < stride {
+                                    out_ids[node * stride + count] = c
+                                }
+                                count = count + 1
+                            }
+                        }
+                        k = k + 1
+                    }
+                    dx = dx + 1
+                }
+                dy = dy + 1
+            }
+            dz = dz + 1
+        }
+        out_count[node] = count
+    }
+}
+
+function main() -> i32 { return 0 }

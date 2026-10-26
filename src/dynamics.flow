@@ -1,0 +1,20 @@
+# Declarative continuous dynamics in native Flow.
+# Demonstrates compiler-generated integrators for isolated continuous subsystems
+# such as morphogen / gene product degradation and linear activation dynamics.
+
+flow GeneConcentration {
+    state gex : f64 = 1.0
+    param decay : f64 = 0.1
+    param basal : f64 = 0.02
+    solver { dt 1 ms  method rk4 }
+    gex evolves as basal - decay * gex
+}
+
+flow MorphogenDiffusionDecay {
+    state concentration : f64 = 1.0
+    param rate : f64 = 0.05
+    solver { dt 1 ms  method rk4 }
+    concentration evolves as 0.0 - rate * concentration
+}
+
+export GeneConcentration, MorphogenDiffusionDecay

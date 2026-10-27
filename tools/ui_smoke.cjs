@@ -312,10 +312,25 @@ async function main() {
       await page.waitForFunction(() => !document.querySelector('#iterationProgress')?.classList.contains('active') && Number(document.querySelector('#iterationValue')?.textContent) === 12, null, { timeout });
       const frameBefore = await page.evaluate(() => window.embryomakerRenderer?.lastFrame?.serial || 0);
       await page.waitForFunction(serial => window.embryomakerRenderer?.lastFrame?.serial > serial, frameBefore, { timeout });
+      await page.locator('#iterationRange').evaluate(range => { range.value = '40'; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true })); });
+      await page.waitForFunction(() => Number(window.state?.lastSnapshot?.iterations) === 40, null, { timeout });
+      const diskFrame = await page.evaluate(async () => {
+        const request = indexedDB.open('EmbryoMakerDB', 3);
+        const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+        const experiment = document.querySelector('#experiment').value;
+        const tx = db.transaction('frames', 'readonly');
+        const result = await new Promise((resolve, reject) => { const get = tx.objectStore('frames').get(`${experiment}:40`); get.onsuccess = () => resolve(get.result); get.onerror = () => reject(get.error); });
+        window.state.trajectoryFrames.ramCache.delete(40);
+        return { exists: Boolean(result), nodes: result?.nodes?.length || 0 };
+      });
+      if (!diskFrame.exists) throw new Error('Iteration 40 was not written to IndexedDB before the scrub check.');
+      const diskFrameBefore = await page.evaluate(() => window.embryomakerRenderer?.lastFrame?.serial || 0);
+      await page.locator('#iterationRange').evaluate(range => { range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true })); });
+      await page.waitForFunction(({ serial, nodes }) => window.embryomakerRenderer?.lastFrame?.serial > serial && window.state?.lastSnapshot?.iterations === 40 && window.state?.lastSnapshot?.nodes?.length === nodes, { serial: diskFrameBefore, nodes: diskFrame.nodes }, { timeout });
       const runtimeErrors = await page.evaluate(() => window.__embryomakerRuntimeErrors);
       for (const error of runtimeErrors) errors.push(`browser runtime error: ${error}`);
       if (errors.length) throw new Error(errors.join('\n'));
-      console.log(JSON.stringify({ ok: true, experiment: 'sea_urchin', progressDuringRun, seekTarget: 12, finalIteration: 12, consoleErrors: 0, runtimeErrors: 0 }, null, 2));
+      console.log(JSON.stringify({ ok: true, experiment: 'sea_urchin', progressDuringRun, seekTarget: 12, diskScrub: { iteration: 40, loadedFromIndexedDB: true, nodes: diskFrame.nodes }, finalIteration: 40, consoleErrors: 0, runtimeErrors: 0 }, null, 2));
       return;
     }
     if (process.env.UI_SMOKE_CONTROLS_ONLY === '1') {

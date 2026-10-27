@@ -23,6 +23,8 @@ import std.string { ParseI64, ParseF64, str_parse_i64_at, str_parse_f64_at, str_
 let mut param: array<f64, 36> = []
 let mut snapshot_error: i32 = 0
 let mut cleaned_length: i32 = 0
+let mut format_ring: array<u8, 1048576> = []
+let mut format_ring_offset: i32 = 0
 
 extern {
     function malloc(size: i64) -> ptr<void>
@@ -584,20 +586,30 @@ function snapshot_flush(path: string) -> bool {
 }
 
 export function format_i64(value: i64) -> string {
-    let buffer: ptr<u8> = calloc(40, 1) as ptr<u8>
-    let length: i32 = str_format_i64(buffer, 40, value)
-    if length < 0 { return "0" }
+    let buffer: ptr<u8> = format_slot()
+    let length: i32 = str_format_i64(buffer, 128, value)
+    if length < 0 { buffer[0] = 48; buffer[1] = 0 }
     return buffer as string
 }
 
-function left_pad(value: string, width: i32) -> string {
-    let mut padded: string = value
-    while padded.len() < width { padded = " " + padded }
-    return padded
+function format_slot() -> ptr<u8> {
+    let slot: ptr<u8> = &format_ring[format_ring_offset] as ptr<u8>
+    format_ring_offset = format_ring_offset + 128
+    if format_ring_offset >= 1048576 { format_ring_offset = 0 }
+    return slot
 }
 
-function format_f64_field(value: f64) -> string { return left_pad(format_f64(value), 24) }
-function format_i64_field(value: i64, width: i32) -> string { return left_pad(format_i64(value), width) }
+function format_i64_field(value: i64, width: i32) -> string {
+    let digits: ptr<u8> = format_slot()
+    let length: i32 = str_format_i64(digits, 128, value)
+    if length < 0 { return format_i64(0) }
+    let output: ptr<u8> = format_slot()
+    let padding: i32 = if width > length { width - length } else { 0 }
+    for i in 0 to padding { output[i] = 32 }
+    for i in 0 to length { output[padding + i] = digits[i] }
+    output[padding + length] = 0
+    return output as string
+}
 
 export function format_f64(value: f64) -> string {
     if value == 0.0 { return "0.0000000000000000e+00" }
@@ -611,31 +623,63 @@ export function format_f64(value: f64) -> string {
         digits = digits / 10
         exponent = exponent + 1
     }
-    let raw: string = format_i64(digits)
-    let mut padded: string = raw
-    while padded.len() < 17 { padded = "0" + padded }
-    let sign: string = if negative { "-" } else { "" }
-    let exponent_sign: string = if exponent < 0 { "-" } else { "+" }
+    let digit_buffer: ptr<u8> = format_slot()
+    let digit_length: i32 = str_format_i64(digit_buffer, 128, digits)
+    let output: ptr<u8> = format_slot()
+    let mut used: i32 = 0
+    if negative { output[used] = 45; used = used + 1 }
+    output[used] = digit_buffer[0]
+    used = used + 1
+    output[used] = 46
+    used = used + 1
+    let mut zeroes: i32 = 16 - (digit_length - 1)
+    while zeroes > 0 { output[used] = 48; used = used + 1; zeroes = zeroes - 1 }
+    let mut digit_index: i32 = 1
+    while digit_index < digit_length {
+        output[used] = digit_buffer[digit_index]
+        used = used + 1
+        digit_index = digit_index + 1
+    }
+    output[used] = 101
+    used = used + 1
+    if exponent < 0 { output[used] = 45 } else { output[used] = 43 }
+    used = used + 1
     let exponent_magnitude: i32 = if exponent < 0 { 0 - exponent } else { exponent }
-    let exponent_text: string = format_i64(exponent_magnitude as i64)
-    let padded_exp: string = if exponent_magnitude < 10 { "0" + exponent_text } else { exponent_text }
-    return sign + copy_span(padded, 0, 1) + "." + copy_span(padded, 1, 17) + "e" + exponent_sign + padded_exp
+    if exponent_magnitude < 10 { output[used] = 48; used = used + 1 }
+    let exponent_buffer: ptr<u8> = format_slot()
+    let exponent_length: i32 = str_format_i64(exponent_buffer, 128, exponent_magnitude as i64)
+    for i in 0 to exponent_length { output[used + i] = exponent_buffer[i] }
+    used = used + exponent_length
+    output[used] = 0
+    return output as string
+}
+
+function format_f64_field(value: f64) -> string {
+    let number: string = format_f64(value)
+    let length: i32 = strlen(number) as i32
+    let output: ptr<u8> = format_slot()
+    let padding: i32 = if length < 24 { 24 - length } else { 0 }
+    for i in 0 to padding { output[i] = 32 }
+    let source: ptr<u8> = number as ptr<u8>
+    for i in 0 to length { output[padding + i] = source[i] }
+    output[padding + length] = 0
+    return output as string
 }
 
 function write_snapshot(path: string) -> bool {
     snapshot_reset()
-    snapshot_append("THIS FILE WAS WRITTEN IN THE FORMAT OF the 14-7-21 VERSION\nEmbryoMaker Flow\n35 number of node parameters\n" + format_i64(nvarglobal_out as i64) + " number of global variables\n\n28 functions\n\n")
+    snapshot_append("THIS FILE WAS WRITTEN IN THE FORMAT OF the 14-7-21 VERSION\nEmbryoMaker Flow\n35 number of node parameters\n"); snapshot_append(format_i64(nvarglobal_out as i64)); snapshot_append(" number of global variables\n\n28 functions\n\n")
     let mut i: i32 = 1
     while i <= NFU {
-        snapshot_append(format_i64(ffu[i] as i64) + " function_" + format_i64(i as i64) + "\n")
+        snapshot_append(format_i64(ffu[i] as i64)); snapshot_append(" function_"); snapshot_append(format_i64(i as i64)); snapshot_append("\n")
         i = i + 1
     }
-    snapshot_append("\n" + format_i64(NFI as i64) + " filters: active, lethal, how often is checked")
-    if whichend > 0 { snapshot_append(", this individual was filtered by whichend: " + format_i64(whichend as i64)) }
+    snapshot_append("\n"); snapshot_append(format_i64(NFI as i64)); snapshot_append(" filters: active, lethal, how often is checked")
+    if whichend > 0 { snapshot_append(", this individual was filtered by whichend: "); snapshot_append(format_i64(whichend as i64)) }
     snapshot_append("\n\n")
     i = 1
     while i <= NFI {
-        snapshot_append(format_i64(ffufi[i * 4 + 1] as i64) + " " + format_i64(ffufi[i * 4 + 2] as i64) + " " + format_i64(ffufi[i * 4 + 3] as i64) + " filter_" + format_i64(i as i64) + "\n")
+        snapshot_append(format_i64(ffufi[i * 4 + 1] as i64)); snapshot_append(" "); snapshot_append(format_i64(ffufi[i * 4 + 2] as i64)); snapshot_append(" "); snapshot_append(format_i64(ffufi[i * 4 + 3] as i64)); snapshot_append(" filter_"); snapshot_append(format_i64(i as i64)); snapshot_append("\n")
         i = i + 1
     }
     snapshot_append("\nparameters\n\n")
@@ -653,7 +697,7 @@ function write_snapshot(path: string) -> bool {
     param[33] = maxcycl; param[34] = newfase; param[35] = maxelong
     i = 1
     while i <= 35 {
-        snapshot_append(format_i64_field(i as i64, 2) + format_f64_field(param[i]) + " parameter_" + format_i64(i as i64) + "\n")
+        snapshot_append(format_i64_field(i as i64, 2)); snapshot_append(format_f64_field(param[i])); snapshot_append(" parameter_"); snapshot_append(format_i64(i as i64)); snapshot_append("\n")
         i = i + 1
     }
     snapshot_append("\nrandom seed at the first iteration\n\n")
@@ -663,20 +707,20 @@ function write_snapshot(path: string) -> bool {
     snapshot_append("\n\nrandom seed at this iteration\n\n")
     rng_get(&idum[0], 8)
     i = 0
-    while i < 12 { snapshot_append(format_i64(idum[i] as i64) + " "); i = i + 1 }
+    while i < 12 { snapshot_append(format_i64(idum[i] as i64)); snapshot_append(" "); i = i + 1 }
     snapshot_append("\n\nglobal output variables\n\n")
     i = 1
     while i <= nvarglobal_out {
         let value: f64 = if i == 1 { itacc as f64 } else { varglobal_out[i] }
-        snapshot_append(format_f64_field(value) + " global variable " + format_i64(i as i64) + "\n")
+        snapshot_append(format_f64_field(value)); snapshot_append(" global variable "); snapshot_append(format_i64(i as i64)); snapshot_append("\n")
         i = i + 1
     }
     snapshot_append("\n")
     if ng > 0 {
-        snapshot_append(format_i64(ng as i64) + " genes\n\nW matrix: gene expression\n\n")
+        snapshot_append(format_i64(ng as i64)); snapshot_append(" genes\n\nW matrix: gene expression\n\n")
         i = 1
         while i <= ng {
-            snapshot_append("gen" + format_i64_field(i as i64, 4))
+            snapshot_append("gen"); snapshot_append(format_i64_field(i as i64, 4))
             let mut j: i32 = 1
             while j <= ng { snapshot_append(format_f64_field(t[gene_matrix_index(i, j)])); j = j + 1 }
             snapshot_append("\n")
@@ -685,16 +729,16 @@ function write_snapshot(path: string) -> bool {
         snapshot_append("\nWW matrix: gene\n\n")
         i = 1
         while i <= ng {
-            snapshot_append(format_i64(i as i64) + " " + format_i64(ww_count[i] as i64) + "\n")
+            snapshot_append(format_i64(i as i64)); snapshot_append(" "); snapshot_append(format_i64(ww_count[i] as i64)); snapshot_append("\n")
             if ww_count[i] > 0 {
                 let mut j: i32 = 1
-                while j <= ww_count[i] { snapshot_append(format_f64(ww_source[i * ww_ld + j]) + " "); j = j + 1 }
+                while j <= ww_count[i] { snapshot_append(format_f64(ww_source[i * ww_ld + j])); snapshot_append(" "); j = j + 1 }
                 snapshot_append("\n")
                 j = 1
-                while j <= ww_count[i] { snapshot_append(format_f64(ww_target[i * ww_ld + j]) + " "); j = j + 1 }
+                while j <= ww_count[i] { snapshot_append(format_f64(ww_target[i * ww_ld + j])); snapshot_append(" "); j = j + 1 }
                 snapshot_append("\n")
                 j = 1
-                while j <= ww_count[i] { snapshot_append(format_f64(ww_rate[i * ww_ld + j]) + " "); j = j + 1 }
+                while j <= ww_count[i] { snapshot_append(format_f64(ww_rate[i * ww_ld + j])); snapshot_append(" "); j = j + 1 }
                 snapshot_append("\n")
             }
             i = i + 1
@@ -702,7 +746,7 @@ function write_snapshot(path: string) -> bool {
         snapshot_append("\nE and C matrix: node properties\n\n")
         i = 1
         while i <= ng {
-            snapshot_append("gen" + format_i64_field(i as i64, 4))
+            snapshot_append("gen"); snapshot_append(format_i64_field(i as i64, 4))
             let mut j: i32 = 1
             while j <= 52 { snapshot_append(format_f64_field(gene_effects[gene_effect_index(i, j)])); j = j + 1 }
             snapshot_append("\n")
@@ -711,17 +755,17 @@ function write_snapshot(path: string) -> bool {
         snapshot_append("\nother gene characteristics\n\n")
         i = 1
         while i <= ng {
-            snapshot_append("gene " + format_i64(i as i64) + "\n")
-            snapshot_append(format_f64_field(diffu[i]) + " diffusivity\n")
-            snapshot_append(format_f64_field(mich[i]) + " Mich-Menten\n")
-            snapshot_append(format_f64_field(degradation[i]) + " degradation rate\n")
-            snapshot_append(format_f64_field(kindof[i]) + " type, 0 TF, 1 modifiable FT, 2 form\n")
-            snapshot_append(format_i64(npre[i] as i64) + " number of pre forms\n")
+            snapshot_append("gene "); snapshot_append(format_i64(i as i64)); snapshot_append("\n")
+            snapshot_append(format_f64_field(diffu[i])); snapshot_append(" diffusivity\n")
+            snapshot_append(format_f64_field(mich[i])); snapshot_append(" Mich-Menten\n")
+            snapshot_append(format_f64_field(degradation[i])); snapshot_append(" degradation rate\n")
+            snapshot_append(format_f64_field(kindof[i])); snapshot_append(" type, 0 TF, 1 modifiable FT, 2 form\n")
+            snapshot_append(format_i64(npre[i] as i64)); snapshot_append(" number of pre forms\n")
             let mut j: i32 = 1
-            while j <= npre[i] { snapshot_append(format_i64(pre[gene_form_index(i, j)] as i64) + " "); j = j + 1 }
-            snapshot_append("\n" + format_i64(npost[i] as i64) + " number of post forms\n")
+            while j <= npre[i] { snapshot_append(format_i64(pre[gene_form_index(i, j)] as i64)); snapshot_append(" "); j = j + 1 }
+            snapshot_append("\n"); snapshot_append(format_i64(npost[i] as i64)); snapshot_append(" number of post forms\n")
             j = 1
-            while j <= npost[i] { snapshot_append(format_i64(post[gene_form_index(i, j)] as i64) + " "); j = j + 1 }
+            while j <= npost[i] { snapshot_append(format_i64(post[gene_form_index(i, j)] as i64)); snapshot_append(" "); j = j + 1 }
             snapshot_append("\n")
             i = i + 1
         }
@@ -729,7 +773,7 @@ function write_snapshot(path: string) -> bool {
             snapshot_append("B matrix: adhesion molecules\n")
             i = 1
             while i <= ntipusadh {
-                snapshot_append("adh" + format_i64_field(i as i64, 4))
+                snapshot_append("adh"); snapshot_append(format_i64_field(i as i64, 4))
                 let mut j: i32 = 1
                 while j <= ntipusadh { snapshot_append(format_f64_field(kadh[i * kadh_ld + j])); j = j + 1 }
                 snapshot_append("\n")
@@ -750,20 +794,20 @@ function write_snapshot(path: string) -> bool {
     write_node_rows(node, true)
     snapshot_append("\nnode properties at time 0 (nodeo)\n\n")
     write_node_rows(nodeo, false)
-    snapshot_append("\ncell properties\n\n" + format_i64(ncels as i64) + " number of cells\n\n")
+    snapshot_append("\ncell properties\n\n"); snapshot_append(format_i64(ncels as i64)); snapshot_append(" number of cells\n\n")
     i = 1
     while i <= ncels {
-        snapshot_append("cell " + format_i64(i as i64) + "\n0.0000000000000000e+00\n")
-        snapshot_append(format_f64_field(cels[i].minsize_for_div) + " minimal number of nodes\n")
-        snapshot_append(format_f64_field(cels[i].maxsize_for_div) + " maximal number of nodes\n")
-        snapshot_append(format_f64_field(cels[i].cex) + format_f64_field(cels[i].cey) + format_f64_field(cels[i].cez) + " centroid\n")
-        snapshot_append(format_f64_field(cels[i].polx) + format_f64_field(cels[i].poly) + format_f64_field(cels[i].polz) + " polarity\n")
-        snapshot_append(format_f64_field(cels[i].fase) + " phase\n" + format_f64_field(cels[i].temt) + " transition\n")
-        snapshot_append(format_i64(cels[i].nunodes as i64) + " nodes\n")
-        snapshot_append(format_i64(cels[i].nodela as i64) + " capacity\n")
-        snapshot_append(format_i64(cels[i].ctipus as i64) + " type\nlist of nodes\n")
+        snapshot_append("cell "); snapshot_append(format_i64(i as i64)); snapshot_append("\n0.0000000000000000e+00\n")
+        snapshot_append(format_f64_field(cels[i].minsize_for_div)); snapshot_append(" minimal number of nodes\n")
+        snapshot_append(format_f64_field(cels[i].maxsize_for_div)); snapshot_append(" maximal number of nodes\n")
+        snapshot_append(format_f64_field(cels[i].cex)); snapshot_append(format_f64_field(cels[i].cey)); snapshot_append(format_f64_field(cels[i].cez)); snapshot_append(" centroid\n")
+        snapshot_append(format_f64_field(cels[i].polx)); snapshot_append(format_f64_field(cels[i].poly)); snapshot_append(format_f64_field(cels[i].polz)); snapshot_append(" polarity\n")
+        snapshot_append(format_f64_field(cels[i].fase)); snapshot_append(" phase\n"); snapshot_append(format_f64_field(cels[i].temt)); snapshot_append(" transition\n")
+        snapshot_append(format_i64(cels[i].nunodes as i64)); snapshot_append(" nodes\n")
+        snapshot_append(format_i64(cels[i].nodela as i64)); snapshot_append(" capacity\n")
+        snapshot_append(format_i64(cels[i].ctipus as i64)); snapshot_append(" type\nlist of nodes\n")
         let mut j: i32 = 1
-        while j <= cels[i].nunodes { snapshot_append(format_i64(cels[i].node[j] as i64) + " "); j = j + 1 }
+        while j <= cels[i].nunodes { snapshot_append(format_i64(cels[i].node[j] as i64)); snapshot_append(" "); j = j + 1 }
         snapshot_append("\n\n")
         i = i + 1
     }
@@ -776,17 +820,18 @@ function write_node_rows(records: ptr<Nod>, clear_energy: bool) -> void {
     while i <= nd {
         let n: Nod = records[i]
         if clear_energy { n.e = 0.0 }
-        snapshot_append(format_f64_field(n.x) + format_f64_field(n.y) + format_f64_field(n.z) + format_f64_field(n.e))
-        snapshot_append(format_f64_field(n.eqd) + format_f64_field(n.add) + format_f64_field(n.you) + format_f64_field(n.adh))
-        snapshot_append(format_f64_field(n.rep) + format_f64_field(n.rec) + format_f64_field(n.erp) + format_f64_field(n.est))
-        snapshot_append(format_f64_field(n.eqs) + format_f64_field(n.hoo) + format_f64_field(n.mov) + format_f64_field(n.dmo))
-        snapshot_append(format_f64_field(n.orix) + format_f64_field(n.oriy) + format_f64_field(n.oriz) + format_f64_field(n.ecm))
-        snapshot_append(format_f64_field(n.cod) + format_f64_field(n.grd) + format_f64_field(n.pld) + format_f64_field(n.vod))
-        snapshot_append(format_f64_field(n.dif) + format_f64_field(n.kfi) + format_f64_field(n.pla) + format_f64_field(n.kvol))
-        snapshot_append(format_i64_field(n.tipus as i64, 16) + format_i64_field(n.icel as i64, 16) + format_i64_field(n.altre as i64, 16))
-        snapshot_append(format_i64_field(n.marge as i64, 16) + format_i64_field(n.talone as i64, 16) + format_i64_field(n.fix as i64, 16) + format_i64_field(n.ndiv as i64, 16) + "\n")
+        snapshot_append(format_f64_field(n.x)); snapshot_append(format_f64_field(n.y)); snapshot_append(format_f64_field(n.z)); snapshot_append(format_f64_field(n.e))
+        snapshot_append(format_f64_field(n.eqd)); snapshot_append(format_f64_field(n.add)); snapshot_append(format_f64_field(n.you)); snapshot_append(format_f64_field(n.adh))
+        snapshot_append(format_f64_field(n.rep)); snapshot_append(format_f64_field(n.rec)); snapshot_append(format_f64_field(n.erp)); snapshot_append(format_f64_field(n.est))
+        snapshot_append(format_f64_field(n.eqs)); snapshot_append(format_f64_field(n.hoo)); snapshot_append(format_f64_field(n.mov)); snapshot_append(format_f64_field(n.dmo))
+        snapshot_append(format_f64_field(n.orix)); snapshot_append(format_f64_field(n.oriy)); snapshot_append(format_f64_field(n.oriz)); snapshot_append(format_f64_field(n.ecm))
+        snapshot_append(format_f64_field(n.cod)); snapshot_append(format_f64_field(n.grd)); snapshot_append(format_f64_field(n.pld)); snapshot_append(format_f64_field(n.vod))
+        snapshot_append(format_f64_field(n.dif)); snapshot_append(format_f64_field(n.kfi)); snapshot_append(format_f64_field(n.pla)); snapshot_append(format_f64_field(n.kvol))
+        snapshot_append(format_i64_field(n.tipus as i64, 16)); snapshot_append(format_i64_field(n.icel as i64, 16)); snapshot_append(format_i64_field(n.altre as i64, 16))
+        snapshot_append(format_i64_field(n.marge as i64, 16)); snapshot_append(format_i64_field(n.talone as i64, 16)); snapshot_append(format_i64_field(n.fix as i64, 16)); snapshot_append(format_i64_field(n.ndiv as i64, 16)); snapshot_append("\n")
         i = i + 1
     }
 }
 
 export get_param_from_matrix_read, read_snapshot_parameters, param, snapshot_error, write_snapshot
+

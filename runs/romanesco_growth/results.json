@@ -1,0 +1,47 @@
+[
+  {
+    "condition": "Growth cue off",
+    "iterations": 1000,
+    "cells": 96,
+    "nodes": 1344,
+    "new_nodes": 0,
+    "cells_with_growth": 0,
+    "higher_order_growth_cells": 0,
+    "max_cell_node_count": 14,
+    "radial_cv": 0.05277970181421102,
+    "mean_radius": 2.9774351783277915,
+    "max_radius": 3.47381813238587,
+    "mean_growth_response": 0.0,
+    "max_growth_response": 0.0
+  },
+  {
+    "condition": "Primary sites",
+    "iterations": 1000,
+    "cells": 96,
+    "nodes": 2210,
+    "new_nodes": 866,
+    "cells_with_growth": 33,
+    "higher_order_growth_cells": 33,
+    "max_cell_node_count": 56,
+    "radial_cv": 0.07403809579648679,
+    "mean_radius": 3.0995841291096604,
+    "max_radius": 3.670424973170658,
+    "mean_growth_response": 0.04352195636897543,
+    "max_growth_response": 0.19716835731469745
+  },
+  {
+    "condition": "Recursive sites",
+    "iterations": 1000,
+    "cells": 96,
+    "nodes": 4240,
+    "new_nodes": 2896,
+    "cells_with_growth": 33,
+    "higher_order_growth_cells": 33,
+    "max_cell_node_count": 132,
+    "radial_cv": 0.11847050046978785,
+    "mean_radius": 3.267846972124113,
+    "max_radius": 4.247454923194292,
+    "mean_growth_response": 0.1787657470838466,
+    "max_growth_response": 0.5969354585359808
+  }
+]

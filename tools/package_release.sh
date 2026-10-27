@@ -81,3 +81,4 @@ else
 fi
 shasum -a 256 "$archive" 2>/dev/null || sha256sum "$archive"
 echo "Created $archive"
+

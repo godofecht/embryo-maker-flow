@@ -27,7 +27,7 @@
     .timeline-slider-wrap input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#eafff4;border:3px solid var(--mint)}
     .timeline-cache-track{height:4px;border-radius:2px;background:#18222d;width:100%;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);transition:background 120ms ease}
     .timeline-readout{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;font-size:18px;color:#e6edf3;flex:none}
-    .timeline-readout #iterationValue{flex:none;width:5ch;text-align:right;font-variant-numeric:tabular-nums}
+    .timeline-readout #iterationValue{flex:none;width:8ch;min-width:7ch;text-align:right;font-variant-numeric:tabular-nums}
     .timeline-sep{color:#5c6b7a}
     .timeline-readout input{width:84px;background:#0d151e;border:1px solid #2a3948;border-radius:8px;color:#d3ddd8;font-size:15px;padding:5px 8px;font-variant-numeric:tabular-nums}
     .cache-badge{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid #2a3746;color:#9eb0c0;font-size:11px;font-weight:500;cursor:pointer;user-select:none;transition:all 120ms ease;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -194,7 +194,7 @@
         <div class="divider"></div>
         <div class="section-label">Run controls</div>
         <div class="transport" style="margin-top:12px">
-          <button class="primary" id="runBtn">▶ &nbsp; Run</button>
+          <button class="primary" id="runBtn" title="Compute the model through the End iteration">⚙ &nbsp; Compute to End</button>
           <button class="secondary" id="pauseBtn" disabled>Ⅱ &nbsp; Pause</button>
           <button class="secondary" id="stepBtn">Step once</button>
           <button class="secondary" id="resetBtn">Reset</button>
@@ -203,7 +203,7 @@
         <select id="speed" class="speed-select" aria-label="Playback speed"><option value="slow">Slow, 3 per second</option><option value="frame" selected>Smooth, one per frame</option><option value="fast">Fast, batched</option><option value="max">Maximum throughput</option></select>
         <label class="field-label" for="computeMode"><span>Compute</span><small id="computeInfo"></small></label>
         <select id="computeMode" class="speed-select" aria-label="Compute mode"><option value="threads" selected>CPU threads, exact</option><option value="serial">CPU single core, exact</option><option value="exact64">GPU binary64, exact</option><option value="preview">GPU float32 preview</option></select>
-        <p class="hint">Use the timeline to move between iterations. Set Target to choose how far to run. GPU modes apply to models of 1000 nodes or more; the preview diverges from the exact trajectory.</p>
+        <p class="hint">Compute to End fills the saved frame cache. The timeline plays and scrubs saved frames. Set End to choose the compute limit. GPU modes apply to models of 1000 nodes or more; the preview diverges from the exact trajectory.</p>
         <div class="divider"></div>
         </div>
         <div class="control-stack">
@@ -227,13 +227,13 @@
       <section class="panel view-panel" id="viewPanel" aria-label="3D model view">
         <div class="view-head"><div><div id="viewTitle" class="view-title">Cell model</div><div id="viewCaption" class="view-caption">Drag to rotate · Scroll to zoom</div></div><div class="view-actions"><button id="workspaceToggle" class="workspace-toggle" type="button" aria-expanded="true">Focus view</button><select id="cameraPreset" class="settings-select" aria-label="Camera view" style="width:auto;padding:7px 9px"><option value="oblique">Oblique view</option><option value="above">View from above</option><option value="front">View from front</option></select><button id="homeView" class="icon-button" aria-label="Reset view" title="Reset view">⌂</button><button id="fullscreenBtn" class="icon-button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button><button id="openMenuBtn" class="icon-button" aria-label="Open EmbryoMaker menu" title="Right-click the view for the original menu">☰</button></div></div>
         <div class="timeline" id="timeline" aria-label="Iteration timeline">
-          <button id="timelinePlay" class="timeline-play" type="button" aria-label="Run or pause">&#9654;</button>
-          <span class="timeline-label">Iteration</span>
+          <button id="timelinePlay" class="timeline-play" type="button" aria-label="Play saved frames" title="Play saved frames">&#9654;</button>
+          <span class="timeline-label" id="timelineDomainLabel">Iteration</span>
           <div class="timeline-slider-wrap">
             <input id="iterationRange" type="range" min="0" max="120" value="0" step="1" aria-label="Iteration">
             <div id="timelineCacheTrack" class="timeline-cache-track" title="Calculated simulation cache map"></div>
           </div>
-          <div class="timeline-readout"><span id="iterationValue">0</span><label class="target-label" for="iterationMax">Target</label><input id="iterationMax" type="number" min="1" step="1" value="120" aria-label="Run target"></div>
+          <div class="timeline-readout"><input id="iterationValue" type="number" min="0" step="1" value="0" aria-label="Current iteration"><label class="target-label" for="iterationMax">End</label><input id="iterationMax" type="number" min="1" step="1" value="120" aria-label="Run target"></div>
           <button type="button" class="cache-badge" id="cacheBadge" aria-haspopup="dialog" title="Simulation cache status · Click for details">
             <span class="cache-dot" id="cacheDot"></span>
             <span id="cacheSummary">0 calc</span>
@@ -355,15 +355,19 @@
     class FrameStorage {
       constructor(maxRam = 48) {
         this.index = new Map();
+        this.totalFrames = 0;
         this.ramCache = new Map();
         this.accessOrder = [];
         this.sortedIters = [];
         this.activeExp = null;
         this.fetchingIters = new Set();
         this.requestedIteration = null;
+        this.pendingDiskIteration = null;
         this.MAX_RAM_FRAMES = maxRam;
+        this.MAX_RAM_BYTES = 64 * 1024 * 1024;
+        this.MAX_INDEX_ENTRIES = 8192;
       }
-      get size() { return this.index.size; }
+      get size() { return this.totalFrames; }
       has(it) { return this.index.has(it) || this.ramCache.has(it); }
       get(it) {
         if (this.ramCache.has(it)) {
@@ -378,12 +382,29 @@
         void this.streamFromDisk(it);
         return this.getClosestInRam(it);
       }
+      async getExact(it) {
+        const resident = this.ramCache.get(it);
+        if (resident) { this._touch(it); return resident; }
+        const exp = this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
+        const record = await dbGetFrame(exp, it, true);
+        if (!record) return null;
+        const frame = {
+          iterations: record.iteration, simulatedTime: record.simulatedTime, count: record.count,
+          nodes: record.nodes, cells: record.cells, edges: record.edges, bounds: record.bounds,
+          triangulationWarning: record.triangulationWarning, snapshot: record.snapshot,
+          experiment: record.experiment, _cached: true
+        };
+        if (this._estimateFrameBytes(frame) <= this.MAX_RAM_BYTES) {
+          this.ramCache.set(it, frame); this._touch(it); this._enforceRamLimit(it);
+        }
+        return frame;
+      }
       set(it, f) {
         this.put(it, f, false);
         return this;
       }
       delete(it) {
-        this.index.delete(it);
+        if(this.index.delete(it))this.totalFrames=Math.max(0,this.totalFrames-1);
         this.ramCache.delete(it);
         const sIdx = this._binarySearch(it);
         if (sIdx >= 0) this.sortedIters.splice(sIdx, 1);
@@ -393,11 +414,13 @@
       }
       clear() {
         this.index.clear();
+        this.totalFrames = 0;
         this.ramCache.clear();
         this.accessOrder = [];
         this.sortedIters = [];
         this.fetchingIters.clear();
         this.requestedIteration = null;
+        this.pendingDiskIteration = null;
       }
       keys() { return this.index.keys(); }
       values() { return this.ramCache.values(); }
@@ -407,9 +430,26 @@
       registerMeta(it, meta) {
         if (!this.index.has(it)) {
           this.index.set(it, meta);
+          this.totalFrames++;
           const sIdx = this._binarySearch(it);
           if (sIdx < 0) this.sortedIters.splice(~sIdx, 0, it);
         }
+      }
+
+      _compactIndexIfNeeded() {
+        if (this.sortedIters.length <= this.MAX_INDEX_ENTRIES * 2) return;
+        const stride = Math.ceil((this.sortedIters.length - 1) / (this.MAX_INDEX_ENTRIES - 1));
+        const keep = new Set();
+        for (let i = 0; i < this.sortedIters.length; i += stride) keep.add(this.sortedIters[i]);
+        keep.add(this.sortedIters[this.sortedIters.length - 1]);
+        for (const it of this.index.keys()) {
+          if (!keep.has(it)) {
+            this.index.delete(it);
+            this.ramCache.delete(it);
+          }
+        }
+        this.sortedIters = this.sortedIters.filter(it => keep.has(it));
+        this.accessOrder = this.accessOrder.filter(it => keep.has(it));
       }
 
       put(it, frame, persist = true) {
@@ -424,10 +464,16 @@
           hasSnapshot: Boolean(frame.snapshot),
           experiment: exp
         });
+        if (this._estimateFrameBytes(frame) > this.MAX_RAM_BYTES) {
+          this._compactIndexIfNeeded();
+          if (persist) state.framePersistPromise = queueFramePersist(frame);
+          return this;
+        }
         this.ramCache.set(it, frame);
         this._touch(it);
+        this._compactIndexIfNeeded();
         if (persist) {
-          queueFramePersist(frame);
+          state.framePersistPromise = queueFramePersist(frame);
         }
         this._enforceRamLimit();
       }
@@ -438,10 +484,17 @@
         this.accessOrder.push(it);
       }
 
+      _estimateFrameBytes(frame) {
+        let bytes=(frame.nodes?.length||0)*1024+(frame.cells?.length||0)*1024+(frame.edges?.length||0)*64+(frame.snapshot?.length||0)*2;
+        for(const node of frame.nodes||[])bytes+=(node.genes?.length||0)*8;
+        return bytes;
+      }
+
       _enforceRamLimit(center = state.iteration || 0) {
-        if (this.ramCache.size <= this.MAX_RAM_FRAMES) return;
+        const ramBytes=()=>{let total=0;for(const frame of this.ramCache.values())total+=this._estimateFrameBytes(frame);return total;};
+        if (this.ramCache.size <= this.MAX_RAM_FRAMES && ramBytes() <= this.MAX_RAM_BYTES) return;
         const current = center;
-        while (this.ramCache.size > this.MAX_RAM_FRAMES && this.accessOrder.length > 0) {
+        while ((this.ramCache.size > this.MAX_RAM_FRAMES || ramBytes() > this.MAX_RAM_BYTES) && this.accessOrder.length > 0) {
           let furthestIter = null, maxDist = -1;
           for (const it of this.ramCache.keys()) {
             const d = Math.abs(it - current);
@@ -498,6 +551,7 @@
 
       async streamFromDisk(iteration) {
         if (this.ramCache.has(iteration) || this.fetchingIters.has(iteration)) return;
+        if (this.fetchingIters.size >= 8) { this.pendingDiskIteration = iteration; return; }
         this.fetchingIters.add(iteration);
         try {
           const exp = this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
@@ -516,9 +570,12 @@
               experiment: record.experiment,
               _cached: true
             };
-            this.ramCache.set(iteration, frame);
-            this._touch(iteration);
-            this._enforceRamLimit(iteration);
+            if (this._estimateFrameBytes(frame) <= this.MAX_RAM_BYTES) {
+              this.ramCache.set(iteration, frame);
+              this._touch(iteration);
+              this._compactIndexIfNeeded();
+              this._enforceRamLimit(iteration);
+            }
             if (this.requestedIteration === iteration || state.iteration === iteration || (state.scrubbing && state.progressTarget === iteration)) {
               if (this.requestedIteration === iteration) this.requestedIteration = null;
               updateModel(frame, '', true);
@@ -527,6 +584,11 @@
           }
         } finally {
           this.fetchingIters.delete(iteration);
+          if (this.pendingDiskIteration !== null && this.fetchingIters.size < 8) {
+            const next = this.pendingDiskIteration;
+            this.pendingDiskIteration = null;
+            if (!this.ramCache.has(next)) void this.streamFromDisk(next);
+          }
         }
       }
 
@@ -545,6 +607,7 @@
       snapshotCache() {
         return {
           index: new Map(this.index),
+          totalFrames: this.totalFrames,
           ramCache: new Map(this.ramCache),
           accessOrder: this.accessOrder.slice(),
           sortedIters: this.sortedIters.slice()
@@ -554,6 +617,7 @@
       restore(s) {
         if (!s) return;
         this.index = new Map(s.index);
+        this.totalFrames = Number.isFinite(s.totalFrames) ? s.totalFrames : this.index.size;
         this.ramCache = new Map(s.ramCache);
         this.accessOrder = s.accessOrder.slice();
         this.sortedIters = s.sortedIters.slice();
@@ -582,25 +646,23 @@
 
       async getAllFramesAsync() {
         if (this.ramCache.size === this.index.size && this.ramCache.size > 0) {
-          return Array.from(this.ramCache.values()).sort((a,b)=>a.iterations-b.iterations);
+          return this._validateExportFrames(Array.from(this.ramCache.values()));
         }
         const exp = this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
         const diskRecords = await dbLoadFramesForExperiment(exp);
         if (diskRecords && diskRecords.length) {
-          return diskRecords.map(r => ({
-            iterations: r.iteration,
-            simulatedTime: r.simulatedTime,
-            count: r.count,
-            nodes: r.nodes,
-            cells: r.cells,
-            edges: r.edges,
-            bounds: r.bounds,
-            triangulationWarning: r.triangulationWarning,
-            snapshot: r.snapshot,
-            experiment: r.experiment
-          })).sort((a,b)=>a.iterations-b.iterations);
+          for(const record of diskRecords){record.iterations=record.iteration;delete record.iteration;delete record.key;delete record.timestamp;}
+          return this._validateExportFrames(diskRecords);
         }
-        return Array.from(this.ramCache.values()).sort((a,b)=>a.iterations-b.iterations);
+        return this._validateExportFrames(Array.from(this.ramCache.values()));
+      }
+
+      _validateExportFrames(frames) {
+        const maxBytes=64*1024*1024;
+        if(frames.length>4096)throw Error('This export exceeds 4,096 frames. Reduce the saved snapshot count first.');
+        let bytes=0;
+        for(const frame of frames){bytes+=this._estimateFrameBytes(frame);if(bytes>maxBytes)throw Error('This export exceeds the 64 MB memory limit. Reduce the saved snapshot count first.');}
+        return frames.sort((a,b)=>a.iterations-b.iterations);
       }
     }
     let ogCameraDistance = 5;
@@ -609,6 +671,7 @@
     const state = { nodes: [], cells: [], edges: [], slicePlots: [], sliceSurface: false, boxGrid: {spacing:0,count:0}, iteration: 0, simulatedTime: 0, max: 120, maxPinned: false, scrubbing: false, pendingIterationTarget: null, progressTarget: null, rewindTarget: null, pendingDisplay: null, scrubEpoch: 0, serverIteration: 0, msPerIteration: 0, rateText: '', keyboardIterationBatch:1, yaw: 0, pitch: 60*Math.PI/180, cameraDistance: 5, cameraShiftX: 0, cameraShiftY: 0, zoom: 1, panX: 0, panY: 0, playing: false, busy: false, colorMode: 'type', paletteMode: 'multi', pointScale: 1, radiusMode: 'add', ballMode: 'cylinders', nodeFilter: 'all', fixedOnly: false, showNodes: true, showApical: true, showBasal: true, showFixed: true, showBox: true, showGrid: false, showEggshell: false, showEllipses: false, showTransparentSpheres: false, showArrows: false, arrowField: 'type', sphereField: 'type', arrowScale: 1, sphereScale: 1, mechanicalArrowField:'scalar:x', otherArrowField:'type', mechanicalSphereField:'scalar:x', otherSphereField:'type', mechanicalColorField:'scalar:x', otherColorField:'type', showEpithelium: true, showMesenchyme: true, showECM: true, showCentroids: false, showPolarization: false, showDisplacement: false, showUnitMovement: false, showMovementVectors: false, showRepulsion: false, showLateralForce: false, showAxialForce: false, selected: null, selectionHistory: [], copiedNodeProperty: null, copiedCellProperty: null, cursor: null, cursorInitialized: false, cursorEnabled: false, dragDelta: null, temporalPlotsEnabled: true, geneSamples: [], plottedNodeIds: [], plottedGenes: [], inputText: null, fileName: null, lastSnapshot: null, timer: null, statusTimer: null, frame: [], bounds: null, colorLimits: {}, customColorLimits: {}, customArrowLimits: {}, customSphereLimits: {}, section: 'off', sectionFraction: 0, fixedSections: false, sectionBounds: null, dragMode: 'rotate', drawQueued: false, depthDirty: true };
     window.state = state;
     Object.assign(state,{periodicSnapshots:false,snapshotFrequency:1000,outputLabel:'',saveImages:false,movieRecorder:null,movieChunks:[],movieEnd:0,lastOutputIteration:-1,leftMouseAdjustment:null,middleMouseAdjustment:null,activeMouseAdjustment:null,trajectoryFrames:new FrameStorage(),isTrajectoryMode:false,minIteration:0});
+    state.geneSampleBytes=0;
     state.showSprings = false;state.showCylinders=true;state.smallBalls=false;state.noBalls=false;
     const cellPalettes = {
       multi: ['#f2f2f2','#e5484d','#16b9d3','#40b64a','#c13ce0','#e7c629','#743fe3','#f07e2f'],
@@ -674,6 +737,7 @@
     const setCountText = (id, value) => {
       const el = $(id); if (!el) return;
       const text = compactCount(value); el.textContent = text;
+      if (el instanceof HTMLInputElement && document.activeElement !== el) el.value = String(Math.floor(Number(value) || 0));
       if (text === exactCount(value)) el.removeAttribute('title'); else el.title = exactCount(value);
     };
     function updateViewCaption() { const caption = `Iteration ${exactCount(state.iteration)} · ${exactCount(state.nodes.length)} nodes · drag to ${state.dragMode}`; const el = $('viewCaption'); el.textContent = caption; el.title = caption; }
@@ -852,7 +916,7 @@
       queueMicrotask(()=>{if(state.busy)restartQueued=true;else void runAt(0,true);});
     }
     const DB_NAME='EmbryoMakerDB';
-    const DB_VERSION=2;
+    const DB_VERSION=3;
     let dbPromise=null;
     function openCacheDB(){
       if(dbPromise)return dbPromise;
@@ -861,104 +925,88 @@
         const req=indexedDB.open(DB_NAME,DB_VERSION);
         req.onupgradeneeded=e=>{
           const db=e.target.result;
-          if(!db.objectStoreNames.contains('frames')){
-            const store=db.createObjectStore('frames',{keyPath:'key'});
-            store.createIndex('by_experiment','experiment',{unique:false});
-            store.createIndex('by_iter',['experiment','iteration'],{unique:true});
-          }
+          const store=db.objectStoreNames.contains('frames')?e.target.transaction.objectStore('frames'):db.createObjectStore('frames',{keyPath:'key'});
+          if(!store.indexNames.contains('by_experiment'))store.createIndex('by_experiment','experiment',{unique:false});
+          if(!store.indexNames.contains('by_iter'))store.createIndex('by_iter',['experiment','iteration'],{unique:true});
         };
         req.onsuccess=()=>resolve(req.result);
         req.onerror=()=>resolve(null);
       });
       return dbPromise;
     }
-    let pendingDbFrames=[];
-    let dbFlushTimer=null;
     function queueFramePersist(frame){
-      if(!frame||typeof frame.iterations!=='number')return;
-      pendingDbFrames.push(frame);
-      if(!dbFlushTimer)dbFlushTimer=setTimeout(flushDbFrames,80);
-    }
-    async function flushDbFrames(){
-      dbFlushTimer=null;
-      if(!pendingDbFrames.length)return;
-      const batch=pendingDbFrames;
-      pendingDbFrames=[];
-      try{
+      if(!frame||typeof frame.iterations!=='number')return Promise.resolve();
+      return (async()=>{
+        const exp=frame.experiment||$('experiment')?.value||'default';
         const db=await openCacheDB();
-        if(!db)return;
+        if(!db)throw Error('IndexedDB is unavailable. This frame was not saved.');
         const tx=db.transaction('frames','readwrite');
-        const store=tx.objectStore('frames');
-        for(const f of batch){
-          const exp=f.experiment||$('experiment')?.value||'default';
-          store.put({
-            key:`${exp}:${f.iterations}`,
-            experiment:exp,
-            iteration:f.iterations,
-            simulatedTime:f.simulatedTime,
-            count:f.count||f.nodes?.length||0,
-            nodes:f.nodes,
-            cells:f.cells,
-            edges:f.edges,
-            bounds:f.bounds,
-            triangulationWarning:f.triangulationWarning||0,
-            timestamp:Date.now(),
-            snapshot:f.snapshot||null
-          });
-        }
-      }catch(err){}
-    }
-    async function dbLoadFramesForExperiment(exp){
-      try{
-        const db=await openCacheDB();
-        if(!db)return [];
-        const tx=db.transaction('frames','readonly');
-        const store=tx.objectStore('frames');
-        const index=store.index('by_experiment');
-        return new Promise(resolve=>{
-          const req=index.getAll(IDBKeyRange.only(exp));
-          req.onsuccess=()=>resolve(req.result||[]);
-          req.onerror=()=>resolve([]);
+        tx.objectStore('frames').put({
+          key:`${exp}:${frame.iterations}`,experiment:exp,iteration:frame.iterations,
+          simulatedTime:frame.simulatedTime,count:frame.count||frame.nodes?.length||0,
+          nodes:frame.nodes,cells:frame.cells,edges:frame.edges,bounds:frame.bounds,
+          triangulationWarning:frame.triangulationWarning||0,timestamp:Date.now(),snapshot:frame.snapshot||null
         });
-      }catch{return [];}
+        await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||Error('Frame write failed'));tx.onabort=()=>reject(tx.error||Error('Frame write aborted'));});
+      })();
     }
-    async function dbGetFrame(exp, iteration){
+    async function flushDbFrames(){await state.framePersistPromise;}
+    async function dbLoadFramesForExperiment(exp){
+      const db=await openCacheDB();
+      if(!db)return [];
+      const tx=db.transaction('frames','readonly');
+      const index=tx.objectStore('frames').index('by_iter');
+      return new Promise((resolve,reject)=>{
+        const frames=[];let bytes=0,settled=false;
+        const fail=error=>{if(settled)return;settled=true;reject(error);};
+        const req=index.openCursor(IDBKeyRange.bound([exp,0],[exp,Number.MAX_SAFE_INTEGER]));
+        req.onsuccess=event=>{
+          const cursor=event.target.result;
+          if(!cursor){settled=true;resolve(frames);return;}
+          const record=cursor.value,frameBytes=state.trajectoryFrames._estimateFrameBytes(record);
+          if(frames.length>=4096||bytes+frameBytes>64*1024*1024){fail(Error('This export exceeds the 4,096 frame or 64 MB memory limit. Reduce the saved snapshot count first.'));tx.abort();return;}
+          frames.push(record);bytes+=frameBytes;cursor.continue();
+        };
+        req.onerror=()=>fail(req.error||Error('Could not read saved trajectory frames.'));
+        tx.onabort=()=>fail(tx.error||Error('Could not read saved trajectory frames.'));
+      });
+    }
+    async function dbGetFrame(exp, iteration, strict=false){
       try{
         const db=await openCacheDB();
-        if(!db)return null;
-        return new Promise(resolve=>{
+        if(!db){if(strict)throw Error('IndexedDB is unavailable.');return null;}
+        return await new Promise((resolve,reject)=>{
           const tx=db.transaction('frames','readonly');
           const store=tx.objectStore('frames');
           const req=store.get(`${exp}:${iteration}`);
           req.onsuccess=()=>resolve(req.result||null);
-          req.onerror=()=>resolve(null);
+          req.onerror=()=>strict?reject(req.error||Error('Could not read the saved frame.')):resolve(null);
+          tx.onabort=()=>strict?reject(tx.error||Error('Frame read was aborted.')):resolve(null);
         });
-      }catch{return null;}
+      }catch(error){if(strict)throw error;return null;}
     }
     async function dbLoadIndexForExperiment(exp){
-      try{
-        const db=await openCacheDB();
-        if(!db)return [];
-        const tx=db.transaction('frames','readonly');
-        const store=tx.objectStore('frames');
-        const index=store.index('by_experiment');
-        const req=index.openKeyCursor(IDBKeyRange.only(exp));
-        const iters=[];
-        return new Promise(resolve=>{
-          req.onsuccess=e=>{
-            const cursor=e.target.result;
-            if(cursor){
-              const parts=String(cursor.primaryKey).split(':');
-              const it=Number(parts[parts.length-1]);
-              if(Number.isFinite(it))iters.push(it);
-              cursor.continue();
-            } else {
-              resolve(iters);
-            }
-          };
-          req.onerror=()=>resolve([]);
-        });
-      }catch{return [];}
+      const db=await openCacheDB();
+      if(!db)return {iterations:[],totalCount:0,maxIteration:0};
+      const tx=db.transaction('frames','readonly');
+      const index=tx.objectStore('frames').index('by_iter');
+      return new Promise((resolve,reject)=>{
+        let iterations=[],totalCount=0,maxIteration=0,stride=1;
+        const req=index.openCursor(IDBKeyRange.bound([exp,0],[exp,Number.MAX_SAFE_INTEGER]));
+        req.onsuccess=event=>{
+          const cursor=event.target.result;
+          if(!cursor){resolve({iterations,totalCount,maxIteration});return;}
+          const it=Number(cursor.key[1]);
+          if(Number.isFinite(it)){
+            totalCount++;maxIteration=Math.max(maxIteration,it);
+            if(totalCount===1||totalCount%stride===0)iterations.push(it);
+            if(iterations.length>16384){iterations=iterations.filter((_,position)=>position%2===0);stride*=2;}
+          }
+          cursor.continue();
+        };
+        req.onerror=()=>reject(req.error||Error('Could not read the saved frame index.'));
+        tx.onabort=()=>reject(tx.error||Error('Could not read the saved frame index.'));
+      });
     }
     async function dbClearFramesForExperiment(exp){
       try{
@@ -971,8 +1019,8 @@
         req.onsuccess=e=>{const c=e.target.result;if(c){c.delete();c.continue();}};
       }catch(err){}
     }
-    function computeCacheRanges(min,max,cachedIters){
-      if(!cachedIters.length)return {cachedSpans:[],uncalculatedSpans:min<=max?[[min,max]]:[],coverageRatio:0,totalCached:0};
+    function computeCacheRanges(min,max,cachedIters,totalCount=cachedIters.length){
+      if(!cachedIters.length)return {cachedSpans:[],uncalculatedSpans:min<=max?[[min,max]]:[],coverageRatio:0,totalCached:totalCount};
       const cachedSpans=[];
       let spanStart=cachedIters[0],spanEnd=cachedIters[0];
       for(let i=1;i<cachedIters.length;i++){
@@ -988,9 +1036,10 @@
         cursor=Math.max(cursor,end+1);
       }
       if(cursor<=max)uncalculatedSpans.push([cursor,max]);
-      const inRange=cachedIters.filter(it=>it>=min&&it<=max).length;
+      const sampleInRange=cachedIters.filter(it=>it>=min&&it<=max).length;
+      const inRange=cachedIters.length?Math.min(max-min+1,Math.round(sampleInRange/cachedIters.length*totalCount)):0;
       const coverageRatio=inRange/Math.max(1,max-min+1);
-      return {cachedSpans,uncalculatedSpans,coverageRatio,totalCached:cachedIters.length};
+      return {cachedSpans,uncalculatedSpans,coverageRatio,totalCached:totalCount};
     }
     function formatSpans(spans){
       if(!spans.length)return 'None';
@@ -999,7 +1048,7 @@
     function updateCacheVisuals(){
       const min=state.minIteration||0,max=Math.max(1,state.max);
       const iters=state.trajectoryFrames?.sortedIters?.length?state.trajectoryFrames.sortedIters:Array.from(state.trajectoryFrames?.keys?.()||[]).sort((a,b)=>a-b);
-      const {cachedSpans,uncalculatedSpans,coverageRatio,totalCached}=computeCacheRanges(min,max,iters);
+      const {cachedSpans,uncalculatedSpans,coverageRatio,totalCached}=computeCacheRanges(min,max,iters,state.trajectoryFrames?.size||iters.length);
       const track=$('timelineCacheTrack');
       if(track){
         if(!cachedSpans.length){
@@ -1033,7 +1082,7 @@
       if(modal&&!modal.hidden){
         $('cacheModalCalcCount').textContent=totalCached.toLocaleString();
         $('cacheModalCalcPct').textContent=`${pct}% of range`;
-        const uncalcCount=Math.max(0,(max-min+1)-iters.filter(i=>i>=min&&i<=max).length);
+        const uncalcCount=Math.max(0,(max-min+1)-Math.min(totalCached,(max-min+1)));
         $('cacheModalUncalcCount').textContent=uncalcCount.toLocaleString();
         $('cacheCalculatedSpans').innerHTML=cachedSpans.length?cachedSpans.map(([s,e])=>`<span class="cache-pill calc">${s===e?s:`${s} to ${e}`}</span>`).join(''):'<span class="cache-pill calc">None</span>';
         $('cacheUncalculatedSpans').innerHTML=uncalculatedSpans.length?uncalculatedSpans.map(([s,e])=>`<span class="cache-pill uncalc">${s===e?s:`${s} to ${e}`}</span>`).join(''):'<span class="cache-pill calc">Fully calculated (100%)</span>';
@@ -1042,18 +1091,21 @@
     function persistFrame(frame){
       if(!frame||typeof frame.iterations!=='number'||frame._cached)return;
       state.trajectoryFrames.put(frame.iterations,frame,true);
+      state.framePersistPromise.catch(error=>setStatus(`Could not save iteration ${frame.iterations}: ${error.message}`,true));
       updateCacheVisuals();
     }
     async function loadExperimentCache(exp){
       if(!exp)return;
       state.trajectoryFrames.activeExp=exp;
       try{
-        const iters=await dbLoadIndexForExperiment(exp);
-        if(iters&&iters.length){
+        const cached=await dbLoadIndexForExperiment(exp);
+        const iters=cached.iterations;
+        if(iters.length){
           for(const it of iters){
             state.trajectoryFrames.registerMeta(it,{iteration:it,experiment:exp});
           }
-          const maxIter=Math.max(...iters);
+          state.trajectoryFrames.totalFrames=cached.totalCount;
+          const maxIter=cached.maxIteration;
           if(maxIter>state.max)state.max=maxIter;
           syncTimeline();
           updateCacheVisuals();
@@ -1138,20 +1190,25 @@
     function downloadBlob(blob,name){const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);}
     async function saveSnapshotToOutput(){const data=await sendSession({label:state.outputLabel},`/api/session/${state.session}/save`);setStatus(`Saved iteration ${data.iteration} to ${data.path}.`);}
     async function outputImage(iteration){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));const gl=$('stageGL'),overlay=$('stage'),capture=document.createElement('canvas');capture.width=gl.width;capture.height=gl.height;const context=capture.getContext('2d');context.drawImage(gl,0,0);context.drawImage(overlay,0,0);const blob=await new Promise(resolve=>capture.toBlob(resolve,'image/png'));if(!blob)throw Error('Could not capture the current view as a PNG');const image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the captured PNG'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.outputLabel,image},`/api/session/${state.session}/save-image`);setStatus(`Saved image for iteration ${iteration} to ${result.path}.`);}
-    function toggleMovie(){if(state.movieRecorder){const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();return;}const end=Number(window.prompt('Save movie until which iteration?',String(Math.max(state.iteration+1,state.iteration+state.snapshotFrequency*10))));if(!Number.isInteger(end)||end<=state.iteration){setStatus('Enter an iteration after the current time.',true);return;}if(typeof $('stageGL').captureStream!=='function'||typeof MediaRecorder==='undefined'){setStatus('Movie recording is unavailable in this browser.',true);return;}try{const stream=$('stageGL').captureStream(20),track=stream.getVideoTracks()[0];state.movieChunks=[];state.movieEnd=end;state.movieLabel=`${state.outputLabel||'embryomaker'}_${Date.now()}`;state.max=Math.max(state.max,end);$('iterationRange').max=state.max;$('iterationReadout').textContent=`${compactCount(state.iteration)} / ${compactCount(state.max)}`;$('iterationReadout').title=`Recorded range · iteration ${exactCount(state.iteration)} of ${exactCount(state.max)}`;state.movieTrack=track;const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';state.movieRecorder=new MediaRecorder(stream,{mimeType});state.movieRecorder.ondataavailable=event=>{if(event.data.size)state.movieChunks.push(event.data);};state.movieRecorder.onstop=async()=>{const blob=new Blob(state.movieChunks,{type:mimeType});stream.getTracks().forEach(item=>item.stop());state.movieTrack=null;state.movieChunks=[];try{const movie=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the movie recording'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.movieLabel,movie},`/api/session/${state.session}/save-movie`);setStatus(`Saved movie to ${result.path}.`);}catch(error){downloadBlob(blob,`${state.movieLabel}.webm`);setStatus(`GIF conversion failed. Saved WebM movie instead: ${error.message}`,true);}};state.movieRecorder.start();setStatus(`Movie recording through iteration ${end}.`);}catch(error){state.movieRecorder=null;setStatus(`Could not start movie recording: ${error.message}`,true);}}
+    const MAX_MOVIE_BYTES=5*1024*1024;
+    function toggleMovie(){if(state.movieRecorder){const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();return;}const end=Number(window.prompt('Save movie until which iteration?',String(Math.max(state.iteration+1,state.iteration+state.snapshotFrequency*10))));if(!Number.isInteger(end)||end<=state.iteration){setStatus('Enter an iteration after the current time.',true);return;}if(typeof $('stageGL').captureStream!=='function'||typeof MediaRecorder==='undefined'){setStatus('Movie recording is unavailable in this browser.',true);return;}try{const stream=$('stageGL').captureStream(20),track=stream.getVideoTracks()[0];state.movieChunks=[];state.movieBytes=0;state.movieLimitReached=false;state.movieEnd=end;state.movieLabel=`${state.outputLabel||'embryomaker'}_${Date.now()}`;state.max=Math.max(state.max,end);$('iterationRange').max=state.max;$('iterationReadout').textContent=`${compactCount(state.iteration)} / ${compactCount(state.max)}`;$('iterationReadout').title=`Recorded range · iteration ${exactCount(state.iteration)} of ${exactCount(state.max)}`;state.movieTrack=track;const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';state.movieRecorder=new MediaRecorder(stream,{mimeType});state.movieRecorder.ondataavailable=event=>{if(!event.data.size||state.movieLimitReached)return;if(state.movieBytes+event.data.size>MAX_MOVIE_BYTES){state.movieLimitReached=true;state.movieRecorder?.stop();return;}state.movieBytes+=event.data.size;state.movieChunks.push(event.data);};state.movieRecorder.onstop=async()=>{const blob=new Blob(state.movieChunks,{type:mimeType});stream.getTracks().forEach(item=>item.stop());state.movieTrack=null;state.movieChunks=[];state.movieBytes=0;if(state.movieLimitReached){state.movieLimitReached=false;downloadBlob(blob,`${state.movieLabel}.webm`);setStatus('Movie reached the 5 MB recording limit. Downloaded the WebM file.');return;}try{const movie=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Could not read the movie recording'));reader.readAsDataURL(blob);});const result=await sendSession({label:state.movieLabel,movie},`/api/session/${state.session}/save-movie`);setStatus(`Saved movie to ${result.path}.`);}catch(error){downloadBlob(blob,`${state.movieLabel}.webm`);setStatus(`GIF conversion failed. Saved WebM movie instead: ${error.message}`,true);}};state.movieRecorder.start();setStatus(`Movie recording through iteration ${end}.`);}catch(error){state.movieRecorder=null;setStatus(`Could not start movie recording: ${error.message}`,true);}}
     async function handleOutputIteration(iteration){const frequency=Math.max(1,state.snapshotFrequency),atFrequency=iteration%frequency===0;if(atFrequency&&state.periodicSnapshots)await saveSnapshotToOutput();if(atFrequency&&state.saveImages)await outputImage(iteration);if(state.movieRecorder){await new Promise(resolve=>requestAnimationFrame(()=>resolve()));await new Promise(resolve=>setTimeout(resolve,60));if(iteration>=state.movieEnd){await new Promise(resolve=>setTimeout(resolve,100));const recorder=state.movieRecorder;state.movieRecorder=null;recorder.stop();}}}
     async function runAt(iteration,restart=false) {
       if(state.isTrajectoryMode){
         const closestIt=state.trajectoryFrames.findClosestIteration(iteration);
         if(closestIt!==null){
-          const frame=state.trajectoryFrames.get(closestIt);
-          if(frame){updateModel(frame,'',true);syncTimeline();}
+          try{
+            const frame=await state.trajectoryFrames.getExact(closestIt);
+            if(frame){updateModel(frame,'',true);syncTimeline();}
+          }catch(error){setStatus(`Could not load iteration ${closestIt}: ${error.message}`,true);return false;}
         }
         return true;
       }
       const activeExperiment=state.inputText!==null?(state.fileName||'custom'):$('experiment').value;
-      if(!restart&&state.trajectoryFrames.has(iteration)){
-        const cached=state.trajectoryFrames.get(iteration);
+      if(!restart){
+        let cached;
+        try{cached=await state.trajectoryFrames.getExact(iteration);}
+        catch(error){setStatus(`Could not load iteration ${iteration}: ${error.message}`,true);return false;}
         if(cached&&cached.experiment===activeExperiment){
           updateModel(cached,'',true);syncTimeline();
           return true;
@@ -1187,8 +1244,9 @@
           }
           const initial=await sendSession(body);
           if(epoch!==state.scrubEpoch){state.serverIteration=initial.iterations;return true;}
-          if(!rewinding&&restart){state.selected=null;state.selectionHistory=[];state.selectionMode=null;state.cursorEnabled=false;state.cursorInitialized=false;state.cursor=null;state.temporalPlotsEnabled=true;state.geneSamples=[];state.plottedNodeIds=[];state.plottedGenes=[];state.slicePlots=[];state.sliceSurface=false;state.fixedSections=false;state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};state.sectionBounds=null;state.section='off';state.sectionFraction=0;state.max=Math.max(120,initial.iterations+120);state.maxPinned=false;state.msPerIteration=0;state.rateText='';$('genePlotPanel').hidden=true;$('sectionPlane').value='off';$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';resetCamera();setDragMode('rotate');}
+          if(!rewinding&&restart){state.selected=null;state.selectionHistory=[];state.selectionMode=null;state.cursorEnabled=false;state.cursorInitialized=false;state.cursor=null;state.temporalPlotsEnabled=true;state.geneSamples=[];state.geneSampleBytes=0;state.plottedNodeIds=[];state.plottedGenes=[];state.slicePlots=[];state.sliceSurface=false;state.fixedSections=false;state.customColorLimits={};state.customArrowLimits={};state.customSphereLimits={};state.sectionBounds=null;state.section='off';state.sectionFraction=0;state.max=Math.max(120,initial.iterations+120);state.maxPinned=false;state.msPerIteration=0;state.rateText='';$('genePlotPanel').hidden=true;$('sectionPlane').value='off';$('sectionPosition').value=0;$('sectionPosition').disabled=true;$('sectionPositionReadout').value='0%';resetCamera();setDragMode('rotate');}
           updateModel(initial,`${((performance.now()-started)/1000).toFixed(1)} s`);
+          await state.framePersistPromise;
         }
         while(state.iteration<iteration){
           if(state.pendingIterationTarget!==null){iteration=state.pendingIterationTarget;state.pendingIterationTarget=null;state.progressTarget=iteration;if(iteration<=state.iteration)break;}
@@ -1204,6 +1262,7 @@
           const data=await sendSession({steps:next-state.iteration,includeSnapshot},`/api/session/${state.session}/advance`);
           if(epoch!==state.scrubEpoch){state.serverIteration=data.iterations;break;}
           updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);
+          await state.framePersistPromise;
           syncIterationProgress();
           if(next%frequency===0)await handleOutputIteration(next);
         }
@@ -1228,6 +1287,7 @@
           data=await sendSession({steps,includeSnapshot},`/api/session/${state.session}/advance`);
           remaining-=steps;
           updateModel(data,`${((performance.now()-started)/1000).toFixed(1)} s`);
+          await state.framePersistPromise;
           if(outputEachStep||includeSnapshot)await handleOutputIteration(state.iteration);
         }
       } catch(error){succeeded=false;setStatus(error.message,true);}
@@ -1244,6 +1304,8 @@
       if(state.iteration>state.max)state.max=state.iteration;
       const range=$('iterationRange');if(Number(range.max)!==state.max)range.max=state.max;
       if(!state.scrubbing)range.value=Math.min(state.iteration,state.max);
+      const currentInput=$('iterationValue');currentInput.min=String(state.minIteration??0);currentInput.max=String(state.max);
+      if(document.activeElement!==currentInput)currentInput.value=String(Math.floor(state.scrubbing?Number(range.value):(state.rewindTarget??state.pendingDisplay??state.iteration)));
       range.style.setProperty('--fill',`${(Number(range.value)/Math.max(1,state.max))*100}%`);
       // A queued or running rewind owns the readout until it lands, so the
       // slider does not snap back to the batch the user just scrubbed away from.
@@ -1254,120 +1316,49 @@
       const rate=state.playing&&state.rateText?state.rateText:'';
       const rateEl=$('iterationReadout');rateEl.textContent=rate;rateEl.title=rate?`Measured rate · ${rate}`:'';
       range.setAttribute('aria-valuetext',`Iteration ${range.value} of ${state.max}`);
-      const playButton=$('timelinePlay');playButton.setAttribute('aria-label',state.playing?'Pause simulation':'Run simulation');playButton.setAttribute('aria-pressed',String(state.playing));playButton.innerHTML=state.playing?'&#10074;&#10074;':'&#9654;';playButton.classList.toggle('playing',state.playing);
+      const playButton=$('timelinePlay');playButton.setAttribute('aria-label',state.playing?'Pause playback':'Play saved frames');playButton.title=state.playing?'Pause playback':'Play saved frames';playButton.setAttribute('aria-pressed',String(state.playing));playButton.innerHTML=state.playing?'&#10074;&#10074;':'&#9654;';playButton.classList.toggle('playing',state.playing);
       if(!state.scrubbing)updateCacheVisuals();
     }
     function syncIterationProgress(){const panel=$('iterationProgress'),bar=$('iterationProgressBar'),label=$('iterationProgressLabel');if(!panel)return;const target=state.progressTarget;panel.classList.toggle('active',state.busy&&target!==null);if(target===null)return;const done=Math.min(state.iteration,target);bar.max=Math.max(1,target);bar.value=done;label.textContent=`Iteration ${compactCount(done)} of ${compactCount(target)}`;label.title=`Iteration ${exactCount(done)} of ${exactCount(target)}`;}
     function stop(){state.playing=false;clearTimeout(state.timer);if(state.busy)state.pendingIterationTarget=state.iteration;$('pauseBtn').disabled=true;setStatus(state.busy?'Pausing after the current batch.':`Paused at iteration ${state.iteration}.`);syncTimeline();}
-    // Play modes: slow waits 300 ms between single iterations, frame runs one
-    // iteration per screen update, fast and max batch several iterations per
-    // request so the solver, not the round trip, sets the pace. Batch sizes
-    // adapt to the measured time per iteration.
+    // Playback reads persisted frames. Solver work starts only from the Run,
+    // Step, or Compute Pending Spans controls.
     async function playLoop(){
       if(!state.playing)return;
-      const activeExperiment = state.inputText !== null ? (state.fileName || 'custom') : $('experiment').value;
       const mode = $('speed').value;
       const iters = state.trajectoryFrames.sortedIters.length
         ? state.trajectoryFrames.sortedIters
         : Array.from(state.trajectoryFrames.keys()).sort((a,b)=>a-b);
-
-      let nextIter = null;
-      if (iters.length > 0) {
-        const higherIters = iters.filter(it => it > state.iteration);
-        if (higherIters.length > 0) {
-          if (state.isTrajectoryMode) {
-            nextIter = higherIters[0];
-          } else {
-            const stride = mode === 'slow' || mode === 'frame' ? 1 : mode === 'fast' ? 2 : 4;
-            const target = state.iteration + stride;
-            nextIter = higherIters.find(it => it >= target) || higherIters[0];
-            if (nextIter - state.iteration > Math.max(10, stride * 4) && !higherIters.includes(state.iteration + 1)) {
-              nextIter = null;
-            }
-          }
-        } else if (state.isTrajectoryMode) {
-          // Only a packaged trajectory loops back to its first frame. A live run
-          // that reaches its target keeps computing: rewinding it to the start
-          // threw the calculation away and dragged the slider back with it.
-          if (!state.maxPinned) {
-            const minIt = state.minIteration;
-            state.iteration = minIt;
-            const f0 = state.trajectoryFrames.get(minIt);
-            if (f0) updateModel(f0, '', true);
-            syncTimeline();
-            const delay = mode === 'slow' ? 300 : mode === 'frame' ? 80 : 30;
-            state.timer = setTimeout(playLoop, delay);
-            return;
-          } else {
-            stop();
-            return;
-          }
-        }
-      }
-
-      if (nextIter !== null) {
-        const frame = state.trajectoryFrames.get(nextIter);
-        if (frame && (state.isTrajectoryMode || frame.experiment === activeExperiment)) {
-          state.iteration = nextIter;
-          updateModel(frame, '', true);
-          state.trajectoryFrames.prefetchAround(nextIter, 6);
-          syncTimeline();
-          const delay = mode === 'slow' ? 300 : mode === 'frame' ? 40 : mode === 'fast' ? 16 : 8;
-          state.rateText = mode === 'slow' ? '3 it/s' : mode === 'frame' ? '25 it/s' : mode === 'fast' ? '60 it/s' : '120 it/s';
-          state.timer = setTimeout(playLoop, delay);
-          return;
-        }
-      }
-
-      if (state.isTrajectoryMode) {
-        stop();
-        return;
-      }
-
-      if (state.busy) { state.timer = setTimeout(playLoop, 4); return; }
-      if (state.iteration >= state.max) {
-        if (state.maxPinned) { stop(); return; }
-        state.max = Math.max(state.max + 1, Math.ceil(state.max * 1.5));
-        syncTimeline();
-      }
-
-      let steps = 1;
-      if (mode === 'fast' || mode === 'max') {
-        const budget = mode === 'fast' ? 40 : 200, perStep = Math.max(0.1, state.msPerIteration || 4);
-        steps = Math.max(1, Math.min(mode === 'fast' ? 64 : 2000, Math.round(budget / perStep)));
-      }
-      steps = Math.max(1, Math.min(steps, state.max - state.iteration));
-
-      const started = performance.now(), from = state.iteration;
-      const ok = await runAt(from + steps);
-      const elapsed = performance.now() - started, advanced = state.iteration - from;
-      if (advanced > 0) {
-        const per = elapsed / advanced;
-        state.msPerIteration = state.msPerIteration ? 0.7 * state.msPerIteration + 0.3 * per : per;
-        state.rateText = formatRate(1000 / per);
-      }
-      if (!ok) { state.playing = false; $('pauseBtn').disabled = true; syncTimeline(); return; }
-      if (!state.playing) { syncTimeline(); return; }
+      const nextIter=iters.find(it=>it>state.iteration);
+      if(nextIter===undefined){stop();setStatus(`Playback reached the last saved frame at iteration ${state.iteration}. Compute more frames to continue.`);return;}
+      let frame;
+      try{frame=await state.trajectoryFrames.getExact(nextIter);}
+      catch(error){stop();setStatus(`Could not load saved iteration ${nextIter}: ${error.message}`,true);return;}
+      if(!state.playing)return;
+      if(!frame){stop();setStatus(`Saved frame ${nextIter} is unavailable. Compute that range before playback.`);return;}
+      state.iteration=nextIter;
+      updateModel(frame,'',true);
+      state.trajectoryFrames.prefetchAround(nextIter,6);
       syncTimeline();
-      state.timer = setTimeout(playLoop, mode === 'slow' ? 300 : 0);
+      state.rateText=mode==='slow'?'3 it/s':mode==='frame'?'25 it/s':mode==='fast'?'60 it/s':'120 it/s';
+      state.timer=setTimeout(playLoop,mode==='slow'?300:mode==='frame'?40:16);
     }
-    function play(){
+    async function play(){
       if(state.playing)return;
-      if(state.iteration>=state.max){
-        const minIt=state.isTrajectoryMode?state.minIteration:0;
-        state.iteration=minIt;
-        if(state.trajectoryFrames.has(minIt)){
-          const f=state.trajectoryFrames.get(minIt);
-          if(f)updateModel(f,'',true);
-        }
-        syncTimeline();
+      if(state.trajectoryFrames.size===0){setStatus('No saved frames are available. Compute the model first.',true);return;}
+      state.playing=true;$('pauseBtn').disabled=false;syncTimeline();
+      const iters=state.trajectoryFrames.sortedIters.length?state.trajectoryFrames.sortedIters:Array.from(state.trajectoryFrames.keys()).sort((a,b)=>a-b);
+      if(state.iteration>=iters[iters.length-1]){
+        const minIt=iters[0];
+        try{const first=await state.trajectoryFrames.getExact(minIt);if(first&&state.playing){state.iteration=minIt;updateModel(first,'',true);syncTimeline();}}
+        catch(error){stop();setStatus(`Could not load saved iteration ${minIt}: ${error.message}`,true);return;}
       }
-      state.playing=true;$('pauseBtn').disabled=false;syncTimeline();void playLoop();
+      if(state.playing)void playLoop();
     }
     async function applyComputeMode(mode){try{const response=await fetch('/api/compute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mode?{mode}:{})});const info=await response.json();if(!response.ok)throw Error(info.error||'Compute mode failed');$('computeMode').value=info.mode;$('computeInfo').textContent=info.threads>1?`${info.threads} threads`:'1 thread';if($('engineStatusLabel'))$('engineStatusLabel').textContent=info.threads>1?`Flow Core (${info.threads}T)`:'Flow Core (1T)';state.msPerIteration=0;}catch(e){setStatus(e.message,true);}}
     $('computeMode').addEventListener('change',e=>applyComputeMode(e.target.value));
     void applyComputeMode('');
-    $('runBtn').addEventListener('click',play);
+    $('runBtn').addEventListener('click',()=>{state.playing=false;clearTimeout(state.timer);const target=Math.max(state.iteration,Math.floor(Number($('iterationMax').value)||state.max));void runAt(target);});
     $('timelinePlay').addEventListener('click',()=>{if(state.playing)stop();else play();});
     $('pauseBtn').addEventListener('click',stop);
     $('workspaceToggle').addEventListener('click',()=>{const open=!document.body.classList.contains('studio-open');document.body.classList.toggle('studio-open',open);document.documentElement.classList.toggle('studio-open',open);$('workspaceToggle').textContent=open?'Focus view':'Show controls';$('workspaceToggle').setAttribute('aria-expanded',String(open));draw();});
@@ -1378,7 +1369,6 @@
       range.style.setProperty('--fill',`${(target/Math.max(1,state.max))*100}%`);
       setCountText('iterationValue',target);
       if(state.trajectoryFrames.size>0){
-        state.trajectoryFrames.prefetchAround(target,5);
         const closestIt=state.trajectoryFrames.findClosestIteration(target);
         if(closestIt!==null){
           const frame=state.trajectoryFrames.get(closestIt);
@@ -1388,6 +1378,31 @@
           }
         }
       }
+      return false;
+    }
+    async function finishScrub(target){
+      const epoch=state.scrubEpoch;
+      const closestIt=state.trajectoryFrames.findClosestIteration(target);
+      const frame=closestIt===null?null:await state.trajectoryFrames.getExact(closestIt);
+      if(!frame||epoch!==state.scrubEpoch)return false;
+      if(closestIt!==target){$('iterationRange').value=String(closestIt);setCountText('iterationValue',closestIt);}
+      updateModel(frame,'',true);
+      draw();
+      return true;
+    }
+    async function seekIteration(target){
+      const range=$('iterationRange');
+      target=Math.max(Number(range.min)||0,Math.min(state.max,Math.floor(Number(target)||0)));
+      state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;
+      const nearest=state.trajectoryFrames.findClosestIteration(target);
+      if(nearest!==null){target=nearest;range.value=String(target);}
+      state.scrubbing=false;state.scrubEpoch++;state.rewindTarget=target<state.iteration?target:null;
+      setCountText('iterationValue',target);
+      const loaded=await finishScrub(target);
+      if(loaded){state.rewindTarget=null;syncTimeline();return true;}
+      state.rewindTarget=null;
+      setStatus('No saved frames are available. Run the model or compute pending spans first.',true);
+      syncTimeline();
       return false;
     }
     {
@@ -1405,23 +1420,22 @@
         scrubInstant(target);
       });
       range.addEventListener('change',()=>{
-        state.scrubbing=false;
-        state.scrubEpoch++;
         const target=Number(range.value);
-        if(!scrubInstant(target)){
-          if(target!==state.iteration){
-            state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;state.rewindTarget=target<state.iteration?target:null;void runAt(target);
-          } else syncTimeline();
-        } else {
-          state.rewindTarget=null;
-          syncTimeline();
-        }
+        void seekIteration(target).catch(error=>setStatus(`Could not load iteration ${target}: ${error.message}`,true));
       });
-      range.addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();if(state.busy)return;state.playing=false;clearTimeout(state.timer);const target=Math.max(0,state.iteration+(e.key==='ArrowRight'?1:-1));if(target>state.max)state.max=target;void runAt(target);});
+      $('iterationValue').addEventListener('change',e=>{
+        const value=Number(e.target.value);
+        if(!Number.isFinite(value)){syncTimeline();return;}
+        void seekIteration(value).catch(error=>setStatus(`Could not load iteration ${value}: ${error.message}`,true));
+      });
       $('iterationMax').addEventListener('change',e=>{const value=Math.floor(Number(e.target.value));if(!Number.isFinite(value)||value<1){e.target.value=state.max;return;}state.max=Math.max(value,state.iteration);state.maxPinned=true;syncTimeline();});
     }
-    function loadProjectData(proj, fileName='Project'){
+    async function loadProjectData(proj, fileName='Project'){
       if(!proj.frames||!proj.frames.length)throw Error('Project has no snapshot frames');
+      const axis=proj.timelineLabel||'Iteration';
+      $('timelineDomainLabel').textContent=axis;
+      $('iterationRange').setAttribute('aria-label',axis);
+      $('iterationValue').setAttribute('aria-label',`Current ${axis.toLowerCase()}`);
       const experiment=proj.name||fileName;
       state.trajectoryFrames.clear();
       // Frames past the RAM budget stream back from the cache database, so the
@@ -1430,12 +1444,14 @@
       for(const f of proj.frames){
         f.experiment=experiment;
         state.trajectoryFrames.set(f.iterations,f);
-        queueFramePersist(f);
+        await queueFramePersist(f);
       }
       updateCacheVisuals();
       state.isTrajectoryMode=true;
       state.minIteration=proj.minIteration??proj.frames[0].iterations;
       state.max=proj.maxIteration??proj.frames[proj.frames.length-1].iterations;
+      const frameSteps=proj.frames.slice(1).map((frame,i)=>frame.iterations-proj.frames[i].iterations).filter(step=>step>0);
+      const sliderStep=frameSteps.length?Math.min(...frameSteps):1;
       state.iteration=state.minIteration;
       if(proj.experiment){
         if($('experiment'))$('experiment').value=proj.experiment;
@@ -1487,7 +1503,9 @@
       const range=$('iterationRange');
       range.min=state.minIteration;
       range.max=state.max;
+      range.step=sliderStep;
       range.value=state.minIteration;
+      $('iterationValue').step=sliderStep;
       setCountText('iterationValue',state.minIteration);
       $('iterationMax').value=state.max;
       setUploadLabel(fileName);
@@ -1502,7 +1520,7 @@
     async function saveProject(){
       if(state.trajectoryFrames.size===0)return;
       setStatus('Preparing project bundle…');
-      const frames=await state.trajectoryFrames.getAllFramesAsync();
+      let frames;try{frames=await state.trajectoryFrames.getAllFramesAsync();}catch(error){setStatus(error.message,true);return;}
       const proj={
         format:'embryomaker-project',
         version:1,
@@ -1543,7 +1561,7 @@
           if(!res.ok)throw Error(`HTTP ${res.status}`);
           proj=await res.json();
         }
-        loadProjectData(proj,'Sea Urchin Gastrulation');
+        await loadProjectData(proj,'Sea Urchin Gastrulation');
         setStatus('Loaded Sea Urchin Gastrulation (2,000 iterations · 101 snapshots, 0 to 2,000 it). Instant replay ready.');
       }catch(err){
         setStatus('Could not load precomputed Urchin: '+err.message,true);
@@ -1602,6 +1620,10 @@
     });
     $('experiment').addEventListener('change',async()=>{
       if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;
+      state.isTrajectoryMode=false;
+      $('timelineDomainLabel').textContent='Iteration';
+      $('iterationRange').setAttribute('aria-label','Iteration');
+      $('iterationRange').step='1';$('iterationValue').step='1';$('iterationValue').setAttribute('aria-label','Current iteration');
       state.inputText=null;state.fileName=null;setUploadLabel('');
       state.trajectoryFrames.clear();
       setStatus('Loading model…');
@@ -1610,23 +1632,33 @@
     });
     $('experimentMenu').addEventListener('change',()=>{classicMenu.hidden=true;if($('experiment').value!==$('experimentMenu').value){$('experiment').value=$('experimentMenu').value;$('experiment').dispatchEvent(new Event('change'));}});
     $('uploadBtn').addEventListener('click',()=>$('filePicker').click());
+    const MAX_MODEL_INPUT_BYTES=7*1024*1024,MAX_PROJECT_INPUT_BYTES=64*1024*1024;
+    async function readUploadedFile(file,limit){
+      if(file.size>limit)throw Error(`Files larger than ${Math.floor(limit/1024/1024)} MB are not loaded into memory.`);
+      if(!file.name.endsWith('.gz')&&!file.name.endsWith('.tgz'))return file.text();
+      const ds=new DecompressionStream('gzip'),reader=file.stream().pipeThrough(ds).getReader(),chunks=[];
+      let total=0;
+      while(true){
+        const part=await reader.read();
+        if(part.done)break;
+        total+=part.value.byteLength;
+        if(total>limit){await reader.cancel();throw Error(`Decompressed files larger than ${Math.floor(limit/1024/1024)} MB are not loaded into memory.`);}
+        chunks.push(part.value);
+      }
+      return new Blob(chunks).text();
+    }
     $('filePicker').addEventListener('change',async e=>{
       const file=e.target.files[0];if(!file)return;e.target.value='';
       let text;
       try{
-        if(file.name.endsWith('.gz')||file.name.endsWith('.tgz')){
-          const ds=new DecompressionStream('gzip');
-          const stream=file.stream().pipeThrough(ds);
-          text=await new Response(stream).text();
-        } else {
-          text=await file.text();
-        }
+        const projectFile=/\.emb(proj|traj)$/i.test(file.name);
+        text=await readUploadedFile(file,projectFile?MAX_PROJECT_INPUT_BYTES:MAX_MODEL_INPUT_BYTES);
       }catch(err){setStatus('Could not read file: '+err.message,true);return;}
       const trimmed=text.trim();
       if(trimmed.startsWith('{')&&(file.name.includes('.embproj')||file.name.includes('.embtraj')||trimmed.includes('"embryomaker-project"')||trimmed.includes('"embryomaker-trajectory"'))){
         try{
           const proj=JSON.parse(trimmed);
-          loadProjectData(proj,file.name);
+          await loadProjectData(proj,file.name);
           return;
         }catch(err){
           setStatus('Project parse failed: '+err.message,true);
@@ -1673,7 +1705,7 @@
       }
     });
     const nodeProperties=[['x','x'],['y','y'],['z','z'],['Energy','energy'],['p^EQD','eqd'],['p^ADD','radius'],['p^YOU','you'],['p^ADH','adh'],['p^REP','rep'],['p^REC','rec'],['p^ERP','erp'],['p^EST','est'],['p^EQS','eqs'],['p^HOO','hoo'],['p^MOV','mov'],['p^DMO','dmo'],['x(0)','x0'],['y(0)','y0'],['z(0)','z0'],['p^ECM','ecm'],['p^COD','cod'],['p^GRD','grd'],['p^PLD','pld'],['p^VOD','vod'],['p^DIF','dif'],['p^KFI','kfi'],['p^PLA','pla'],['p^VOC','kvol'],['type','type'],['cell','cell'],['other','other'],['marge','marge'],['talone','talone'],['p^FIX','fixed'],['divisions','ndiv']];
-    function showSelectedNode(n,preferredNodeField='',preferredCellField=''){if(!n)return;if(state.selected&&state.selected!==n.id)state.selectionHistory.push(state.selected);state.selected=n.id;$('selectionInfo').textContent=`Node ${n.id} · ${n.type===1||n.type===2?'epithelial':n.type===3?'mesenchymal':'ECM'} cell`;$('nodeDetails').innerHTML=`<div class="node-row"><span>Position</span><b>${n.x.toFixed(3)}, ${n.y.toFixed(3)}, ${n.z.toFixed(3)}</b></div><div class="node-row"><span>Cell / type</span><b>${n.cell} / ${n.type}</b></div><div class="node-row"><span>Radius</span><b>${n.radius.toFixed(4)}</b></div>`;const select=$('nodeProperty');if(!select.options.length){for(const [label,value] of nodeProperties){const option=document.createElement('option');option.textContent=label;option.value=value;select.append(option);}}select.value=[...select.options].some(o=>o.value===preferredNodeField)?preferredNodeField:'x';$('nodeValue').value=n[select.value];$('nodeEditControls').hidden=false;const cell=state.cells.find(c=>c.id===n.cell),cellSelect=$('cellProperty');if(cell){if(!cellSelect.options.length){for(const [label,value] of [['fase','phase'],['temt','time'],['cex','x'],['cey','y'],['cez','z'],['polx','polx'],['poly','poly'],['polz','polz'],['minsize_for_div','minsize_for_div'],['maxsize_for_div','maxsize_for_div'],['nodela','nodela'],['ctipus','type']]){const option=document.createElement('option');option.textContent=label;option.value=value;cellSelect.append(option);}}cellSelect.value=[...cellSelect.options].some(o=>o.value===preferredCellField)?preferredCellField:'phase';$('cellValue').value=cell[cellSelect.value];$('cellEditControls').hidden=false;}else{$('cellEditControls').hidden=true;}captureGeneSample();}
+    function showSelectedNode(n,preferredNodeField='',preferredCellField=''){if(!n)return;if(state.selected&&state.selected!==n.id){state.selectionHistory.push(state.selected);if(state.selectionHistory.length>256)state.selectionHistory.shift();}state.selected=n.id;$('selectionInfo').textContent=`Node ${n.id} · ${n.type===1||n.type===2?'epithelial':n.type===3?'mesenchymal':'ECM'} cell`;$('nodeDetails').innerHTML=`<div class="node-row"><span>Position</span><b>${n.x.toFixed(3)}, ${n.y.toFixed(3)}, ${n.z.toFixed(3)}</b></div><div class="node-row"><span>Cell / type</span><b>${n.cell} / ${n.type}</b></div><div class="node-row"><span>Radius</span><b>${n.radius.toFixed(4)}</b></div>`;const select=$('nodeProperty');if(!select.options.length){for(const [label,value] of nodeProperties){const option=document.createElement('option');option.textContent=label;option.value=value;select.append(option);}}select.value=[...select.options].some(o=>o.value===preferredNodeField)?preferredNodeField:'x';$('nodeValue').value=n[select.value];$('nodeEditControls').hidden=false;const cell=state.cells.find(c=>c.id===n.cell),cellSelect=$('cellProperty');if(cell){if(!cellSelect.options.length){for(const [label,value] of [['fase','phase'],['temt','time'],['cex','x'],['cey','y'],['cez','z'],['polx','polx'],['poly','poly'],['polz','polz'],['minsize_for_div','minsize_for_div'],['maxsize_for_div','maxsize_for_div'],['nodela','nodela'],['ctipus','type']]){const option=document.createElement('option');option.textContent=label;option.value=value;cellSelect.append(option);}}cellSelect.value=[...cellSelect.options].some(o=>o.value===preferredCellField)?preferredCellField:'phase';$('cellValue').value=cell[cellSelect.value];$('cellEditControls').hidden=false;}else{$('cellEditControls').hidden=true;}captureGeneSample();}
     $('nodeProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected);if(node)$('nodeValue').value=node[$('nodeProperty').value]??0;});$('cellProperty').addEventListener('change',()=>{const node=state.nodes.find(item=>item.id===state.selected),cell=state.cells.find(item=>item.id===node?.cell);if(cell)$('cellValue').value=cell[$('cellProperty').value]??0;});
     $('applyCellEdit').addEventListener('click',async()=>{const selected=state.nodes.find(n=>n.id===state.selected),cellId=selected?.cell,field=$('cellProperty').value,value=Number($('cellValue').value);if(!cellId||!Number.isFinite(value))return;try{const data=await sendSession({cellId,field,value},`/api/session/${state.session}/cell-edit`);updateModel(data);setStatus(`Updated cell ${cellId}.`);draw();}catch(e){setStatus(e.message,true);}});
     $('applyNodeEdit').addEventListener('click',async()=>{const nodeId=state.selected,field=$('nodeProperty').value,value=Number($('nodeValue').value);if(!nodeId||!Number.isFinite(value))return;try{const data=await sendSession({nodeId,field,value},`/api/session/${state.session}/edit`);updateModel(data);setStatus(`Updated node ${nodeId}.`);draw();}catch(e){setStatus(e.message,true);}});
@@ -1693,18 +1725,28 @@
     function applyColorRange(){const field=state.colorMode==='cells'?'cell':visualizationField(state.colorMode),minimum=Number($('colorMinimum').value),maximum=Number($('colorMaximum').value);if(!field||!Number.isFinite(minimum)||!Number.isFinite(maximum)||maximum<minimum)return;state.customColorLimits[field]=[minimum,maximum];updateLegend();draw();}
     function syncOgColorRanges(){for(const [prefix,mode,channel] of [['ogMechanicalColor',state.mechanicalColorField,'color'],['ogOtherColor',state.otherColorField,'color'],['ogMechanicalArrow',state.mechanicalArrowField,'arrow'],['ogOtherArrow',state.otherArrowField,'arrow'],['ogMechanicalSphere',state.mechanicalSphereField,'sphere'],['ogOtherSphere',state.otherSphereField,'sphere']]){const range=visualizationRange(mode,channel);$(`${prefix}Minimum`).value=range[0];$(`${prefix}Maximum`).value=range[1];if(channel==='arrow')$(`${prefix}Scale`).value=state.arrowScale;if(channel==='sphere')$(`${prefix}Scale`).value=state.sphereScale;}}
     function applyOgColorRange(prefix){const mode=prefix==='ogMechanicalColor'?state.mechanicalColorField:state.otherColorField;if(state.colorMode!==mode){$('colorMode').value=mode;$('colorMode').dispatchEvent(new Event('change'));}const minimum=$(`${prefix}Minimum`).value,maximum=$(`${prefix}Maximum`).value;$('colorMinimum').value=minimum;$('colorMaximum').value=maximum;applyColorRange();syncOgColorRanges();}
+    const MAX_GENE_SAMPLE_BYTES=32*1024*1024;
     function captureGeneSample(){
       if(!state.temporalPlotsEnabled||!state.nodes.length)return;
       const geneCount=state.lastSnapshot?.geneCount||0;
-      const values=new Float64Array(state.nodes.length*geneCount);
+      const valueCount=state.nodes.length*geneCount;
+      if(!Number.isSafeInteger(valueCount)||valueCount*8>MAX_GENE_SAMPLE_BYTES)return;
+      const values=new Float64Array(valueCount);
       for(let nodeIndex=0;nodeIndex<state.nodes.length;nodeIndex++){
         const genes=state.nodes[nodeIndex].genes||[];
         for(let geneIndex=0;geneIndex<geneCount;geneIndex++)values[nodeIndex*geneCount+geneIndex]=Number(genes[geneIndex]??0);
       }
       const sample={iteration:state.iteration,nodeCount:state.nodes.length,geneCount,values};
       const last=state.geneSamples.at(-1);
-      if(last?.iteration===sample.iteration)state.geneSamples[state.geneSamples.length-1]=sample;
-      else state.geneSamples.push(sample);
+      if(last?.iteration===sample.iteration){state.geneSampleBytes+=sample.values.byteLength-last.values.byteLength;state.geneSamples[state.geneSamples.length-1]=sample;}
+      else {
+        state.geneSamples.push(sample);
+        state.geneSampleBytes+=sample.values.byteLength;
+        if(state.geneSamples.length>4096||state.geneSampleBytes>MAX_GENE_SAMPLE_BYTES){
+          state.geneSamples=state.geneSamples.filter((_,index)=>index%2===0);
+          state.geneSampleBytes=state.geneSamples.reduce((bytes,item)=>bytes+item.values.byteLength,0);
+        }
+      }
       if(!$('genePlotPanel').hidden)drawGenePlot();
     }
     function drawGenePlot(){
@@ -1923,7 +1965,7 @@
     $('exportTrajBtn').addEventListener('click',async()=>{
       if(state.trajectoryFrames.size===0)return;
       setStatus('Exporting trajectory…');
-      const frames=await state.trajectoryFrames.getAllFramesAsync();
+      let frames;try{frames=await state.trajectoryFrames.getAllFramesAsync();}catch(error){setStatus(error.message,true);return;}
       const traj={
         format:'embryomaker-trajectory',
         version:1,
@@ -1956,3 +1998,4 @@
   </script>
 </body>
 </html>
+

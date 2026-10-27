@@ -1,6 +1,6 @@
 # EmbryoMaker Studio
 
-EmbryoMaker Studio is a local browser interface for the Flow simulator. The HTTP server and simulation run in Flow. The page opens on an 800 by 800 black model view. Right-click the view to open the EmbryoMaker menu. The model picker includes the original examples and nine Figure 7 and Figure 4 states from the Morphospace exploration collection. See [MCP.md](../MCP.md) for Claude setup and paired hypothesis tests.
+EmbryoMaker Studio is a local browser interface for the Flow simulator. The HTTP server and simulation run in Flow. The page opens on an 800 by 800 black model view. Right-click the view to open the EmbryoMaker menu. The model picker includes the original examples, nine Figure 7 and Figure 4 states from the Morphospace exploration collection, and a precomputed Arabidopsis thaliana primary-root gravitropism comparison. It shows Col-0 and a PIN2 transport-deficient proxy after a 90-degree reorientation. See [MCP.md](../MCP.md) for model controls and paired hypothesis tests.
 
 Status messages fade after 1.8 seconds. Right-click the view to open the EmbryoMaker menu. Hover a category to open its submenu, then click an item. The menu loads `.txt` and `.dat` examples, runs iteration batches, selects and edits nodes, moves nodes and cells, plots gene expression over time, and saves `.dat` snapshots. The `Controls` button opens the Studio panels with the model picker, playback buttons, iteration slider, display settings, and model inspector. Gene history starts with the model and can be paused from the menu. Plots support up to ten nodes and ten genes. Periodic snapshots go to `output/<model>/`. Automatic PNG frames go to `images/<model>/`. Movie capture records the rendered model view and converts it to an animated GIF with FFmpeg. If FFmpeg is unavailable, the browser downloads the WebM recording. Color, arrow, and transparent sphere ranges have independent controls. Arrow and sphere scales can be set from the same menus.
 
@@ -60,3 +60,4 @@ The broader regression suite is `node tools/ui_smoke.cjs`.
 The packaged trajectory is `ui/sea_urchin_project.json.gz`. The JSON endpoint
 serves that same file with HTTP gzip encoding. The expanded JSON is generated
 locally and excluded from Git. The preview video lives in `ui/assets/`.
+

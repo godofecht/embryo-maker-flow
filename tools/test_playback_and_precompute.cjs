@@ -6,6 +6,14 @@ async function testPlaybackAndPrecompute() {
   const page = await context.newPage();
 
   const errors = [];
+  await page.addInitScript(() => {
+    window.advanceRequests = 0;
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (...args) => {
+      if (String(args[0]).includes('/advance')) window.advanceRequests++;
+      return nativeFetch(...args);
+    };
+  });
   page.on('console', msg => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
@@ -37,40 +45,35 @@ async function testPlaybackAndPrecompute() {
   await page.waitForFunction(() => state.iteration === 5);
   console.log('Rewound to iteration:', await page.evaluate(() => state.iteration));
 
-  console.log('4. Hitting Play in "fast" mode to test smooth cached playback…');
+  console.log('4. Playing saved frames in "fast" mode…');
   await page.evaluate(() => {
     document.querySelector('#speed').value = 'fast';
     document.querySelector('#timelinePlay').click();
   });
 
-  // Watch it advance through the cached frames (5 -> 10 -> 20 -> 30)
-  await page.waitForFunction(() => state.iteration >= 25, null, { timeout: 10000 });
-  const midPlayback = await page.evaluate(() => ({
-    iteration: state.iteration,
-    playing: state.playing,
-    rateText: state.rateText
-  }));
-  console.log('Mid-playback state (playing cached frames):', JSON.stringify(midPlayback));
-
-  // Watch it seamlessly cross the boundary from cached into newly computed frames (> 30)
-  await page.waitForFunction(() => state.iteration > 35, null, { timeout: 15000 });
-  const computedState = await page.evaluate(() => ({
+  await page.waitForFunction(() => state.iteration === 30 && !state.playing, null, { timeout: 10000 });
+  const playbackState = await page.evaluate(() => ({
     iteration: state.iteration,
     playing: state.playing,
     rateText: state.rateText,
-    totalCached: state.trajectoryFrames.size
+    totalCached: state.trajectoryFrames.size,
+    advanceRequests: window.advanceRequests
   }));
-  console.log('Crossed boundary into new computation:', JSON.stringify(computedState));
+  console.log('Playback stopped at the saved cache edge:', JSON.stringify(playbackState));
+  if (playbackState.advanceRequests !== 30) {
+    throw new Error(`Playback issued ${playbackState.advanceRequests - 30} solver requests`);
+  }
 
-  // Pause
-  await page.evaluate(() => {
-    if (state.playing) document.querySelector('#timelinePlay').click();
-  });
-  await page.waitForFunction(() => !state.playing);
-  await page.waitForFunction(() => !state.busy);
-  console.log('Paused at iteration:', await page.evaluate(() => state.iteration));
+  console.log('5. Computing explicitly through iteration 40…');
+  await page.locator('#iterationMax').fill('40');
+  await page.locator('#iterationMax').dispatchEvent('change');
+  await page.locator('#runBtn').click();
+  await page.waitForFunction(() => state.iteration === 40 && !state.busy, null, { timeout: 20000 });
+  const computedState = await page.evaluate(() => ({ iteration: state.iteration, advanceRequests: window.advanceRequests }));
+  if (computedState.advanceRequests <= 30) throw new Error('Compute to End did not advance the solver');
+  console.log('Explicit compute result:', JSON.stringify(computedState));
 
-  console.log('5. Testing Precompute Pending Range button…');
+  console.log('6. Testing Precompute Pending Range button…');
   await page.evaluate(() => document.querySelector('#fillUncalcBtn').click());
 
   await page.waitForFunction(() => {
@@ -98,3 +101,4 @@ testPlaybackAndPrecompute().catch(err => {
   console.error(err.stack || err.message);
   process.exit(1);
 });
+

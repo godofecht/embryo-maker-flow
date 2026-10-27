@@ -1585,7 +1585,9 @@
     $('openProjBtn')?.addEventListener('click',()=>$('filePicker').click());
     $('saveProjBtn')?.addEventListener('click',saveProject);
     const plantGrowthProjects={
-      arabidopsis_root_gravitropism:{name:'Arabidopsis Col-0 vs pin2 root gravitropism',url:'/arabidopsis_root_gravitropism.json.gz'}
+      arabidopsis_root_gravitropism:{name:'Arabidopsis Col-0 root gravitropism',url:'/arabidopsis_root_gravitropism.json.gz',range:'0 to 720 minutes after reorientation'},
+      arabidopsis_seedling:{name:'Arabidopsis Col-0 seedling growth',url:'/arabidopsis_seedling.json.gz',range:'0 to 10 days after germination'},
+      neurospora_crassa:{name:'Neurospora crassa conidium to mycelium',url:'/neurospora_crassa.json.gz',range:'0 to 16 hours'}
     };
     async function loadPlantGrowthProject(id){
       const item=plantGrowthProjects[id];if(!item)throw Error(`Unknown plant model: ${id}`);
@@ -1595,7 +1597,7 @@
       const stream=response.body.pipeThrough(new DecompressionStream('gzip'));
       const project=JSON.parse(await new Response(stream).text());
       await loadProjectData(project,item.name);
-      setStatus(`Loaded ${item.name} (${project.frameCount} frames, 0 to 720 minutes after reorientation).`);
+      setStatus(`Loaded ${item.name} (${project.frameCount} frames, ${item.range}).`);
     }
     async function loadPrecomputedSeaUrchin(){
       setStatus('Loading precomputed Sea Urchin Gastrulation (2,000 iterations · 101 snapshots)…');

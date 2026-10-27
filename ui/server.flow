@@ -1761,20 +1761,8 @@ function route_request(fd: i32, request: HttpRequest) -> void {
             else { send_response(fd, 404, "text/plain", "Not found") }
             return
         }
-        if bytes_equal(bytes, request.path_start, request.path_end, "/shoot_branching.json.gz") {
-            let gz_data: FileRead = io_read_file("ui/plant_models/shoot_branching.json.gz")
-            if gz_data.ok { send_file_read_response(fd, 200, "application/gzip", gz_data, "") }
-            else { send_response(fd, 404, "text/plain", "Not found") }
-            return
-        }
-        if bytes_equal(bytes, request.path_start, request.path_end, "/shoot_phototropism.json.gz") {
-            let gz_data: FileRead = io_read_file("ui/plant_models/shoot_phototropism.json.gz")
-            if gz_data.ok { send_file_read_response(fd, 200, "application/gzip", gz_data, "") }
-            else { send_response(fd, 404, "text/plain", "Not found") }
-            return
-        }
-        if bytes_equal(bytes, request.path_start, request.path_end, "/root_gravitropism.json.gz") {
-            let gz_data: FileRead = io_read_file("ui/plant_models/root_gravitropism.json.gz")
+        if bytes_equal(bytes, request.path_start, request.path_end, "/arabidopsis_root_gravitropism.json.gz") {
+            let gz_data: FileRead = io_read_file("ui/plant_models/arabidopsis_root_gravitropism.json.gz")
             if gz_data.ok { send_file_read_response(fd, 200, "application/gzip", gz_data, "") }
             else { send_response(fd, 404, "text/plain", "Not found") }
             return

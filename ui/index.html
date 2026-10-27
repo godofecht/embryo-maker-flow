@@ -1585,9 +1585,7 @@
     $('openProjBtn')?.addEventListener('click',()=>$('filePicker').click());
     $('saveProjBtn')?.addEventListener('click',saveProject);
     const plantGrowthProjects={
-      plant_shoot_branching:{name:'Plant: shoot branching after apex removal',url:'/shoot_branching.json.gz'},
-      plant_shoot_phototropism:{name:'Plant: shoot growth toward light',url:'/shoot_phototropism.json.gz'},
-      plant_root_gravitropism:{name:'Plant: root growth toward gravity',url:'/root_gravitropism.json.gz'}
+      arabidopsis_root_gravitropism:{name:'Arabidopsis Col-0 vs pin2 root gravitropism',url:'/arabidopsis_root_gravitropism.json.gz'}
     };
     async function loadPlantGrowthProject(id){
       const item=plantGrowthProjects[id];if(!item)throw Error(`Unknown plant model: ${id}`);
@@ -1597,7 +1595,7 @@
       const stream=response.body.pipeThrough(new DecompressionStream('gzip'));
       const project=JSON.parse(await new Response(stream).text());
       await loadProjectData(project,item.name);
-      setStatus(`Loaded ${item.name} (${project.frameCount} snapshots, ${project.minIteration} to ${project.maxIteration} iterations).`);
+      setStatus(`Loaded ${item.name} (${project.frameCount} frames, 0 to 720 minutes after reorientation).`);
     }
     async function loadPrecomputedSeaUrchin(){
       setStatus('Loading precomputed Sea Urchin Gastrulation (2,000 iterations · 101 snapshots)…');

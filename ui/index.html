@@ -1584,6 +1584,21 @@
     }
     $('openProjBtn')?.addEventListener('click',()=>$('filePicker').click());
     $('saveProjBtn')?.addEventListener('click',saveProject);
+    const plantGrowthProjects={
+      plant_shoot_branching:{name:'Plant: shoot branching after apex removal',url:'/shoot_branching.json.gz'},
+      plant_shoot_phototropism:{name:'Plant: shoot growth toward light',url:'/shoot_phototropism.json.gz'},
+      plant_root_gravitropism:{name:'Plant: root growth toward gravity',url:'/root_gravitropism.json.gz'}
+    };
+    async function loadPlantGrowthProject(id){
+      const item=plantGrowthProjects[id];if(!item)throw Error(`Unknown plant model: ${id}`);
+      setStatus(`Loading ${item.name}…`);
+      const response=await fetch(item.url);if(!response.ok)throw Error(`HTTP ${response.status}`);
+      if(!window.DecompressionStream)throw Error('This browser cannot open compressed trajectory projects.');
+      const stream=response.body.pipeThrough(new DecompressionStream('gzip'));
+      const project=JSON.parse(await new Response(stream).text());
+      await loadProjectData(project,item.name);
+      setStatus(`Loaded ${item.name} (${project.frameCount} snapshots, ${project.minIteration} to ${project.maxIteration} iterations).`);
+    }
     async function loadPrecomputedSeaUrchin(){
       setStatus('Loading precomputed Sea Urchin Gastrulation (2,000 iterations · 101 snapshots)…');
       try{
@@ -1661,6 +1676,8 @@
     });
     $('experiment').addEventListener('change',async()=>{
       if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;
+      if(plantGrowthProjects[$('experiment').value]){state.inputText=null;state.fileName=null;setUploadLabel('');state.trajectoryFrames.clear();try{await loadPlantGrowthProject($('experiment').value);}catch(error){setStatus(`Could not load plant model: ${error.message}`,true);}return;}
+      state.isTrajectoryMode=false;
       state.inputText=null;state.fileName=null;setUploadLabel('');
       state.trajectoryFrames.clear();
       setStatus('Loading model…');
@@ -2028,7 +2045,7 @@
     canvas.addEventListener('wheel',event=>{event.preventDefault();state.zoom=Math.max(.35,Math.min(4,state.zoom*Math.exp(-event.deltaY*.001)));draw();},{passive:false});
     document.addEventListener('keydown',event=>{if(event.key==='Escape'){toggleCacheModal(false);toggleVideoModal(false);return;}if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft'].includes(event.key)||event.altKey||event.ctrlKey||event.metaKey)return;const target=event.target;if(target instanceof HTMLElement&&(target.isContentEditable||['INPUT','SELECT','TEXTAREA'].includes(target.tagName)))return;event.preventDefault();if(event.key==='ArrowDown'){if(state.dragMode==='cursor-xy')setCursorMode('cursor-z');else if(state.dragMode==='cursor-z')setCursorMode('cursor-xy');else if(state.dragMode==='rotate')setDragMode('zoom');else if(state.dragMode==='zoom')setDragMode('rotate');return;}if(state.busy)return;if(event.key==='ArrowUp'){state.keyboardIterationBatch=Math.min(50000,state.keyboardIterationBatch*10);void runMenuIterations(state.keyboardIterationBatch);}else if(event.key==='ArrowRight'){void runMenuIterations(state.keyboardIterationBatch);}else if(state.iteration>0){state.playing=false;void runAt(state.iteration-1);}});
     window.addEventListener('resize',fitCanvas);new ResizeObserver(fitCanvas).observe(canvas);
-    async function boot(){try{const configResponse=await fetch('/api/display-config');if(configResponse.ok)applyOgDisplayConfig(await configResponse.text());}catch{}if(![...$('colorMode').options].some(option=>option.value===state.colorMode)){const option=document.createElement('option');option.value=state.colorMode;option.textContent=state.colorMode;$('colorMode').append(option);}$('colorMode').value=state.colorMode;$('paletteMode').value=state.paletteMode;$('showNodes').checked=state.showNodes;populateOgPropertyMenus();syncOgColorRanges();updateLegend();try{const response=await fetch('/api/examples');if(!response.ok)throw Error(`Example list request failed (${response.status})`);const data=await response.json();if(!Array.isArray(data.examples)||data.examples.length===0)throw Error('The server returned no experiments');for(const item of data.examples){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;$('experiment').append(option);$('experimentMenu').append(option.cloneNode(true));}const requestedExample=new URLSearchParams(location.search).get('example');if(requestedExample&&data.examples.some(item=>item.id===requestedExample))$('experiment').value=requestedExample;$('experimentMenu').value=$('experiment').value;fitCanvas();void loadExperimentCache($('experiment').value);await runAt(0);}catch(error){setStatus(`Could not load experiment list: ${error.message}`,true);}}
+    async function boot(){try{const configResponse=await fetch('/api/display-config');if(configResponse.ok)applyOgDisplayConfig(await configResponse.text());}catch{}if(![...$('colorMode').options].some(option=>option.value===state.colorMode)){const option=document.createElement('option');option.value=state.colorMode;option.textContent=state.colorMode;$('colorMode').append(option);}$('colorMode').value=state.colorMode;$('paletteMode').value=state.paletteMode;$('showNodes').checked=state.showNodes;populateOgPropertyMenus();syncOgColorRanges();updateLegend();try{const response=await fetch('/api/examples');if(!response.ok)throw Error(`Example list request failed (${response.status})`);const data=await response.json();if(!Array.isArray(data.examples)||data.examples.length===0)throw Error('The server returned no experiments');for(const item of data.examples){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;$('experiment').append(option);$('experimentMenu').append(option.cloneNode(true));}for(const [id,item] of Object.entries(plantGrowthProjects)){const option=document.createElement('option');option.value=id;option.textContent=item.name;$('experiment').append(option);$('experimentMenu').append(option.cloneNode(true));}const requestedExample=new URLSearchParams(location.search).get('example');if(requestedExample&&(data.examples.some(item=>item.id===requestedExample)||plantGrowthProjects[requestedExample]))$('experiment').value=requestedExample;$('experimentMenu').value=$('experiment').value;fitCanvas();if(plantGrowthProjects[$('experiment').value])await loadPlantGrowthProject($('experiment').value);else{void loadExperimentCache($('experiment').value);await runAt(0);}}catch(error){setStatus(`Could not load experiment list: ${error.message}`,true);}}
     void boot();
     window.addEventListener('beforeunload',()=>{flushDbFrames();if(state.session)navigator.sendBeacon(`/api/session/${state.session}/close`,new Blob(['{}'],{type:'application/json'}));});
   })();

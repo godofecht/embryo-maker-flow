@@ -45,6 +45,8 @@ jobs:
           git diff --exit-code -- reference/examples/auxin_stem_growth/auxin_stem_growth.txt
       - name: Check latest-release downloads page
         run: node tests/test_download_page_release.cjs
+      - name: Check optional topological field laboratory
+        run: node tools/test_topology.cjs
       - name: Run Flow checks
         run: tools/run_flow_checks.sh
       - name: Build Studio server

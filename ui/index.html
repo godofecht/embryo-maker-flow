@@ -193,7 +193,7 @@
         <div class="divider"></div>
         <div class="section-label">Run controls</div>
         <div class="transport" style="margin-top:12px">
-          <button class="primary" id="runBtn">▶ &nbsp; Run</button>
+          <button class="primary" id="runBtn" title="Compute the model through the End iteration">⚙ &nbsp; Compute to End</button>
           <button class="secondary" id="pauseBtn" disabled>Ⅱ &nbsp; Pause</button>
           <button class="secondary" id="stepBtn">Step once</button>
           <button class="secondary" id="resetBtn">Reset</button>
@@ -202,7 +202,7 @@
         <select id="speed" class="speed-select" aria-label="Playback speed"><option value="slow">Slow, 3 per second</option><option value="frame" selected>Smooth, one per frame</option><option value="fast">Fast, batched</option><option value="max">Maximum throughput</option></select>
         <label class="field-label" for="computeMode"><span>Compute</span><small id="computeInfo"></small></label>
         <select id="computeMode" class="speed-select" aria-label="Compute mode"><option value="threads" selected>CPU threads, exact</option><option value="serial">CPU single core, exact</option><option value="exact64">GPU binary64, exact</option><option value="preview">GPU float32 preview</option></select>
-        <p class="hint">Use the timeline to move between iterations. Set Target to choose how far to run. GPU modes apply to models of 1000 nodes or more; the preview diverges from the exact trajectory.</p>
+        <p class="hint">Compute to End fills the saved frame cache. The timeline plays and scrubs saved frames. Set End to choose the compute limit. GPU modes apply to models of 1000 nodes or more; the preview diverges from the exact trajectory.</p>
         <div class="divider"></div>
         </div>
         <div class="control-stack">
@@ -226,7 +226,7 @@
       <section class="panel view-panel" id="viewPanel" aria-label="3D model view">
         <div class="view-head"><div><div id="viewTitle" class="view-title">Cell model</div><div id="viewCaption" class="view-caption">Drag to rotate · Scroll to zoom</div></div><div class="view-actions"><button id="workspaceToggle" class="workspace-toggle" type="button" aria-expanded="true">Focus view</button><select id="cameraPreset" class="settings-select" aria-label="Camera view" style="width:auto;padding:7px 9px"><option value="oblique">Oblique view</option><option value="above">View from above</option><option value="front">View from front</option></select><button id="homeView" class="icon-button" aria-label="Reset view" title="Reset view">⌂</button><button id="fullscreenBtn" class="icon-button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button><button id="openMenuBtn" class="icon-button" aria-label="Open EmbryoMaker menu" title="Right-click the view for the original menu">☰</button></div></div>
         <div class="timeline" id="timeline" aria-label="Iteration timeline">
-          <button id="timelinePlay" class="timeline-play" type="button" aria-label="Run or pause">&#9654;</button>
+          <button id="timelinePlay" class="timeline-play" type="button" aria-label="Play saved frames" title="Play saved frames">&#9654;</button>
           <span class="timeline-label" id="timelineDomainLabel">Iteration</span>
           <div class="timeline-slider-wrap">
             <input id="iterationRange" type="range" min="0" max="120" value="0" step="1" aria-label="Iteration">
@@ -1315,120 +1315,49 @@
       const rate=state.playing&&state.rateText?state.rateText:'';
       const rateEl=$('iterationReadout');rateEl.textContent=rate;rateEl.title=rate?`Measured rate · ${rate}`:'';
       range.setAttribute('aria-valuetext',`Iteration ${range.value} of ${state.max}`);
-      const playButton=$('timelinePlay');playButton.setAttribute('aria-label',state.playing?'Pause simulation':'Run simulation');playButton.setAttribute('aria-pressed',String(state.playing));playButton.innerHTML=state.playing?'&#10074;&#10074;':'&#9654;';playButton.classList.toggle('playing',state.playing);
+      const playButton=$('timelinePlay');playButton.setAttribute('aria-label',state.playing?'Pause playback':'Play saved frames');playButton.title=state.playing?'Pause playback':'Play saved frames';playButton.setAttribute('aria-pressed',String(state.playing));playButton.innerHTML=state.playing?'&#10074;&#10074;':'&#9654;';playButton.classList.toggle('playing',state.playing);
       if(!state.scrubbing)updateCacheVisuals();
     }
     function syncIterationProgress(){const panel=$('iterationProgress'),bar=$('iterationProgressBar'),label=$('iterationProgressLabel');if(!panel)return;const target=state.progressTarget;panel.classList.toggle('active',state.busy&&target!==null);if(target===null)return;const done=Math.min(state.iteration,target);bar.max=Math.max(1,target);bar.value=done;label.textContent=`Iteration ${compactCount(done)} of ${compactCount(target)}`;label.title=`Iteration ${exactCount(done)} of ${exactCount(target)}`;}
     function stop(){state.playing=false;clearTimeout(state.timer);if(state.busy)state.pendingIterationTarget=state.iteration;$('pauseBtn').disabled=true;setStatus(state.busy?'Pausing after the current batch.':`Paused at iteration ${state.iteration}.`);syncTimeline();}
-    // Play modes: slow waits 300 ms between single iterations, frame runs one
-    // iteration per screen update, fast and max batch several iterations per
-    // request so the solver, not the round trip, sets the pace. Batch sizes
-    // adapt to the measured time per iteration.
+    // Playback reads persisted frames. Solver work starts only from the Run,
+    // Step, or Compute Pending Spans controls.
     async function playLoop(){
       if(!state.playing)return;
-      const activeExperiment = state.inputText !== null ? (state.fileName || 'custom') : $('experiment').value;
       const mode = $('speed').value;
       const iters = state.trajectoryFrames.sortedIters.length
         ? state.trajectoryFrames.sortedIters
         : Array.from(state.trajectoryFrames.keys()).sort((a,b)=>a-b);
-
-      let nextIter = null;
-      if (iters.length > 0) {
-        const higherIters = iters.filter(it => it > state.iteration);
-        if (higherIters.length > 0) {
-          if (state.isTrajectoryMode) {
-            nextIter = higherIters[0];
-          } else {
-            const stride = mode === 'slow' || mode === 'frame' ? 1 : mode === 'fast' ? 2 : 4;
-            const target = state.iteration + stride;
-            nextIter = higherIters.find(it => it >= target) || higherIters[0];
-            if (nextIter - state.iteration > Math.max(10, stride * 4) && !higherIters.includes(state.iteration + 1)) {
-              nextIter = null;
-            }
-          }
-        } else if (state.isTrajectoryMode) {
-          // Only a packaged trajectory loops back to its first frame. A live run
-          // that reaches its target keeps computing: rewinding it to the start
-          // threw the calculation away and dragged the slider back with it.
-          if (!state.maxPinned) {
-            const minIt = state.minIteration;
-            state.iteration = minIt;
-            const f0 = state.trajectoryFrames.get(minIt);
-            if (f0) updateModel(f0, '', true);
-            syncTimeline();
-            const delay = mode === 'slow' ? 300 : mode === 'frame' ? 80 : 30;
-            state.timer = setTimeout(playLoop, delay);
-            return;
-          } else {
-            stop();
-            return;
-          }
-        }
-      }
-
-      if (nextIter !== null) {
-        const frame = state.trajectoryFrames.get(nextIter);
-        if (frame && (state.isTrajectoryMode || frame.experiment === activeExperiment)) {
-          state.iteration = nextIter;
-          updateModel(frame, '', true);
-          state.trajectoryFrames.prefetchAround(nextIter, 6);
-          syncTimeline();
-          const delay = mode === 'slow' ? 300 : mode === 'frame' ? 40 : mode === 'fast' ? 16 : 8;
-          state.rateText = mode === 'slow' ? '3 it/s' : mode === 'frame' ? '25 it/s' : mode === 'fast' ? '60 it/s' : '120 it/s';
-          state.timer = setTimeout(playLoop, delay);
-          return;
-        }
-      }
-
-      if (state.isTrajectoryMode) {
-        stop();
-        return;
-      }
-
-      if (state.busy) { state.timer = setTimeout(playLoop, 4); return; }
-      if (state.iteration >= state.max) {
-        if (state.maxPinned) { stop(); return; }
-        state.max = Math.max(state.max + 1, Math.ceil(state.max * 1.5));
-        syncTimeline();
-      }
-
-      let steps = 1;
-      if (mode === 'fast' || mode === 'max') {
-        const budget = mode === 'fast' ? 40 : 200, perStep = Math.max(0.1, state.msPerIteration || 4);
-        steps = Math.max(1, Math.min(mode === 'fast' ? 64 : 2000, Math.round(budget / perStep)));
-      }
-      steps = Math.max(1, Math.min(steps, state.max - state.iteration));
-
-      const started = performance.now(), from = state.iteration;
-      const ok = await runAt(from + steps);
-      const elapsed = performance.now() - started, advanced = state.iteration - from;
-      if (advanced > 0) {
-        const per = elapsed / advanced;
-        state.msPerIteration = state.msPerIteration ? 0.7 * state.msPerIteration + 0.3 * per : per;
-        state.rateText = formatRate(1000 / per);
-      }
-      if (!ok) { state.playing = false; $('pauseBtn').disabled = true; syncTimeline(); return; }
-      if (!state.playing) { syncTimeline(); return; }
+      const nextIter=iters.find(it=>it>state.iteration);
+      if(nextIter===undefined){stop();setStatus(`Playback reached the last saved frame at iteration ${state.iteration}. Compute more frames to continue.`);return;}
+      let frame;
+      try{frame=await state.trajectoryFrames.getExact(nextIter);}
+      catch(error){stop();setStatus(`Could not load saved iteration ${nextIter}: ${error.message}`,true);return;}
+      if(!state.playing)return;
+      if(!frame){stop();setStatus(`Saved frame ${nextIter} is unavailable. Compute that range before playback.`);return;}
+      state.iteration=nextIter;
+      updateModel(frame,'',true);
+      state.trajectoryFrames.prefetchAround(nextIter,6);
       syncTimeline();
-      state.timer = setTimeout(playLoop, mode === 'slow' ? 300 : 0);
+      state.rateText=mode==='slow'?'3 it/s':mode==='frame'?'25 it/s':mode==='fast'?'60 it/s':'120 it/s';
+      state.timer=setTimeout(playLoop,mode==='slow'?300:mode==='frame'?40:16);
     }
-    function play(){
+    async function play(){
       if(state.playing)return;
-      if(state.iteration>=state.max){
-        const minIt=state.isTrajectoryMode?state.minIteration:0;
-        state.iteration=minIt;
-        if(state.trajectoryFrames.has(minIt)){
-          const f=state.trajectoryFrames.get(minIt);
-          if(f)updateModel(f,'',true);
-        }
-        syncTimeline();
+      if(state.trajectoryFrames.size===0){setStatus('No saved frames are available. Compute the model first.',true);return;}
+      state.playing=true;$('pauseBtn').disabled=false;syncTimeline();
+      const iters=state.trajectoryFrames.sortedIters.length?state.trajectoryFrames.sortedIters:Array.from(state.trajectoryFrames.keys()).sort((a,b)=>a-b);
+      if(state.iteration>=iters[iters.length-1]){
+        const minIt=iters[0];
+        try{const first=await state.trajectoryFrames.getExact(minIt);if(first&&state.playing){state.iteration=minIt;updateModel(first,'',true);syncTimeline();}}
+        catch(error){stop();setStatus(`Could not load saved iteration ${minIt}: ${error.message}`,true);return;}
       }
-      state.playing=true;$('pauseBtn').disabled=false;syncTimeline();void playLoop();
+      if(state.playing)void playLoop();
     }
     async function applyComputeMode(mode){try{const response=await fetch('/api/compute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mode?{mode}:{})});const info=await response.json();if(!response.ok)throw Error(info.error||'Compute mode failed');$('computeMode').value=info.mode;$('computeInfo').textContent=info.threads>1?`${info.threads} threads`:'1 thread';if($('engineStatusLabel'))$('engineStatusLabel').textContent=info.threads>1?`Flow Core (${info.threads}T)`:'Flow Core (1T)';state.msPerIteration=0;}catch(e){setStatus(e.message,true);}}
     $('computeMode').addEventListener('change',e=>applyComputeMode(e.target.value));
     void applyComputeMode('');
-    $('runBtn').addEventListener('click',play);
+    $('runBtn').addEventListener('click',()=>{state.playing=false;clearTimeout(state.timer);const target=Math.max(state.iteration,Math.floor(Number($('iterationMax').value)||state.max));void runAt(target);});
     $('timelinePlay').addEventListener('click',()=>{if(state.playing)stop();else play();});
     $('pauseBtn').addEventListener('click',stop);
     $('workspaceToggle').addEventListener('click',()=>{const open=!document.body.classList.contains('studio-open');document.body.classList.toggle('studio-open',open);document.documentElement.classList.toggle('studio-open',open);$('workspaceToggle').textContent=open?'Focus view':'Show controls';$('workspaceToggle').setAttribute('aria-expanded',String(open));draw();});
@@ -1452,12 +1381,10 @@
     }
     async function finishScrub(target){
       const epoch=state.scrubEpoch;
-      let frame=await state.trajectoryFrames.getExact(target);
-      if(!frame&&state.isTrajectoryMode){
-        const closestIt=state.trajectoryFrames.findClosestIteration(target);
-        if(closestIt!==null)frame=await state.trajectoryFrames.getExact(closestIt);
-      }
+      const closestIt=state.trajectoryFrames.findClosestIteration(target);
+      const frame=closestIt===null?null:await state.trajectoryFrames.getExact(closestIt);
       if(!frame||epoch!==state.scrubEpoch)return false;
+      if(closestIt!==target){$('iterationRange').value=String(closestIt);setCountText('iterationValue',closestIt);}
       updateModel(frame,'',true);
       draw();
       return true;
@@ -1466,15 +1393,16 @@
       const range=$('iterationRange');
       target=Math.max(Number(range.min)||0,Math.min(state.max,Math.floor(Number(target)||0)));
       state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;
-      if(state.isTrajectoryMode){
-        const nearest=state.trajectoryFrames.findClosestIteration(target);
-        if(nearest!==null){target=nearest;range.value=String(target);}
-      }
+      const nearest=state.trajectoryFrames.findClosestIteration(target);
+      if(nearest!==null){target=nearest;range.value=String(target);}
       state.scrubbing=false;state.scrubEpoch++;state.rewindTarget=target<state.iteration?target:null;
       setCountText('iterationValue',target);
       const loaded=await finishScrub(target);
       if(loaded){state.rewindTarget=null;syncTimeline();return true;}
-      return runAt(target);
+      state.rewindTarget=null;
+      setStatus('No saved frames are available. Run the model or compute pending spans first.',true);
+      syncTimeline();
+      return false;
     }
     {
       const range=$('iterationRange');

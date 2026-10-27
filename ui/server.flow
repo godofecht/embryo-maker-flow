@@ -54,7 +54,7 @@ extern { function embryomaker_ignore_sigpipe() -> void }
 
 const MAX_REQUEST: i32 = 16777216
 const SESSION_ID: string = "00000000000000000000000000000001"
-const EXAMPLE_COUNT: i32 = 23
+const EXAMPLE_COUNT: i32 = 24
 
 let mut session_active: bool = false
 let mut session_name: string = ""
@@ -99,6 +99,7 @@ function example_id(index: i32) -> string {
     if index == 20 { return "sea_urchin_high_noise" }
     if index == 21 { return "morphospace_no_adhesion" }
     if index == 22 { return "auxin_stem_growth" }
+    if index == 23 { return "romanesco_growth" }
     return ""
 }
 
@@ -126,6 +127,7 @@ function example_name(index: i32) -> string {
     if index == 20 { return "Sea urchin · high noise" }
     if index == 21 { return "Morphospace 7A · no adhesion molecules" }
     if index == 22 { return "Auxin stem growth" }
+    if index == 23 { return "Romanesco-like meristem growth" }
     return ""
 }
 
@@ -153,6 +155,7 @@ function example_path(index: i32) -> string {
     if index == 20 { return "reference/examples/sea_urchin_high_noise/sea_urchin_high_noise.txt" }
     if index == 21 { return "reference/examples/morphospace_no_adhesion/figure_7a_no_adhesion.dat" }
     if index == 22 { return "reference/examples/auxin_stem_growth/auxin_stem_growth.txt" }
+    if index == 23 { return "reference/examples/romanesco_growth/romanesco_growth.txt" }
     return ""
 }
 

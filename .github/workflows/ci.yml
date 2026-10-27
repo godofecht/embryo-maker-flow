@@ -62,5 +62,7 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1
+          curl --fail --silent http://127.0.0.1:8765/topology | grep -q "Spin textures and skyrmion topology"
+          curl --fail --silent http://127.0.0.1:8765/topology-core.js | grep -q "TopologyCore"
           python3 tools/run_auxin_stem_hypotheses.py --iterations 5000 --output "$RUNNER_TEMP/auxin-results"
           if grep -Ei 'runtime error|uncaught exception|panic:' "$RUNNER_TEMP/studio.log"; then exit 1; fi

@@ -27,7 +27,7 @@
     .timeline-slider-wrap input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#eafff4;border:3px solid var(--mint)}
     .timeline-cache-track{height:4px;border-radius:2px;background:#18222d;width:100%;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);transition:background 120ms ease}
     .timeline-readout{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;font-size:18px;color:#e6edf3;flex:none}
-    .timeline-readout #iterationValue{flex:none;width:5ch;text-align:right;font-variant-numeric:tabular-nums}
+    .timeline-readout #iterationValue{flex:none;width:8ch;min-width:7ch;text-align:right;font-variant-numeric:tabular-nums}
     .timeline-sep{color:#5c6b7a}
     .timeline-readout input{width:84px;background:#0d151e;border:1px solid #2a3948;border-radius:8px;color:#d3ddd8;font-size:15px;padding:5px 8px;font-variant-numeric:tabular-nums}
     .cache-badge{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid #2a3746;color:#9eb0c0;font-size:11px;font-weight:500;cursor:pointer;user-select:none;transition:all 120ms ease;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -227,12 +227,12 @@
         <div class="view-head"><div><div id="viewTitle" class="view-title">Cell model</div><div id="viewCaption" class="view-caption">Drag to rotate · Scroll to zoom</div></div><div class="view-actions"><button id="workspaceToggle" class="workspace-toggle" type="button" aria-expanded="true">Focus view</button><select id="cameraPreset" class="settings-select" aria-label="Camera view" style="width:auto;padding:7px 9px"><option value="oblique">Oblique view</option><option value="above">View from above</option><option value="front">View from front</option></select><button id="homeView" class="icon-button" aria-label="Reset view" title="Reset view">⌂</button><button id="fullscreenBtn" class="icon-button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button><button id="openMenuBtn" class="icon-button" aria-label="Open EmbryoMaker menu" title="Right-click the view for the original menu">☰</button></div></div>
         <div class="timeline" id="timeline" aria-label="Iteration timeline">
           <button id="timelinePlay" class="timeline-play" type="button" aria-label="Run or pause">&#9654;</button>
-          <span class="timeline-label">Iteration</span>
+          <span class="timeline-label" id="timelineDomainLabel">Iteration</span>
           <div class="timeline-slider-wrap">
             <input id="iterationRange" type="range" min="0" max="120" value="0" step="1" aria-label="Iteration">
             <div id="timelineCacheTrack" class="timeline-cache-track" title="Calculated simulation cache map"></div>
           </div>
-          <div class="timeline-readout"><span id="iterationValue">0</span><label class="target-label" for="iterationMax">Target</label><input id="iterationMax" type="number" min="1" step="1" value="120" aria-label="Run target"></div>
+          <div class="timeline-readout"><input id="iterationValue" type="number" min="0" step="1" value="0" aria-label="Current iteration"><label class="target-label" for="iterationMax">End</label><input id="iterationMax" type="number" min="1" step="1" value="120" aria-label="Run target"></div>
           <button type="button" class="cache-badge" id="cacheBadge" aria-haspopup="dialog" title="Simulation cache status · Click for details">
             <span class="cache-dot" id="cacheDot"></span>
             <span id="cacheSummary">0 calc</span>
@@ -361,6 +361,7 @@
         this.activeExp = null;
         this.fetchingIters = new Set();
         this.requestedIteration = null;
+        this.pendingDiskIteration = null;
         this.MAX_RAM_FRAMES = maxRam;
         this.MAX_RAM_BYTES = 64 * 1024 * 1024;
         this.MAX_INDEX_ENTRIES = 8192;
@@ -418,6 +419,7 @@
         this.sortedIters = [];
         this.fetchingIters.clear();
         this.requestedIteration = null;
+        this.pendingDiskIteration = null;
       }
       keys() { return this.index.keys(); }
       values() { return this.ramCache.values(); }
@@ -547,7 +549,8 @@
       }
 
       async streamFromDisk(iteration) {
-        if (this.ramCache.has(iteration) || this.fetchingIters.has(iteration) || this.fetchingIters.size >= 32) return;
+        if (this.ramCache.has(iteration) || this.fetchingIters.has(iteration)) return;
+        if (this.fetchingIters.size >= 8) { this.pendingDiskIteration = iteration; return; }
         this.fetchingIters.add(iteration);
         try {
           const exp = this.activeExp || (state.inputText !== null ? state.fileName : $('experiment')?.value) || 'default';
@@ -580,6 +583,11 @@
           }
         } finally {
           this.fetchingIters.delete(iteration);
+          if (this.pendingDiskIteration !== null && this.fetchingIters.size < 8) {
+            const next = this.pendingDiskIteration;
+            this.pendingDiskIteration = null;
+            if (!this.ramCache.has(next)) void this.streamFromDisk(next);
+          }
         }
       }
 
@@ -728,6 +736,7 @@
     const setCountText = (id, value) => {
       const el = $(id); if (!el) return;
       const text = compactCount(value); el.textContent = text;
+      if (el instanceof HTMLInputElement && document.activeElement !== el) el.value = String(Math.floor(Number(value) || 0));
       if (text === exactCount(value)) el.removeAttribute('title'); else el.title = exactCount(value);
     };
     function updateViewCaption() { const caption = `Iteration ${exactCount(state.iteration)} · ${exactCount(state.nodes.length)} nodes · drag to ${state.dragMode}`; const el = $('viewCaption'); el.textContent = caption; el.title = caption; }
@@ -1294,6 +1303,8 @@
       if(state.iteration>state.max)state.max=state.iteration;
       const range=$('iterationRange');if(Number(range.max)!==state.max)range.max=state.max;
       if(!state.scrubbing)range.value=Math.min(state.iteration,state.max);
+      const currentInput=$('iterationValue');currentInput.min=String(state.minIteration??0);currentInput.max=String(state.max);
+      if(document.activeElement!==currentInput)currentInput.value=String(Math.floor(state.scrubbing?Number(range.value):(state.rewindTarget??state.pendingDisplay??state.iteration)));
       range.style.setProperty('--fill',`${(Number(range.value)/Math.max(1,state.max))*100}%`);
       // A queued or running rewind owns the readout until it lands, so the
       // slider does not snap back to the batch the user just scrubbed away from.
@@ -1428,7 +1439,6 @@
       range.style.setProperty('--fill',`${(target/Math.max(1,state.max))*100}%`);
       setCountText('iterationValue',target);
       if(state.trajectoryFrames.size>0){
-        state.trajectoryFrames.prefetchAround(target,5);
         const closestIt=state.trajectoryFrames.findClosestIteration(target);
         if(closestIt!==null){
           const frame=state.trajectoryFrames.get(closestIt);
@@ -1452,6 +1462,20 @@
       draw();
       return true;
     }
+    async function seekIteration(target){
+      const range=$('iterationRange');
+      target=Math.max(Number(range.min)||0,Math.min(state.max,Math.floor(Number(target)||0)));
+      state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;
+      if(state.isTrajectoryMode){
+        const nearest=state.trajectoryFrames.findClosestIteration(target);
+        if(nearest!==null){target=nearest;range.value=String(target);}
+      }
+      state.scrubbing=false;state.scrubEpoch++;state.rewindTarget=target<state.iteration?target:null;
+      setCountText('iterationValue',target);
+      const loaded=await finishScrub(target);
+      if(loaded){state.rewindTarget=null;syncTimeline();return true;}
+      return runAt(target);
+    }
     {
       const range=$('iterationRange');
       range.addEventListener('pointerdown',()=>{state.scrubbing=true;if(state.playing)stop();});
@@ -1467,20 +1491,22 @@
         scrubInstant(target);
       });
       range.addEventListener('change',()=>{
-        state.scrubbing=false;
-        state.scrubEpoch++;
         const target=Number(range.value);
-        void finishScrub(target).then(loaded=>{
-          if(loaded){state.rewindTarget=null;syncTimeline();return;}
-          if(target!==state.iteration){state.playing=false;clearTimeout(state.timer);$('pauseBtn').disabled=true;state.rewindTarget=target<state.iteration?target:null;void runAt(target);}
-          else syncTimeline();
-        }).catch(error=>setStatus(`Could not load iteration ${target}: ${error.message}`,true));
+        void seekIteration(target).catch(error=>setStatus(`Could not load iteration ${target}: ${error.message}`,true));
       });
-      range.addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();if(state.busy)return;state.playing=false;clearTimeout(state.timer);const target=Math.max(0,state.iteration+(e.key==='ArrowRight'?1:-1));if(target>state.max)state.max=target;void runAt(target);});
+      $('iterationValue').addEventListener('change',e=>{
+        const value=Number(e.target.value);
+        if(!Number.isFinite(value)){syncTimeline();return;}
+        void seekIteration(value).catch(error=>setStatus(`Could not load iteration ${value}: ${error.message}`,true));
+      });
       $('iterationMax').addEventListener('change',e=>{const value=Math.floor(Number(e.target.value));if(!Number.isFinite(value)||value<1){e.target.value=state.max;return;}state.max=Math.max(value,state.iteration);state.maxPinned=true;syncTimeline();});
     }
     async function loadProjectData(proj, fileName='Project'){
       if(!proj.frames||!proj.frames.length)throw Error('Project has no snapshot frames');
+      const axis=proj.timelineLabel||'Iteration';
+      $('timelineDomainLabel').textContent=axis;
+      $('iterationRange').setAttribute('aria-label',axis);
+      $('iterationValue').setAttribute('aria-label',`Current ${axis.toLowerCase()}`);
       const experiment=proj.name||fileName;
       state.trajectoryFrames.clear();
       // Frames past the RAM budget stream back from the cache database, so the
@@ -1495,6 +1521,8 @@
       state.isTrajectoryMode=true;
       state.minIteration=proj.minIteration??proj.frames[0].iterations;
       state.max=proj.maxIteration??proj.frames[proj.frames.length-1].iterations;
+      const frameSteps=proj.frames.slice(1).map((frame,i)=>frame.iterations-proj.frames[i].iterations).filter(step=>step>0);
+      const sliderStep=frameSteps.length?Math.min(...frameSteps):1;
       state.iteration=state.minIteration;
       if(proj.experiment){
         if($('experiment'))$('experiment').value=proj.experiment;
@@ -1546,7 +1574,9 @@
       const range=$('iterationRange');
       range.min=state.minIteration;
       range.max=state.max;
+      range.step=sliderStep;
       range.value=state.minIteration;
+      $('iterationValue').step=sliderStep;
       setCountText('iterationValue',state.minIteration);
       $('iterationMax').value=state.max;
       setUploadLabel(fileName);
@@ -1585,9 +1615,11 @@
     $('openProjBtn')?.addEventListener('click',()=>$('filePicker').click());
     $('saveProjBtn')?.addEventListener('click',saveProject);
     const plantGrowthProjects={
-      arabidopsis_root_gravitropism:{name:'Arabidopsis Col-0 root gravitropism',url:'/arabidopsis_root_gravitropism.json.gz',range:'0 to 720 minutes after reorientation'},
-      arabidopsis_seedling:{name:'Arabidopsis Col-0 seedling growth',url:'/arabidopsis_seedling.json.gz',range:'0 to 10 days after germination'},
-      neurospora_crassa:{name:'Neurospora crassa conidium to mycelium',url:'/neurospora_crassa.json.gz',range:'0 to 16 hours'}
+      arabidopsis_root_gravitropism:{name:'Arabidopsis Col-0 root gravitropism',url:'/arabidopsis_root_gravitropism.json.gz',range:'0 to 720 minutes after reorientation',axis:'Minutes after turn'},
+      arabidopsis_seedling:{name:'Arabidopsis Col-0 seedling growth',url:'/arabidopsis_seedling.json.gz',range:'0 to 10 days after germination',axis:'Hours after germination'},
+      neurospora_crassa:{name:'Neurospora crassa conidium to mycelium',url:'/neurospora_crassa.json.gz',range:'0 to 16 hours',axis:'Minutes after inoculation'},
+      a673_cancer_spheroid:{name:'A673 cancer spheroid with hypoxic core',url:'/a673_cancer_spheroid.json.gz',range:'200 to 700 um diameter',axis:'Diameter (um)'},
+      c_elegans_embryo:{name:'C. elegans early embryo lineage',url:'/c_elegans_embryo.json.gz',range:'0 to 90 minutes after fertilization',axis:'Minutes after fertilization'}
     };
     async function loadPlantGrowthProject(id){
       const item=plantGrowthProjects[id];if(!item)throw Error(`Unknown plant model: ${id}`);
@@ -1597,6 +1629,10 @@
       const stream=response.body.pipeThrough(new DecompressionStream('gzip'));
       const project=JSON.parse(await new Response(stream).text());
       await loadProjectData(project,item.name);
+      const axis=project.timelineLabel||item.axis;
+      $('timelineDomainLabel').textContent=axis;
+      $('iterationRange').setAttribute('aria-label',axis);
+      $('iterationValue').setAttribute('aria-label',`Current ${axis.toLowerCase()}`);
       setStatus(`Loaded ${item.name} (${project.frameCount} frames, ${item.range}).`);
     }
     async function loadPrecomputedSeaUrchin(){
@@ -1678,6 +1714,9 @@
       if($('experimentMenu').value!==$('experiment').value)$('experimentMenu').value=$('experiment').value;
       if(plantGrowthProjects[$('experiment').value]){state.inputText=null;state.fileName=null;setUploadLabel('');state.trajectoryFrames.clear();try{await loadPlantGrowthProject($('experiment').value);}catch(error){setStatus(`Could not load plant model: ${error.message}`,true);}return;}
       state.isTrajectoryMode=false;
+      $('timelineDomainLabel').textContent='Iteration';
+      $('iterationRange').setAttribute('aria-label','Iteration');
+      $('iterationRange').step='1';$('iterationValue').step='1';$('iterationValue').setAttribute('aria-label','Current iteration');
       state.inputText=null;state.fileName=null;setUploadLabel('');
       state.trajectoryFrames.clear();
       setStatus('Loading model…');

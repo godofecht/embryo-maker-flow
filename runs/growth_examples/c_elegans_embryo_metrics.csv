@@ -1,0 +1,47 @@
+time_minutes_after_fertilization,blastomere_count,lineages
+0,1,P0
+2,1,P0
+4,1,P0
+6,1,P0
+8,1,P0
+10,1,P0
+12,1,P0
+14,1,P0
+16,1,P0
+18,1,P0
+20,1,P0
+22,1,P0
+24,1,P0
+26,1,P0
+28,1,P0
+30,1,P0
+32,1,P0
+34,1,P0
+36,1,P0
+38,1,P0
+40,2,AB P1
+42,2,AB P1
+44,2,AB P1
+46,2,AB P1
+48,2,AB P1
+50,2,AB P1
+52,2,AB P1
+54,2,AB P1
+56,3,ABa ABp P1
+58,4,ABa ABp EMS P2
+60,4,ABa ABp EMS P2
+62,4,ABa ABp EMS P2
+64,4,ABa ABp EMS P2
+66,4,ABa ABp EMS P2
+68,4,ABa ABp EMS P2
+70,4,ABa ABp EMS P2
+72,4,ABa ABp EMS P2
+74,6,ABal ABar ABpl ABpr EMS P2
+76,6,ABal ABar ABpl ABpr EMS P2
+78,6,ABal ABar ABpl ABpr EMS P2
+80,8,ABal ABar ABpl ABpr MS E C P3
+82,8,ABal ABar ABpl ABpr MS E C P3
+84,8,ABal ABar ABpl ABpr MS E C P3
+86,8,ABal ABar ABpl ABpr MS E C P3
+88,8,ABal ABar ABpl ABpr MS E C P3
+90,8,ABal ABar ABpl ABpr MS E C P3

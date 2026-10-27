@@ -1779,6 +1779,18 @@ function route_request(fd: i32, request: HttpRequest) -> void {
             else { send_response(fd, 404, "text/plain", "Not found") }
             return
         }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/a673_cancer_spheroid.json.gz") {
+            let gz_data: FileRead = io_read_file("ui/plant_models/a673_cancer_spheroid.json.gz")
+            if gz_data.ok { send_file_read_response(fd, 200, "application/gzip", gz_data, "") }
+            else { send_response(fd, 404, "text/plain", "Not found") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/c_elegans_embryo.json.gz") {
+            let gz_data: FileRead = io_read_file("ui/plant_models/c_elegans_embryo.json.gz")
+            if gz_data.ok { send_file_read_response(fd, 200, "application/gzip", gz_data, "") }
+            else { send_response(fd, 404, "text/plain", "Not found") }
+            return
+        }
         if bytes_equal(bytes, request.path_start, request.path_end, "/sea_urchin_gastrulation.mp4") or bytes_equal(bytes, request.path_start, request.path_end, "/build/sea_urchin_video/sea_urchin_gastrulation.mp4") {
             let video_data: FileRead = io_read_file("ui/assets/sea_urchin_gastrulation.mp4")
             if video_data.ok { send_file_read_response(fd, 200, "video/mp4", video_data, "") }

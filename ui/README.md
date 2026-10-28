@@ -60,3 +60,4 @@ The broader regression suite is `node tools/ui_smoke.cjs`.
 The packaged trajectory is `ui/sea_urchin_project.json.gz`. The JSON endpoint
 serves that same file with HTTP gzip encoding. The expanded JSON is generated
 locally and excluded from Git. The preview video lives in `ui/assets/`.
+

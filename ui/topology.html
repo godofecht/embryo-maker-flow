@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topological Fields · EmbryoMaker Research Lab</title>
+<style>
+:root{color-scheme:dark;font:15px/1.55 system-ui,sans-serif;background:#0b1119;color:#e7edf2}
+*{box-sizing:border-box}body{margin:0;padding:22px;max-width:1120px;margin-inline:auto}
+a{color:#b3eed3}header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+h1{font-size:23px;margin:18px 0 5px}p{color:#aec0ce;margin:0 0 16px}
+main{display:grid;grid-template-columns:minmax(0,650px) minmax(255px,1fr);gap:20px}
+section,aside{background:#141e28;border:1px solid #34485b;border-radius:14px;padding:16px}
+canvas{display:block;width:100%;aspect-ratio:1;image-rendering:auto;border-radius:8px;background:#09111a}
+label{display:block;font-size:13px;margin:14px 0 6px;color:#d5e0e7}
+input[type=range]{width:100%;accent-color:#b3eed3}
+button,select{background:#1e3342;border:1px solid #57727e;border-radius:8px;color:#e7edf2;padding:9px 12px;cursor:pointer;min-height:38px}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #b3eed3;outline-offset:2px}
+.controls{display:flex;flex-wrap:wrap;gap:7px}.metric{font-size:25px;font-variant-numeric:tabular-nums}
+small{display:block;color:#9bafbe;margin:7px 0 15px}output{float:right}#status{min-height:20px}
+@media(max-width:760px){main{grid-template-columns:1fr}body{padding:12px}}
+</style></head><body>
+<header><strong>EmbryoMaker · Optional topology research</strong><nav><a href="/nematic">Nematic defects</a> · <a href="/">Back to cell Studio</a></nav></header>
+<h1>Spin textures and skyrmion topology</h1>
+<p>Independent 2D vector-field laboratory. This does not change or couple to the 3D cell solver.</p>
+<main><section><canvas id="field" width="650" height="650" role="img" aria-label="Color indicates out-of-plane spin component; arrows show in-plane orientation"></canvas>
+<small>Gold: up (+z) · Violet: down (−z) · White arrows: in-plane direction</small></section>
+<aside>
+<label for="texture">Initial texture</label>
+<select id="texture"><option value="neel">Néel skyrmion</option><option value="bloch">Bloch skyrmion</option><option value="antiskyrmion">Antiskyrmion</option><option value="uniform">Uniform reference</option></select>
+<div class="controls"><button id="reset">Reset texture</button><button id="advance">Relax 25 steps</button></div>
+<label for="noise">Perturbation amplitude <output id="noiseOut">0.20</output></label>
+<input id="noise" type="range" min="0" max="2" step="0.05" value="0.20">
+<div class="controls"><button id="perturb">Apply seeded noise</button><button id="export">Export JSON</button></div>
+<label for="dmi">DMI-like coupling <output id="dmiOut">0.12</output></label>
+<input id="dmi" type="range" min="-0.5" max="0.5" step="0.01" value="0.12">
+<label for="anisotropy">Easy-axis coupling <output id="anisotropyOut">0.08</output></label>
+<input id="anisotropy" type="range" min="0" max="0.5" step="0.01" value="0.08">
+<div>Topological charge Q</div><div id="charge" class="metric" aria-live="polite">-</div>
+<div>Exchange gradient energy</div><div id="energy" class="metric">-</div><div>Relaxation steps: <span id="steps">0</span></div>
+<p id="status" role="status">Ready</p>
+<small>The open square boundary is not compactified: Q is approximate and can vary when edge spins or field continuity change. Evolution uses an illustrative damped tangent-field update with exchange, DMI-like and anisotropy terms, not validated magnetic material dynamics or a cell-tissue model.</small>
+</aside></main>
+<script src="/topology-core.js"></script>
+<script>
+(() => {
+  const core = window.TopologyCore;
+  const $ = id => document.getElementById(id);
+  const n = 81, canvas=$('field'),ctx=canvas.getContext('2d');
+  let field=core.seed(n),steps=0,noiseSeed=12345;
+  const readout = id => $(id+'Out').textContent=Number($(id).value).toFixed(2);
+  function paint(){
+    const pitch=canvas.width/n;
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+      const i=3*(y*n+x),z=Math.max(-1,Math.min(1,field[i+2])), t=(z+1)/2;
+      ctx.fillStyle='rgb('+Math.round(146+76*t)+','+Math.round(81+122*t)+','+Math.round(192-95*t)+')';
+      ctx.fillRect(x*pitch,y*pitch,Math.ceil(pitch)+1,Math.ceil(pitch)+1);
+    }
+    ctx.strokeStyle='rgba(245,251,255,.9)';ctx.lineWidth=1.5;
+    for(let y=4;y<n;y+=8)for(let x=4;x<n;x+=8){
+      const i=3*(y*n+x),cx=(x+0.5)*pitch,cy=(y+0.5)*pitch;
+      const dx=field[i]*pitch*3.3,dy=field[i+1]*pitch*3.3;
+      ctx.beginPath();ctx.moveTo(cx-dx/2,cy-dy/2);ctx.lineTo(cx+dx/2,cy+dy/2);ctx.stroke();
+    }
+    $('charge').textContent=core.charge(field,n).toFixed(5);
+    $('energy').textContent=core.gradientEnergy(field,n).toFixed(3);
+    $('steps').textContent=String(steps);
+  }
+  $('reset').addEventListener('click',()=>{field=core.seed(n,$('texture').value);steps=0;paint();$('status').textContent='Initial texture restored';});
+  $('texture').addEventListener('change',()=>$('reset').click());
+  $('advance').addEventListener('click',()=>{
+    const options={dmi:Number($('dmi').value),anisotropy:Number($('anisotropy').value)};
+    for(let i=0;i<25;i++)field=core.relax(field,n,options);
+    steps+=25;paint();$('status').textContent='Applied 25 deterministic relaxation steps';
+  });
+  $('perturb').addEventListener('click',()=>{field=core.perturb(field,Number($('noise').value),noiseSeed++);paint();$('status').textContent='Applied seeded vector noise';});
+  for(const id of ['noise','dmi','anisotropy']){$(id).addEventListener('input',()=>readout(id));readout(id);}
+  $('export').addEventListener('click',()=>{
+    const data=JSON.stringify({schema:'embryomaker-topology-v1',size:n,steps,texture:$('texture').value,spins:Array.from(field)});
+    const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+    const a=document.createElement('a');a.href=url;a.download='topology-field.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $('status').textContent='Exported vector field JSON';
+  });
+  paint();
+})();
+</script></body></html>

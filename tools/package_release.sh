@@ -34,7 +34,10 @@ cp "$repo_dir/LICENSE" "$stage/LICENSE"
 cp "$repo_dir/docs/user-guide.md" "$stage/USER_GUIDE.md"
 cp "$repo_dir/reference/config_file.txt" "$stage/reference/config_file.txt"
 cp -R "$repo_dir/reference/examples" "$stage/reference/examples"
-cp "$repo_dir/ui/index.html" "$repo_dir/ui/renderer.js" "$repo_dir/ui/favicon.svg" "$stage/ui/"
+cp "$repo_dir/ui/index.html" "$repo_dir/ui/renderer.js" "$repo_dir/ui/studio.css" \
+   "$repo_dir/ui/topology.html" "$repo_dir/ui/topology-core.js" \
+   "$repo_dir/ui/nematic.html" "$repo_dir/ui/nematic-core.js" \
+   "$repo_dir/ui/favicon.svg" "$stage/ui/"
 
 cat > "$stage/launch.sh" <<'LAUNCH'
 #!/bin/sh
@@ -79,3 +82,4 @@ else
 fi
 shasum -a 256 "$archive" 2>/dev/null || sha256sum "$archive"
 echo "Created $archive"
+

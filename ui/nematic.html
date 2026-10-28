@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Active-nematic topology · EmbryoMaker</title>
+<style>
+:root{color-scheme:dark;font:15px/1.5 system-ui,sans-serif;background:#0b1119;color:#e7edf2}
+*{box-sizing:border-box}body{margin:0 auto;max-width:1120px;padding:24px}
+a{color:#b3eed3}header{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+main{display:grid;grid-template-columns:minmax(0,640px) minmax(270px,1fr);gap:18px}
+section,aside{background:#141e28;border:1px solid #34485b;border-radius:12px;padding:16px}
+canvas{width:100%;aspect-ratio:1;background:#080f17;display:block;border-radius:8px}
+h1{font-size:23px;margin:15px 0 4px}p{color:#aebfcb;margin:0 0 15px}
+label{display:block;margin:13px 0 5px;font-size:13px}
+select,button{background:#1e3342;border:1px solid #57727e;border-radius:8px;color:#edf5f8;padding:9px 12px;min-height:38px;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #b3eed3;outline-offset:2px}
+input{width:100%;accent-color:#b3eed3}output{float:right}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.metric{font-size:27px;font-variant-numeric:tabular-nums}
+small{display:block;color:#adc1cf;margin:8px 0 14px}
+@media(max-width:760px){main{grid-template-columns:1fr}body{padding:12px}}
+</style></head>
+<body>
+<header><strong>EmbryoMaker · Topological defects</strong><nav><a href="/topology">Spin textures</a> · <a href="/">Cell Studio</a></nav></header>
+<h1>Nematic director fields</h1><p>Exploration of +½ / −½ disclinations in a field with head-tail symmetry. Independent of the cell simulation.</p>
+<main><section>
+<canvas id="field" width="640" height="640" role="img" aria-label="Field of unoriented line segments displaying the local nematic director"></canvas>
+<small>Line segments have no arrowheads because nematic directors are invariant under n → −n. The centre may contain a topological singularity.</small>
+</section><aside>
+<label for="defect">Initial configuration</label>
+<select id="defect"><option value="plus-half">+½ defect</option><option value="minus-half">−½ defect</option><option value="plus-one">+1 defect</option><option value="uniform">Uniform director</option></select>
+<div class="actions"><button id="reset">Reset</button><button id="advance">Relax 25 steps</button></div>
+<label for="noise">Director noise <output id="noiseOut">0.20</output></label>
+<input id="noise" type="range" min="0" max="1.5" step="0.05" value="0.20">
+<div class="actions"><button id="perturb">Perturb</button><button id="export">Export JSON</button></div>
+<label for="loop">Winding loop radius <output id="loopOut">26</output></label>
+<input id="loop" type="range" min="5" max="36" value="26" step="1">
+<div>Enclosed director charge</div><div id="charge" class="metric" aria-live="polite">-</div>
+<div>Alignment gradient energy</div><div id="energy" class="metric">-</div>
+<div>Relaxation steps: <span id="steps">0</span></div>
+<small id="status" role="status"></small>
+<small>Winding is evaluated on an oriented square loop by unwrapping the doubled director angle. Relaxation minimizes a simplified local alignment term. It is not an active hydrodynamic tissue model. Defects in experimental tissues require additional biological and mechanical mechanisms.</small>
+</aside></main>
+<script src="/nematic-core.js"></script>
+<script>
+(() => {
+  const core=window.NematicCore,$=id=>document.getElementById(id);
+  const canvas=$('field'),ctx=canvas.getContext('2d'),n=81;
+  let field=core.seed(n),stepCount=0,noiseSeed=99;
+  function render() {
+    ctx.fillStyle='#09131d';ctx.fillRect(0,0,canvas.width,canvas.height);
+    const unit=canvas.width/n;
+    for(let y=2;y<n;y+=4)for(let x=2;x<n;x+=4){
+      const i=2*(y*n+x),angle=.5*Math.atan2(field[i+1],field[i]);
+      const dx=Math.cos(angle)*unit*1.55,dy=Math.sin(angle)*unit*1.55;
+      const px=(x+.5)*unit,py=(y+.5)*unit;
+      const shade=Math.round(145+80*Math.abs(field[i]));
+      ctx.strokeStyle='rgb('+shade+','+(shade+25)+',245)';ctx.lineWidth=1.8;
+      ctx.beginPath();ctx.moveTo(px-dx,py-dy);ctx.lineTo(px+dx,py+dy);ctx.stroke();
+    }
+    const r=Number($('loop').value),cx=canvas.width/2,rr=r*unit;
+    ctx.strokeStyle='#b3eed3';ctx.lineWidth=1;
+    ctx.strokeRect(cx-rr, cx-rr, 2*rr, 2*rr);
+    $('charge').textContent=core.winding(field,n,r).toFixed(5);
+    $('energy').textContent=core.alignmentEnergy(field,n).toFixed(3);
+    $('steps').textContent=String(stepCount);
+    $('loopOut').textContent=String(r);
+    $('noiseOut').textContent=Number($('noise').value).toFixed(2);
+  }
+  $('reset').addEventListener('click',()=>{field=core.seed(n,$('defect').value);stepCount=0;render();$('status').textContent='Reset';});
+  $('defect').addEventListener('change',()=>$('reset').click());
+  $('loop').addEventListener('input',render);$('noise').addEventListener('input',render);
+  $('perturb').addEventListener('click',()=>{field=core.perturb(field,n,Number($('noise').value),noiseSeed++);render();$('status').textContent='Added seeded director noise';});
+  $('advance').addEventListener('click',()=>{for(let i=0;i<25;i++)field=core.relax(field,n);stepCount+=25;render();$('status').textContent='25 alignment steps applied';});
+  $('export').addEventListener('click',()=>{
+    const data=JSON.stringify({schema:'embryomaker-nematic-v1',size:n,steps:stepCount,doubledDirector:Array.from(field)});
+    const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+    const a=document.createElement('a');a.href=url;a.download='nematic-director-field.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $('status').textContent='Exported doubled-angle field JSON';
+  });
+  render();
+})();
+</script></body></html>

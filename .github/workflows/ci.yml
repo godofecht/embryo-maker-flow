@@ -45,6 +45,10 @@ jobs:
           git diff --exit-code -- reference/examples/auxin_stem_growth/auxin_stem_growth.txt
       - name: Check latest-release downloads page
         run: node tests/test_download_page_release.cjs
+      - name: Check optional topological field laboratory
+        run: node tools/test_topology.cjs
+      - name: Test isolated active nematic defect lab
+        run: node tools/test_nematic.cjs
       - name: Run Flow checks
         run: tools/run_flow_checks.sh
       - name: Build Studio server
@@ -60,5 +64,9 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1
+          curl --fail --silent http://127.0.0.1:8765/topology | grep -q "Spin textures and skyrmion topology"
+          curl --fail --silent http://127.0.0.1:8765/topology-core.js | grep -q "TopologyCore"
+          curl --fail --silent http://127.0.0.1:8765/nematic | grep -q "Nematic director fields"
+          curl --fail --silent http://127.0.0.1:8765/nematic-core.js | grep -q "NematicCore"
           python3 tools/run_auxin_stem_hypotheses.py --iterations 5000 --output "$RUNNER_TEMP/auxin-results"
           if grep -Ei 'runtime error|uncaught exception|panic:' "$RUNNER_TEMP/studio.log"; then exit 1; fi

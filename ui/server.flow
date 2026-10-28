@@ -1752,6 +1752,30 @@ function route_request(fd: i32, request: HttpRequest) -> void {
             else { send_response(fd, 404, "text/plain", "Not found") }
             return
         }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/topology") or bytes_equal(bytes, request.path_start, request.path_end, "/topology.html") {
+            let page: FileRead = io_read_file("ui/topology.html")
+            if page.ok { send_response(fd, 200, "text/html; charset=utf-8", page.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read topology lab") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/nematic") or bytes_equal(bytes, request.path_start, request.path_end, "/nematic.html") {
+            let page: FileRead = io_read_file("ui/nematic.html")
+            if page.ok { send_response(fd, 200, "text/html; charset=utf-8", page.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read nematic lab") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/nematic-core.js") {
+            let script: FileRead = io_read_file("ui/nematic-core.js")
+            if script.ok { send_response(fd, 200, "application/javascript; charset=utf-8", script.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read nematic core") }
+            return
+        }
+        if bytes_equal(bytes, request.path_start, request.path_end, "/topology-core.js") {
+            let script: FileRead = io_read_file("ui/topology-core.js")
+            if script.ok { send_response(fd, 200, "application/javascript; charset=utf-8", script.data) }
+            else { send_response(fd, 500, "text/plain; charset=utf-8", "Could not read topology core") }
+            return
+        }
         if bytes_equal(bytes, request.path_start, request.path_end, "/renderer.js") {
             let renderer: FileRead = io_read_file("ui/renderer.js")
             if renderer.ok { send_response(fd, 200, "application/javascript; charset=utf-8", renderer.data); free(renderer.data as ptr<void>) }
@@ -1836,3 +1860,4 @@ function main() -> i32 {
     }
     return 0
 }
+

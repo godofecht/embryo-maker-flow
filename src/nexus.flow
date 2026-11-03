@@ -362,25 +362,22 @@ function diffusion_apply_prepared(changed_a: i32, changed_b: i32) -> bool {
     let offsets: ptr<i32> = diffusion_offsets
     let partners: ptr<i32> = diffusion_neighbors
     let rate: f64 = dif_req
-    let mut current: i32 = 1
-    while current <= node_count {
+    # Keep the two ordered passes: read every neighbor into scratch before
+    # mutating the field, preserving the reference diffusion update.
+    for current in 1 to node_count + 1 {
         let mut gradient: f64 = 0.0
         let current_gradient: f64 = field[current]
-        let mut edge: i32 = offsets[current]
+        let edge_start: i32 = offsets[current]
         let edge_end: i32 = offsets[current + 1]
-        while edge < edge_end {
+        for edge in edge_start to edge_end {
             let other: i32 = partners[edge]
             gradient = gradient + (field[other] - current_gradient)
-            edge = edge + 1
         }
         scratch[current] = gradient * rate
-        current = current + 1
     }
     let step: f64 = delta
-    current = 1
-    while current <= node_count {
+    for current in 1 to node_count + 1 {
         field[current] = field[current] + step * scratch[current]
-        current = current + 1
     }
     if changed_a >= 1 and changed_a <= node_count { node[changed_a].grd = field[changed_a] }
     if changed_b >= 1 and changed_b <= node_count { node[changed_b].grd = field[changed_b] }

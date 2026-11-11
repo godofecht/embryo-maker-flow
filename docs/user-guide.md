@@ -88,7 +88,7 @@ Close the browser tab, then press Control-C in the terminal window. Each server 
 
 ## Build from source
 
-To build from source, install the [Flow compiler at verified commit `62c5e81d8715`](https://github.com/flooooooooooow/flow/tree/62c5e81d871524af7d1c0e4d1fb00e0a5cdbeede) and a C compiler, clone the source repository, then run:
+To build from source, install the [Flow compiler at verified commit `ac71ce1cee07`](https://github.com/flooooooooooow/flow/tree/ac71ce1cee07723b65c898dcd5d75bc56e885ac3) and a C compiler, clone the source repository, then run:
 
 ```sh
 tools/run-ui.sh

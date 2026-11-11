@@ -1,3 +1,4 @@
+import "stdlib/dynamics/pde.flow"
 import embryo.general { ncels, cels, node, nodeo, nd, delta, ffu, reqmin, df_reqmax, fmeanl, ttalone, nneigh, neigh, neigh_ld, dif_req }
 import embryo.mitosis { division, mitosis_error }
 import embryo.genetic {
@@ -358,30 +359,13 @@ function diffusion_apply_prepared(changed_a: i32, changed_b: i32) -> bool {
     let field: ptr<f64> = diffusion_field
     if changed_a >= 1 and changed_a <= node_count { field[changed_a] = node[changed_a].grd }
     if changed_b >= 1 and changed_b <= node_count { field[changed_b] = node[changed_b].grd }
-    let scratch: ptr<f64> = diffusion_scratch
-    let offsets: ptr<i32> = diffusion_offsets
-    let partners: ptr<i32> = diffusion_neighbors
-    let rate: f64 = dif_req
-    let mut current: i32 = 1
-    while current <= node_count {
-        let mut gradient: f64 = 0.0
-        let current_gradient: f64 = field[current]
-        let mut edge: i32 = offsets[current]
-        let edge_end: i32 = offsets[current + 1]
-        while edge < edge_end {
-            let other: i32 = partners[edge]
-            gradient = gradient + (field[other] - current_gradient)
-            edge = edge + 1
-        }
-        scratch[current] = gradient * rate
-        current = current + 1
-    }
-    let step: f64 = delta
-    current = 1
-    while current <= node_count {
-        field[current] = field[current] + step * scratch[current]
-        current = current + 1
-    }
+    # Keep EmbryoMaker's two-pass synchronous update and exact operation order.
+    # CSR row offsets are indexed 1..nd while edge IDs are zero-based.
+    # The helper accepts a pointer to the first CSR row and 1-based node IDs.
+    heat_euler_step_csr_ordered_inplace(
+        field, diffusion_scratch, node_count, dif_req, delta,
+        &diffusion_offsets[1], diffusion_neighbors, 1
+    )
     if changed_a >= 1 and changed_a <= node_count { node[changed_a].grd = field[changed_a] }
     if changed_b >= 1 and changed_b <= node_count { node[changed_b].grd = field[changed_b] }
     return true

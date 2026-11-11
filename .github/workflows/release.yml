@@ -42,7 +42,7 @@ jobs:
         with:
           repository: flooooooooooow/flow
           # Temporary SHA pin for Flow PR #1686; refresh to the verified merge SHA.
-          ref: 62c5e81d871524af7d1c0e4d1fb00e0a5cdbeede
+          ref: ac71ce1cee07723b65c898dcd5d75bc56e885ac3
           path: flow-toolchain
       - name: Install compiler dependencies
         if: runner.os == 'Linux'

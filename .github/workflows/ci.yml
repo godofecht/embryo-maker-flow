@@ -128,7 +128,7 @@ jobs:
   macos-parity:
     name: Apple silicon build and snapshot parity
     if: github.event_name == 'pull_request'
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     env:
       FLOW_BUILD_ROOT: /tmp/embryo-parity-build

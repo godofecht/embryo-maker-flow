@@ -41,8 +41,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: flooooooooooow/flow
-          # Temporary SHA pin for Flow PR #1686; refresh to the verified merge SHA.
-          ref: ac71ce1cee07723b65c898dcd5d75bc56e885ac3
+          # Merged Flow #1686; keep the release compiler identical to CI.
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
           path: flow-toolchain
       - name: Install compiler dependencies
         if: runner.os == 'Linux'

@@ -28,8 +28,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: flooooooooooow/flow
-          # Temporary SHA pin for Flow PR #1686; refresh to the verified merge SHA.
-          ref: ac71ce1cee07723b65c898dcd5d75bc56e885ac3
+          # Merged Flow #1686: ordered CSR diffusion, qualified by parity below.
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
           path: flow-toolchain
       - name: Install compiler dependencies
         run: |
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: flooooooooooow/flow
-          ref: ac71ce1cee07723b65c898dcd5d75bc56e885ac3
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
           path: flow-toolchain
       - name: Install compiler dependencies
         run: |
@@ -145,7 +145,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: flooooooooooow/flow
-          ref: ac71ce1cee07723b65c898dcd5d75bc56e885ac3
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
           path: flow-toolchain
       - name: Add Flow compiler to PATH
         run: echo "$GITHUB_WORKSPACE/flow-toolchain" >> "$GITHUB_PATH"

@@ -23,7 +23,7 @@ jobs:
           - os: ubuntu-24.04
             target: linux-x86_64
             cc: clang
-          - os: macos-14
+          - os: macos-15
             target: macos-arm64
             cc: clang
     runs-on: ${{ matrix.os }}

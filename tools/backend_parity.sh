@@ -32,14 +32,14 @@ if [ -z "$reference" ]; then
         echo "reference build failed, see $out_dir/reference_build.log" >&2
         exit 1
     }
-    cp "$HOME/flow/build/embryomaker" "$out_dir/embryomaker_c"
+    cp "${FLOW_BUILD_ROOT:-$HOME/flow/build}/embryomaker" "$out_dir/embryomaker_c"
     reference="$out_dir/embryomaker_c"
 fi
 FLOW_CFLAGS="${FLOW_CFLAGS:+$FLOW_CFLAGS }-ffp-contract=off" flow compile tools/snapdiff.flow > "$out_dir/snapdiff_build.log" 2>&1 || {
     echo "snapdiff build failed, see $out_dir/snapdiff_build.log" >&2
     exit 1
 }
-snapdiff="$HOME/flow/build/snapdiff"
+snapdiff="${FLOW_BUILD_ROOT:-$HOME/flow/build}/snapdiff"
 
 now() { python3 -I -c 'import time; print(time.time())'; }
 max_steps=${EMBRYO_PARITY_MAX_STEPS:-2147483647}

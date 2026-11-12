@@ -28,7 +28,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: flooooooooooow/flow
-          ref: v2.0.0
+          # Merged Flow #1686: ordered CSR diffusion, qualified by parity below.
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
           path: flow-toolchain
       - name: Install compiler dependencies
         run: |
@@ -70,3 +71,102 @@ jobs:
           curl --fail --silent http://127.0.0.1:8765/nematic-core.js | grep -q "NematicCore"
           python3 tools/run_auxin_stem_hypotheses.py --iterations 5000 --output "$RUNNER_TEMP/auxin-results"
           if grep -Ei 'runtime error|uncaught exception|panic:' "$RUNNER_TEMP/studio.log"; then exit 1; fi
+
+  parity:
+    name: C backend exact snapshot parity
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FLOW_BUILD_ROOT: /tmp/embryo-parity-build
+      FLOW_OPT_LEVEL: "3"
+      FLOW_CFLAGS: -ffp-contract=off
+      CC: clang
+      EMBRYO_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+      - uses: actions/checkout@v5
+        with:
+          repository: flooooooooooow/flow
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
+          path: flow-toolchain
+      - name: Install compiler dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+      - name: Add Flow compiler to PATH
+        run: echo "$GITHUB_WORKSPACE/flow-toolchain" >> "$GITHUB_PATH"
+      - name: Normalize frameworks for Linux
+        run: |
+          sed -i 's/^frameworks = \["Metal", "Foundation"\]/frameworks = []/' flow.toml
+          sed -i 's/^frameworks = \["Metal", "Foundation"\]/frameworks = []/' baseline/flow.toml
+      - name: Compile the independent base-commit reference
+        working-directory: baseline
+        run: |
+          flow compile src/embryomaker.flow
+          cp "$FLOW_BUILD_ROOT/embryomaker" "$RUNNER_TEMP/embryomaker_baseline"
+      - name: Compile proposed solver with same compiler
+        run: |
+          flow compile src/embryomaker.flow
+          cp "$FLOW_BUILD_ROOT/embryomaker" "$RUNNER_TEMP/embryomaker_candidate"
+      - name: Compare complete bitwise snapshots against the base commit
+        run: |
+          EMBRYO_PARITY_REFERENCE="$RUNNER_TEMP/embryomaker_baseline" \
+            tools/backend_parity.sh "$RUNNER_TEMP/embryomaker_candidate" ordered-csr-1606
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ordered-csr-parity-diagnostics
+          path: build/parity/ordered-csr-1606/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  macos-parity:
+    name: Apple silicon build and snapshot parity
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      FLOW_BUILD_ROOT: /tmp/embryo-parity-build
+      FLOW_OPT_LEVEL: "3"
+      FLOW_CFLAGS: -ffp-contract=off
+      CC: clang
+      EMBRYO_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+      - uses: actions/checkout@v5
+        with:
+          repository: flooooooooooow/flow
+          ref: d99d4fca8870dde91c8b7a0e24b66d5c30ad9102
+          path: flow-toolchain
+      - name: Add Flow compiler to PATH
+        run: echo "$GITHUB_WORKSPACE/flow-toolchain" >> "$GITHUB_PATH"
+      - name: Compile independent baseline on Apple silicon
+        working-directory: baseline
+        run: |
+          flow compile src/embryomaker.flow
+          cp "$FLOW_BUILD_ROOT/embryomaker" "$RUNNER_TEMP/embryomaker_baseline"
+      - name: Compile the proposed solver and Studio on Apple silicon
+        run: |
+          flow compile src/embryomaker.flow
+          cp "$FLOW_BUILD_ROOT/embryomaker" "$RUNNER_TEMP/embryomaker_candidate"
+          flow compile ui/server.flow
+      - name: Compare snapshot bytes against the same-compiler baseline
+        run: |
+          EMBRYO_PARITY_REFERENCE="$RUNNER_TEMP/embryomaker_baseline" \
+            tools/backend_parity.sh "$RUNNER_TEMP/embryomaker_candidate" ordered-csr-macos
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ordered-csr-macos-parity-diagnostics
+          path: build/parity/ordered-csr-macos/
+          if-no-files-found: ignore
+          retention-days: 7
